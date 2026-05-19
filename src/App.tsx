@@ -215,7 +215,7 @@ function LiveScoreTicker({ games }: any) {
       {games.map((g: any) => (
         <div key={g.id} className="min-w-[140px] bg-slate-800 rounded-xl p-3 border border-slate-700 flex flex-col justify-between shrink-0 shadow-inner">
           <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 flex justify-between items-center">
-            <span>{g.status === 'final' ? 'FINAL' : g.time}</span>
+          <span>{g.status === 'final' ? 'FINAL' : (g.status && g.status !== 'upcoming' ? g.status.toUpperCase() : g.time)}</span>
           </div>
           <div className="flex justify-between items-center mb-1.5">
             <div className="flex items-center gap-2">
