@@ -165,10 +165,11 @@ function KnockoutGameCard({ game, selectedTeam, usedTeams, onPick, isLocked }: a
   const isAwayUsed = (usedTeams || []).includes(game?.away) && selectedTeam !== game?.away;
   const isHomeUsed = (usedTeams || []).includes(game?.home) && selectedTeam !== game?.home;
   return (
-    <div className={`p-4 flex-1 flex flex-col sm:flex-row items-center gap-3 sm:gap-6 w-full ${isLocked ? 'opacity-75' : ''}`}>
-      <TeamButton team={String(game?.away)} abbr={game?.awayAbbr} name={game?.awayName} selected={String(selectedPick) === String(game?.away)} isLocked={isLocked} onClick={() => onPick(String(game?.away))} />
-     <div className="text-sm font-black text-slate-200 uppercase italic tracking-widest hidden sm:block">VS</div>
-     <TeamButton team={String(game?.home)} abbr={game?.homeAbbr} name={game?.homeName} selected={String(selectedPick) === String(game?.home)} isLocked={isLocked} onClick={() => onPick(String(game?.home))} />
+    <div className={`p-4 bg-white rounded-2xl border-2 border-slate-100 flex-1 flex flex-col sm:flex-row items-center gap-3 sm:gap-6 w-full ${isLocked ? 'opacity-75' : ''}`}>
+      {/* FIX: Changed selectedPick to selectedTeam to perfectly map to incoming parameters */}
+      <TeamButton team={String(game?.away)} abbr={game?.awayAbbr} name={game?.awayName} selected={String(selectedTeam) === String(game?.away)} isLocked={isLocked || isAwayUsed} onClick={() => onPick(String(game?.away))} />
+      <div className="text-sm font-black text-slate-200 uppercase italic tracking-widest hidden sm:block">VS</div>
+      <TeamButton team={String(game?.home)} abbr={game?.homeAbbr} name={game?.homeName} selected={String(selectedTeam) === String(game?.home)} isLocked={isLocked || isHomeUsed} onClick={() => onPick(String(game?.home))} />
     </div>
   );
 }
@@ -1036,62 +1037,87 @@ function MainApp() {
 // --- API SPORTS INTEGRATION ---
 const handleFetchSchedule = async () => {
   if (!globalSettings?.apiSportsKey) return alert("Please enter your API-Sports Key in the Admin Settings tab.");
-  const fetchDateStr = prompt(`Enter date to fetch MLB schedule for Week ${selectedWeek} (YYYY-MM-DD):`);
+  const fetchDateStr = prompt(`Enter local US date to fetch MLB schedule for Week ${selectedWeek} (YYYY-MM-DD):`);
   if (!fetchDateStr) return;
   
   setIsSyncing(true);
   try {
       const season = fetchDateStr.split('-')[0]; 
-      const res = await fetch(`https://v1.baseball.api-sports.io/games?date=${fetchDateStr}&league=1&season=${season}`, {
-          headers: { 'x-apisports-key': globalSettings.apiSportsKey }
-      });
-      const json = await res.json();
       
-      if (json.errors && Object.keys(json.errors).length > 0) {
-          console.error("API Errors:", json.errors);
-          alert("API Error: " + Object.values(json.errors)[0]);
-          setIsSyncing(false);
-          return;
+      // Calculate clean timezone offset numbers
+      const todayParts = fetchDateStr.split('-');
+      const todayYear = parseInt(todayParts[0], 10);
+      const todayMonth = parseInt(todayParts[1], 10) - 1;
+      const todayDay = parseInt(todayParts[2], 10);
+      
+      const todayDateObj = new Date(todayYear, todayMonth, todayDay, 12, 0, 0);
+      const tomorrowDateObj = new Date(todayDateObj);
+      tomorrowDateObj.setDate(tomorrowDateObj.getDate() + 1);
+      const tomorrowDateStr = tomorrowDateObj.toISOString().split('T')[0];
+
+      const targetDates = [fetchDateStr, tomorrowDateStr];
+      let combinedResponse: any[] = [];
+
+      for (const targetDate of targetDates) {
+        // FIX: Explicitly append league=1 and season to ensure we only scrape true current MLB Game IDs
+        const res = await fetch(`https://v1.baseball.api-sports.io/games?date=${targetDate}&league=1&season=${season}`, {
+            headers: { 'x-apisports-key': globalSettings.apiSportsKey }
+        });
+        const json = await res.json();
+        if (json.response) combinedResponse = [...combinedResponse, ...json.response];
       }
       
-      if (!json.response || json.response.length === 0) {
-          alert("0 games found. Ensure the date is during the MLB regular season (e.g., 2024-04-15).");
+      if (combinedResponse.length === 0) {
+          alert("0 games found matching MLB parameters for this window.");
           setIsSyncing(false);
           return;
       }
       
       const getInitials = (name: string) => name.split(' ').map(w => w[0]).join('').substring(0, 3).toUpperCase();
 
-      const newGames = json.response.map((match: any) => {
+      // Filter based strictly on your local US calendar matching window
+      const newGames = combinedResponse
+        .filter((match: any) => {
+          const gameTimestamp = match.timestamp ? match.timestamp * 1000 : new Date(match.date).getTime();
+          const localClock = new Date(gameTimestamp);
+          
+          const localY = localClock.getFullYear();
+          const localM = String(localClock.getMonth() + 1).padStart(2, '0');
+          const localD = String(localClock.getDate()).padStart(2, '0');
+          const localDateString = `${localY}-${localM}-${localD}`;
+          
+          return localDateString === fetchDateStr;
+        })
+        .map((match: any) => {
           const awayName = match.teams?.away?.name || 'Away';
           const homeName = match.teams?.home?.name || 'Home';
-          
           const rawDateString = match.date || `${fetchDateStr}T12:00:00Z`;
           const gameTime = new Date(rawDateString).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
           
           return {
               id: match.id || Math.floor(Math.random() * 100000), 
-              away: String(match.teams.away.id), // DATABASE KEY
-              home: String(match.teams.home.id), // DATABASE KEY
-              awayAbbr: getInitials(awayName),   // UI VISUAL KEY
-              homeAbbr: getInitials(homeName),   // UI VISUAL KEY
+              away: String(match.teams.away.id), 
+              home: String(match.teams.home.id), 
+              awayAbbr: getInitials(awayName),   
+              homeAbbr: getInitials(homeName),   
               awayName: awayName,
               homeName: homeName,
               date: fetchDateStr, 
-              apiDate: fetchDateStr, 
+              apiDate: match.date.split('T')[0], // Track precise API date for the update checker
               time: gameTime,
               status: 'upcoming'
           };
+        });
+      
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { 
+        [`games.${selectedWeek}`]: newGames 
       });
       
-      trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { 
-        [`games.${selectedWeek}`]: newGames 
-      }));
-      alert(`Successfully loaded ${newGames.length} MLB games into Week ${selectedWeek}!`);
+      alert(`Successfully synchronized ${newGames.length} clean upcoming MLB games into Week ${selectedWeek}!`);
       
   } catch (e) {
       console.error("Schedule Fetch Error:", e);
-      alert("Failed to fetch schedule. Check console for details.");
+      alert("Failed to fetch schedule.");
   } finally {
       setIsSyncing(false);
   }
