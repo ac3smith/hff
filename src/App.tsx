@@ -47,12 +47,9 @@ const INITIAL_USERS = [
 // --- HELPERS ---
 function formatFullName(user: any) { return !user ? "" : `${user.firstName}${user.nickname ? ` "${user.nickname}"` : ""} ${user.lastName}`; }
 
-// --- UPDATED: STARTS AT MAX POSSIBLE POINTS AND DEDUCTS LOST POINTS ---
 function calculatePoints(picks: any, ranks: any, games: any) {
   if (!picks || !ranks || !games || games.length === 0) return 0;
-  
   const maxPossible = games.reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
-
   const lostPoints = games.reduce((lost: number, g: any) => {
     const userPick = picks[g.id];
     const userRank = parseInt(ranks[g.id], 10) || 0;
@@ -61,7 +58,6 @@ function calculatePoints(picks: any, ranks: any, games: any) {
     }
     return lost;
   }, 0);
-
   return maxPossible - lostPoints;
 }
 
@@ -150,7 +146,6 @@ function TeamButton({ team, abbr, name, selected, isLocked, onClick }: any) {
   return <button onClick={onClick} disabled={isLocked} className={`flex-1 w-full flex items-center justify-between p-3 sm:p-4 rounded-2xl border-2 transition-all duration-300 ${selected ? 'border-[#FFB81C] bg-[#FFB81C]/5 shadow-lg scale-[1.02]' : `border-transparent ${isLocked ? 'bg-slate-50' : 'bg-slate-50 hover:bg-slate-100 hover:scale-[1.01]'} text-slate-700`} ${isLocked && !selected ? 'grayscale' : ''}`}><div className="flex items-center gap-3 text-left"><div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white font-black text-xs shadow-lg ${isLocked ? 'bg-slate-300 shadow-none' : ''}`} style={!isLocked ? { backgroundColor: NFL_COLORS[team] || '#1e293b' } : {}}>{displayAbbr}</div><div><div className="font-black uppercase italic text-base sm:text-lg leading-tight text-slate-900">{name}</div><div className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest">{displayAbbr}</div></div></div>{selected && <CheckCircle className="w-6 h-6 text-[#FFB81C]" strokeWidth={3} />}</button>; 
 }
 
-// --- UPDATED GAME CARD WITH RANK CLEAR / UNSELECT OPTION ---
 function GameCard({ game, selectedPick, selectedRank, totalGames, usedRanks, isLocked, onPick, onRankChange }: any) {
   const isFullyPicked = selectedPick && selectedRank;
   return (
@@ -283,8 +278,6 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                   {(games || []).map((g: any) => {
                     const pick = user.picks?.[week]?.[g.id];
                     const rank = user.ranks?.[week]?.[g.id];
-                    
-                    // --- ENFORCED HIDDEN PICKS UNTIL LOCKDOWN ---
                     const isHidden = !isWeekLocked && !adminForceReveal && !isMe;
 
                     return (
@@ -327,6 +320,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
   );
 }
 
+// --- UPDATED KNOCKOUT BOARD: SHOWS RED DOLLAR SIGN IF UNPAID/DISQUALIFIED ---
 function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal, currentUser }: any) {
   return (
     <div className="bg-white rounded-3xl shadow-xl border overflow-hidden border-t-8 border-red-600 max-w-4xl mx-auto">
@@ -339,6 +333,7 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
           const pick = user.pick;
           const isDead = ['Loser', 'Loser (No Pick)', 'No Pick', 'Previously Out', 'Disqualified (Unpaid)', 'Knocked Out'].includes(status);
           const isMe = user.id === currentUser?.id;
+          const isUnpaid = user.paymentStatus === 'unpaid' || user.paymentStatus === 'disqualified';
           
           const game = (allGames?.[week] || []).find((g: any) => g.away === pick || g.home === pick);
           const displayPick = game ? (pick === game.away ? (game.awayAbbr || game.away) : (game.homeAbbr || game.home)) : pick;
@@ -348,7 +343,14 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
               <div className="flex items-center gap-4">
                 <div className={`p-3 rounded-2xl ${isDead ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>{isDead ? <XCircle className="w-6 h-6" /> : <CheckCircle className="w-6 h-6" />}</div>
                 <div>
-                  <h4 className="font-black uppercase text-base text-slate-900">{formatFullName(user)}</h4>
+                  <h4 className="font-black uppercase text-base text-slate-900 flex items-center gap-1.5">
+                    {formatFullName(user)}
+                    {isUnpaid && (
+                      <span className="inline-flex items-center text-red-600" title="Unpaid Player">
+                        <DollarSign className="w-4 h-4 stroke-[3]" />
+                      </span>
+                    )}
+                  </h4>
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-0.5">Status: <span className={isDead ? 'text-red-600' : 'text-green-600'}>{isDead ? 'Knocked Out' : 'Alive'}</span></p>
                 </div>
               </div>
@@ -2078,14 +2080,14 @@ function MainApp() {
 
                     <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm"><h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2"><Coins className="w-4 h-4" /> Weekly FP Payouts (Top 1-8)</h3><div className="grid grid-cols-4 md:grid-cols-8 gap-4">{(globalSettings?.fpPayouts || Array(8).fill(0)).map((val: any, i: number) => <AdminNumberInput key={i} label={`Rank ${i+1}`} value={val} onSave={(newVal: any) => updateFpPayouts(i, newVal)} />)}</div></div>
                     
-                    <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
-                        <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2"><Trophy className="w-4 h-4" /> Season/Half Payouts (Top 1-8)</h3>
+                    <div className="bg-[#FFB81C]/10 p-8 rounded-3xl border-2 border-[#FFB81C]/30 shadow-sm">
+                        <h3 className="font-black uppercase tracking-widest text-slate-900 text-xs mb-6 flex items-center gap-2"><Trophy className="w-4 h-4 text-[#FFB81C]" /> Season/Half Payouts (Top 1-8)</h3>
                         <div className="flex flex-col gap-8">
                             {(['firstHalf', 'secondHalf', 'overall']).map(key => {
                                 const bonusesObj = globalSettings?.seasonBonuses || {};
                                 const safeArray = Array.isArray(bonusesObj) ? bonusesObj : (bonusesObj[key === 'firstHalf' ? 'firstHalf' : key === 'secondHalf' ? 'secondHalf' : 'overall'] || Array(8).fill(0));
                                 return (
-                                    <div key={key}><label className="block text-[12px] font-black uppercase text-slate-900 border-b-2 border-slate-100 pb-2 mb-3">{key === 'firstHalf' ? 'First Half' : key === 'secondHalf' ? 'Second Half' : 'Overall Season'}</label><div className="grid grid-cols-4 md:grid-cols-8 gap-4">{(safeArray || Array(8).fill(0)).map((val: any, i: number) => <AdminNumberInput key={`${key}-${i}`} label={`Rank ${i+1}`} value={val} onSave={(newVal: any) => updateSeasonBonuses(key, i, newVal)} />)}</div></div>
+                                    <div key={key}><label className="block text-[12px] font-black uppercase text-slate-900 border-b-2 border-slate-200 pb-2 mb-3">{key === 'firstHalf' ? 'First Half' : key === 'secondHalf' ? 'Second Half' : 'Overall Season'}</label><div className="grid grid-cols-4 md:grid-cols-8 gap-4">{(safeArray || Array(8).fill(0)).map((val: any, i: number) => <AdminNumberInput key={`${key}-${i}`} label={`Rank ${i+1}`} value={val} onSave={(newVal: any) => updateSeasonBonuses(key, i, newVal)} />)}</div></div>
                                 );
                             })}
                         </div>
