@@ -44,6 +44,14 @@ const INITIAL_USERS = [
   { id: 'admin-1', firstName: 'Admin', lastName: 'Account', nickname: 'The Admin', username: 'admin', password: 'admin', requiresPasswordChange: true, email: '', role: 'admin', paymentStatus: 'paid', playsConfidence: true, playsKnockout: true, picks: {1:{},2:{},3:{},4:{}}, ranks: {1:{},2:{},3:{},4:{}}, tiebreakers: {1:'',2:'',3:'',4:''}, knockoutPicks: {}, knockoutStatuses: {}, weeklyFantasyHistory: {}, weeklyConfidenceHistory: {} },
 ];
 
+// --- HELPER TO CONVERT NFL SYSTEM WEEKS TO DISPLAY WEEKS ---
+function getDisplayWeekLabel(weekNum: number): string {
+  if (weekNum <= 3) {
+    return `Preseason Week ${weekNum}`;
+  }
+  return `Week ${weekNum - 3}`;
+}
+
 // --- HELPERS ---
 function formatFullName(user: any) { return !user ? "" : `${user.firstName}${user.nickname ? ` "${user.nickname}"` : ""} ${user.lastName}`; }
 
@@ -150,7 +158,14 @@ function GameCard({ game, selectedPick, selectedRank, totalGames, usedRanks, isL
   const isFullyPicked = selectedPick && selectedRank;
   return (
     <div className={`bg-white rounded-2xl border-2 transition-all duration-300 overflow-hidden flex flex-col lg:flex-row ${isFullyPicked && !isLocked ? 'border-slate-900 shadow-md scale-[1.005]' : selectedPick && !isLocked ? 'border-[#FFB81C]/40' : 'border-slate-100 hover:border-slate-200'}`}>
-      <div className={`p-4 lg:w-48 flex flex-row lg:flex-col justify-between lg:justify-center items-center lg:items-start border-b lg:border-b-0 lg:border-r-2 border-slate-50 ${isLocked ? 'bg-slate-100' : 'bg-slate-50'}`}><div className="flex items-center gap-2 text-sm font-black text-slate-400 uppercase tracking-widest">{isLocked ? <Lock className="w-4 h-4 text-red-500" /> : <Clock className="w-4 h-4 text-[#FFB81C]" />}{game?.date}</div><div className="text-sm font-bold text-slate-300">{game?.time}</div></div>
+      <div className={`p-4 lg:w-48 flex flex-row lg:flex-col justify-between lg:justify-center items-center lg:items-start border-b lg:border-b-0 lg:border-r-2 border-slate-50 ${isLocked ? 'bg-slate-100' : 'bg-slate-50'}`}>
+        <div className="flex items-center gap-2 text-sm font-black text-slate-400 uppercase tracking-widest">
+          {isLocked ? <Lock className="w-4 h-4 text-red-500" /> : <Clock className="w-4 h-4 text-[#FFB81C]" />}
+          {game?.date}
+          {game?.isTiebreaker && <span className="text-[#FFB81C] font-black text-base leading-none" title="Official Tiebreaker Game">*</span>}
+        </div>
+        <div className="text-sm font-bold text-slate-300">{game?.time}</div>
+      </div>
       <div className={`p-4 flex-1 flex flex-col sm:flex-row items-center gap-3 sm:gap-6 w-full ${isLocked ? 'opacity-75' : ''}`}><TeamButton team={game?.away} abbr={game?.awayAbbr} name={game?.awayName} selected={selectedPick === game?.away} isLocked={isLocked} onClick={() => onPick(game?.away)} /><div className="text-sm font-black text-slate-200 uppercase italic tracking-widest hidden sm:block">VS</div><TeamButton team={game?.home} abbr={game?.homeAbbr} name={game?.homeName} selected={selectedPick === game?.home} isLocked={isLocked} onClick={() => onPick(game?.home)} /></div>
       <div className={`p-4 lg:w-64 flex flex-row lg:flex-col justify-between items-center lg:justify-center border-t lg:border-t-0 lg:border-l-2 border-slate-50 ${isLocked ? 'bg-slate-100' : 'bg-slate-50/50'}`}>
         <label className="text-[10px] font-black text-slate-400 flex items-center gap-1.5 uppercase tracking-[0.2em] lg:mb-2">Fanatics Rank</label>
@@ -185,16 +200,33 @@ function KnockoutGameCard({ game, selectedTeam, usedTeams, onPick, isLocked }: a
   );
 }
 
-function LiveTrackerCell({ game, pick, rank }: any) {
-  if (!pick || !rank) return <div className="text-center text-slate-200 py-1">-</div>;
-  const isWinner = game?.status === 'final' && pick === game?.winner;
-  const isLoser = game?.status === 'final' && pick !== game?.winner;
-  const bg = isWinner ? 'bg-green-500 text-white border-transparent shadow-sm' : isLoser ? 'bg-red-500 text-white border-transparent opacity-80' : 'bg-white text-slate-700 border-slate-200';
+function LiveTrackerCell({ game, pick, rank, isProjection }: any) {
+  if (!pick || !rank) return <div className="text-center text-slate-300 font-bold text-xs py-1">-</div>;
+  
+  const activeWinner = isProjection ? getProjectedWinner(game) : (game?.status === 'final' ? game?.winner : null);
+  const isWinner = activeWinner && pick === activeWinner;
+  const isLoser = activeWinner && pick !== activeWinner;
+  const inProgress = game?.status === 'in_progress';
+
+  let bg = 'bg-white text-slate-900 border-slate-300 shadow-sm';
+  if (isWinner) {
+    bg = inProgress && isProjection
+      ? 'bg-emerald-500 text-white font-black shadow-sm border-emerald-400 animate-pulse'
+      : 'bg-emerald-600 text-white font-black shadow-sm border-emerald-500';
+  } else if (isLoser) {
+    bg = 'bg-rose-50 text-rose-700 border-rose-200 line-through opacity-60';
+  }
+
   const displayPick = pick === game?.away ? (game?.awayAbbr || pick) : (pick === game?.home ? (game?.homeAbbr || pick) : pick);
+
   return (
-    <div className={`font-black uppercase text-center px-1 py-1.5 rounded border transition-all duration-300 w-full h-full flex flex-col items-center justify-center leading-none tracking-tight ${bg}`}>
-      <span className="text-[10px] sm:text-xs">{String(displayPick)}</span>
-      <span className="text-[8px] sm:text-[9px] mt-0.5 bg-black/15 px-1 py-0.5 rounded shadow-inner italic opacity-80">{String(rank)}</span>
+    <div className={`font-black uppercase text-center rounded-md py-0.5 border transition-all duration-200 w-full flex flex-col items-center justify-center leading-tight ${bg}`}>
+      <span className="text-xs font-black tracking-tighter">
+        {String(displayPick)}
+      </span>
+      <span className={`text-[10px] mt-0.5 px-1 py-0.2 rounded font-black italic ${isWinner ? 'bg-black/30 text-white' : 'bg-slate-100 text-slate-800'}`}>
+        {String(rank)}
+      </span>
     </div>
   );
 }
@@ -232,89 +264,379 @@ function LiveScoreTicker({ games }: any) {
   );
 }
 
+// --- HELPER TO CALCULATE LIVE PROJECTED GAME WINNERS ---
+function getProjectedWinner(game: any) {
+  if (!game) return null;
+  if (game.status === 'final') return game.winner;
+  if (game.status === 'in_progress') {
+    const awayScore = parseInt(game.awayScore || 0);
+    const homeScore = parseInt(game.homeScore || 0);
+    if (awayScore > homeScore) return game.away;
+    if (homeScore > awayScore) return game.home;
+    return null; // Tie in progress
+  }
+  return null;
+}
+
 function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser, isWeekLocked, adminForceReveal }: any) {
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  const [isProjection, setIsProjection] = useState<boolean>(true); // Default to live projected view
+
+  // Calculate live projected scores for every user
+  const processedData = useMemo(() => {
+    if (!data) return [];
+    
+    const calculated = data.map((user: any) => {
+      let liveScore = 0;
+      (games || []).forEach((g: any) => {
+        const pick = user.picks?.[week]?.[g.id];
+        const rank = parseInt(user.ranks?.[week]?.[g.id] || 0);
+        
+        if (pick && rank) {
+          const winner = isProjection ? getProjectedWinner(g) : (g.status === 'final' ? g.winner : null);
+          if (winner && pick === winner) {
+            liveScore += rank;
+          }
+        }
+      });
+      return { ...user, projectedScore: liveScore };
+    });
+
+    // Sort by projected score
+    calculated.sort((a: any, b: any) => b.projectedScore - a.projectedScore || a.tbDiff - b.tbDiff);
+
+    let rank = 1;
+    calculated.forEach((u: any, i: number) => {
+      if (i > 0 && u.projectedScore < calculated[i - 1].projectedScore) {
+        rank = i + 1;
+      }
+      u.projectedRank = rank;
+    });
+
+    return calculated;
+  }, [data, games, week, isProjection]);
+
+  // Find high stakes games for the logged in user
+  const highStakesGames = useMemo(() => {
+    if (!currentUser || !games) return [];
+    
+    const myPicks = currentUser.picks?.[week] || {};
+    const myRanks = currentUser.ranks?.[week] || {};
+
+    return games
+      .filter((g: any) => g.status === 'in_progress' || g.status === 'scheduled')
+      .map((g: any) => {
+        const myPick = myPicks[g.id];
+        const myRank = parseInt(myRanks[g.id] || 0);
+        return { game: g, myPick, myRank };
+      })
+      .filter((item: any) => item.myPick && item.myRank >= 8) // Focus on high-confidence picks (8+ PTS)
+      .sort((a: any, b: any) => b.myRank - a.myRank)
+      .slice(0, 3); // Top 3 highest stakes games
+  }, [currentUser, games, week]);
+
   return (
-    <div className="bg-white rounded-3xl shadow-xl border overflow-hidden border-t-8 border-slate-900 relative">
-      <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-        <h2 className="text-xl sm:text-2xl font-black italic uppercase text-slate-900 leading-tight">
-          {week <= 3 ? `Preseason Week ${week}` : `Week ${week - 3}`} {isWeekComplete ? 'Final' : 'Live'} Results
-        </h2>
-      </div>
-      <div className="overflow-x-auto scrollbar-hide relative z-0">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-900 text-white text-[10px] sm:text-xs uppercase border-b-4 border-[#FFB81C]">
-              <th className="p-2 sm:p-3 sticky left-0 bg-slate-900 z-30 w-32 sm:w-48 shadow-[4px_0_15px_rgba(0,0,0,0.3)] tracking-widest italic">Identity</th>
-              {(games || []).map((g: any) => (
-                <th key={g.id} className="p-1 text-center border-r border-slate-700 w-auto min-w-[50px] font-black italic leading-tight relative z-10">
-                  <div className="text-slate-400 text-[9px] sm:text-[10px]">{String(g.awayAbbr || g.away)} {g.awayScore !== undefined ? `(${g.awayScore})` : ''}</div>
-                  <div className="text-white text-[9px] sm:text-[10px]">{String(g.homeAbbr || g.home)} {g.homeScore !== undefined ? `(${g.homeScore})` : ''}</div>
-                </th>
-              ))}
-              <th className="p-2 text-center border-l border-r border-slate-700 w-12 sm:w-16 text-[#FFB81C] font-black italic relative z-10">Score</th>
-              <th className="p-2 text-center border-r border-slate-700 w-12 sm:w-16 italic relative z-10">Behind</th>
-              <th className="p-2 text-center border-r border-slate-700 w-12 sm:w-16 italic relative z-10">TieB</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 text-[10px] sm:text-sm">
-            {(data || []).map((user: any, idx: number) => {
-              if (!user) return null;
-              const firstScore = data[0]?.confidenceScore || 0;
-              const behindFirst = firstScore - user.confidenceScore;
-              const behindNext = idx > 0 ? data[idx - 1]?.confidenceScore - user.confidenceScore : 0;
-              const isMe = currentUser && user.id === currentUser.id;
+    <div className="space-y-6">
+      {/* PERSONAL HIGH-STAKES GAME IMPACT BAR */}
+      {currentUser && highStakesGames.length > 0 && (
+        <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl border-t-8 border-[#FFB81C]">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-black italic uppercase text-[#FFB81C] flex items-center gap-2">
+                <Zap className="w-5 h-5 text-[#FFB81C]" /> High-Stakes Watch For {currentUser.firstName}
+              </h3>
+              <p className="text-xs text-slate-400 font-bold mt-0.5">
+                Your highest confidence picks currently live or upcoming
+              </p>
+            </div>
+            <span className="text-[10px] font-black uppercase bg-[#FFB81C]/20 text-[#FFB81C] px-3 py-1 rounded-full border border-[#FFB81C]/30">
+              Personalized Watchlist
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {highStakesGames.map(({ game, myPick, myRank }: any) => {
+              const projWinner = getProjectedWinner(game);
+              const isWinning = projWinner === myPick;
+              const displayPick = myPick === game.away ? (game.awayAbbr || myPick) : (game.homeAbbr || myPick);
 
               return (
-                <tr key={user.id} className={`${isMe ? 'bg-[#FFB81C]/20 border-l-4 sm:border-l-8 border-[#FFB81C]' : 'hover:bg-slate-50'} transition-colors group relative`}>
-                  <td className={`p-2 sm:p-3 sticky left-0 z-20 bg-white group-hover:bg-slate-50 border-r border-slate-100 shadow-[4px_0_15px_rgba(0,0,0,0.05)] ${isMe ? 'bg-[#FFB81C]/20 group-hover:bg-[#FFB81C]/30 border-l-4 sm:border-l-8 border-[#FFB81C]' : ''}`}>
-                    <div className="flex items-center gap-1 sm:gap-2">
-                       <span className="text-[#FFB81C] font-black italic text-xs sm:text-base w-4 sm:w-5 text-right">{String(user.displayRank)}.</span>
-                       <div className={`flex flex-col leading-tight ${isMe ? 'font-black text-xs sm:text-lg' : 'font-bold text-[10px] sm:text-sm'}`}>
-                          <span className="truncate max-w-[80px] sm:max-w-[120px]">{String(user.firstName)} {user.nickname ? `"${user.nickname}"` : ''}</span>
-                          <span className="truncate max-w-[80px] sm:max-w-[120px]">{String(user.lastName)}</span>
-                       </div>
-                    </div>
-                  </td>
-                  {(games || []).map((g: any) => {
-                    const pick = user.picks?.[week]?.[g.id];
-                    const rank = user.ranks?.[week]?.[g.id];
-                    const isHidden = !isWeekLocked && !adminForceReveal && !isMe;
+                <div key={game.id} className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700 flex flex-col justify-between">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-[10px] font-black uppercase text-slate-400">
+                      {game.awayAbbr} @ {game.homeAbbr}
+                    </span>
+                    <span className="text-xs font-black italic text-[#FFB81C] bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-700">
+                      +{myRank} PTS
+                    </span>
+                  </div>
 
-                    return (
-                      <td key={g.id} className="p-1 border-r border-slate-50 relative z-0">
-                        {isHidden ? (
-                          <div className="text-center text-[8px] font-black italic text-slate-300 bg-slate-100 py-2 rounded uppercase tracking-widest border border-slate-200">Hidden</div>
-                        ) : (
-                          <LiveTrackerCell game={g} pick={pick} rank={rank} />
-                        )}
-                      </td>
-                    )
-                  })}
-                  <td className="p-1 sm:p-2 text-center font-black tabular-nums text-sm sm:text-xl border-l border-r border-slate-50 text-slate-900 relative z-0">{String(user.confidenceScore)}</td>
-                  <td className="p-1 sm:p-2 text-right font-black italic tabular-nums text-[9px] sm:text-xs border-r border-slate-50 relative z-0">
-                    {idx === 0 ? <span className="text-slate-300">-</span> : (
-                      <div className="flex flex-col items-end leading-tight">
-                        <span className={behindFirst === 0 ? 'text-slate-400' : 'text-red-500'}>{behindFirst === 0 ? '0' : `-${behindFirst}`}</span>
-                        <span className="text-[8px] sm:text-[9px] text-slate-400 mt-0.5">({behindNext === 0 ? '0' : `-${behindNext}`})</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-1 sm:p-2 text-center text-xs sm:text-sm font-bold text-slate-500 italic border-r border-slate-50 relative z-0">
-                    {!isWeekLocked && !adminForceReveal && !isMe ? (
-                      <span className="text-slate-300 text-[10px] font-black uppercase italic">HIDDEN</span>
-                    ) : user.wonTiebreaker ? (
-                      <span className="inline-flex items-center justify-center gap-0.5 sm:gap-1 bg-[#FFB81C] text-slate-900 px-1 sm:px-2 py-0.5 rounded shadow-sm font-black text-xs sm:text-base">
-                        <Target className="w-3 h-3 sm:w-4 sm:h-4" /> {String(user.tiebreakers?.[week] || '')}
+                  <div className="flex items-center justify-between my-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400 font-bold">Your Pick:</span>
+                      <span className="text-sm font-black text-white">{displayPick}</span>
+                    </div>
+
+                    {game.status === 'in_progress' ? (
+                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${isWinning ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'}`}>
+                        {isWinning ? '▲ Winning' : '▼ Trailing'}
                       </span>
                     ) : (
-                      String(user.tiebreakers?.[week] || '')
+                      <span className="text-[10px] font-black uppercase text-slate-400 bg-slate-700/50 px-2 py-0.5 rounded">
+                        Upcoming
+                      </span>
                     )}
-                  </td>
-                </tr>
+                  </div>
+
+                  <div className="text-[10px] font-mono text-slate-400 mt-2 border-t border-slate-700/60 pt-2 flex justify-between">
+                    <span>Score: {game.awayScore ?? 0} - {game.homeScore ?? 0}</span>
+                    <span className="text-slate-300 font-bold">{game.status === 'in_progress' ? 'In Progress' : 'Scheduled'}</span>
+                  </div>
+                </div>
               );
             })}
-          </tbody>
-        </table>
+          </div>
+        </div>
+      )}
+
+      {/* MAIN TRACKER BOARD */}
+      <div className="bg-white rounded-3xl shadow-xl border overflow-hidden border-t-8 border-slate-900 relative w-full">
+        {/* HEADER & TOGGLE CONTROLS */}
+        <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black italic uppercase text-slate-900 tracking-tight leading-tight flex items-center gap-2">
+              {week <= 3 ? `Preseason Week ${week}` : `Week ${week - 3}`} {isProjection ? 'Live Projection' : 'Official Results'}
+            </h2>
+            <p className="text-xs text-slate-500 font-bold mt-0.5">
+              {isProjection ? 'Simulating standings if all active games ended right now' : 'Official settled scores for completed games'}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* PROJECTION TOGGLE */}
+            <div className="flex bg-slate-200 p-1 rounded-xl border border-slate-300">
+              <button
+                onClick={() => setIsProjection(true)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                  isProjection ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5" /> If Ended Now
+              </button>
+              <button
+                onClick={() => setIsProjection(false)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                  !isProjection ? 'bg-slate-900 text-[#FFB81C] shadow-md' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Official Only
+              </button>
+            </div>
+
+            {/* VIEW TOGGLE */}
+            <div className="flex bg-slate-200 p-1 rounded-xl border border-slate-300">
+              <button
+                onClick={() => setViewMode('table')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                  viewMode === 'table' ? 'bg-slate-900 text-[#FFB81C] shadow-md' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Table
+              </button>
+              <button
+                onClick={() => setViewMode('cards')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                  viewMode === 'cards' ? 'bg-slate-900 text-[#FFB81C] shadow-md' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Cards
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* COMPACT TABLE VIEW */}
+        {viewMode === 'table' ? (
+          <div className="overflow-x-auto scrollbar-hide relative z-0">
+            <table className="w-full text-left border-collapse table-fixed">
+              <thead>
+                <tr className="bg-slate-900 text-white uppercase border-b-4 border-[#FFB81C]">
+                  <th className="p-2 sticky left-0 bg-slate-900 z-30 w-44 sm:w-52 shadow-[3px_0_10px_rgba(0,0,0,0.3)] tracking-widest italic font-black text-xs sm:text-sm">
+                    Player
+                  </th>
+
+                  {(games || []).map((g: any) => (
+                    <th key={g.id} className="p-0.5 text-center border-r border-slate-800 font-black italic leading-tight w-10 sm:w-11">
+                      <div className="text-[#FFB81C] text-xs truncate flex items-center justify-center gap-0.5">
+                        <span>{String(g.awayAbbr || g.away)}</span>
+                        {g.isTiebreaker && <span className="text-[#FFB81C] font-black text-sm leading-none" title="Official Tiebreaker Game">*</span>}
+                      </div>
+                      <div className="text-slate-500 text-[9px]">@</div>
+                      <div className="text-white text-xs truncate">{String(g.homeAbbr || g.home)}</div>
+                    </th>
+                  ))}
+
+                  <th className="p-1 text-center border-l-2 border-r border-slate-800 w-14 text-[#FFB81C] font-black italic text-xs sm:text-sm">
+                    {isProjection ? 'Proj PTS' : 'CP'}
+                  </th>
+                  <th className="p-1 text-center border-r border-slate-800 w-14 italic text-xs">Behind</th>
+                  <th className="p-1 text-center border-r border-slate-800 w-16 italic text-xs">TB</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {processedData.map((user: any, idx: number) => {
+                  if (!user) return null;
+                  const activeScore = isProjection ? user.projectedScore : user.confidenceScore;
+                  const activeRank = isProjection ? user.projectedRank : user.displayRank;
+                  const firstScore = processedData[0]?.[isProjection ? 'projectedScore' : 'confidenceScore'] || 0;
+                  
+                  const behindFirst = firstScore - activeScore;
+                  const behindNext = idx > 0 ? (processedData[idx - 1]?.[isProjection ? 'projectedScore' : 'confidenceScore'] - activeScore) : 0;
+                  const isMe = currentUser && user.id === currentUser.id;
+
+                  // Rank Shift Indicator
+                  const rankShift = user.displayRank - activeRank;
+
+                  return (
+                    <tr key={user.id} className={`${isMe ? 'bg-[#FFB81C]/20 border-l-4 border-[#FFB81C]' : 'hover:bg-slate-50'} transition-colors group relative`}>
+                      {/* Sticky Name Column */}
+                      <td className={`p-2 sticky left-0 z-20 bg-white group-hover:bg-slate-50 border-r-2 border-slate-200 shadow-[3px_0_10px_rgba(0,0,0,0.05)] ${isMe ? 'bg-[#FFB81C]/20 group-hover:bg-[#FFB81C]/30 border-l-4 border-[#FFB81C]' : ''}`}>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-end w-7 flex-shrink-0">
+                            <span className="text-black font-semibold italic text-xs sm:text-sm">
+                              {activeRank}.
+                            </span>
+                            {isProjection && rankShift !== 0 && (
+                              <span className={`text-[9px] font-black ml-1 ${rankShift > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {rankShift > 0 ? `▲${rankShift}` : `▼${Math.abs(rankShift)}`}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-col leading-tight truncate">
+                            <span className="text-black font-normal text-xs sm:text-sm truncate">
+                              {String(user.firstName)} {user.nickname ? `"${user.nickname}"` : ''}
+                            </span>
+                            <span className="text-slate-600 font-normal text-xs truncate">
+                              {String(user.lastName)}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Game Cells */}
+                      {(games || []).map((g: any) => {
+                        const pick = user.picks?.[week]?.[g.id];
+                        const rank = user.ranks?.[week]?.[g.id];
+                        const isHidden = !isWeekLocked && !adminForceReveal && !isMe;
+
+                        return (
+                          <td key={g.id} className="p-0.5 border-r border-slate-100 text-center bg-white">
+                            {isHidden ? (
+                              <div className="text-center text-[8px] font-black italic text-slate-300 bg-slate-50 py-1.5 rounded uppercase border border-slate-100">
+                                Lock
+                              </div>
+                            ) : (
+                              <LiveTrackerCell game={g} pick={pick} rank={rank} isProjection={isProjection} />
+                            )}
+                          </td>
+                        );
+                      })}
+
+                      {/* Score & Standings Columns */}
+                      <td className="p-1 text-center font-black tabular-nums text-sm sm:text-base border-l-2 border-r border-slate-100 text-slate-900 bg-white">
+                        {activeScore}
+                      </td>
+                      <td className="p-1 text-right font-black italic tabular-nums text-xs border-r border-slate-100 bg-white">
+                        {idx === 0 ? (
+                          <span className="text-slate-300 font-bold block text-center">-</span>
+                        ) : (
+                          <div className="flex flex-col items-end leading-tight pr-0.5">
+                            <span className={behindFirst === 0 ? 'text-slate-400' : 'text-rose-600 font-black'}>
+                              {behindFirst === 0 ? '0' : `-${behindFirst}`}
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-bold">({behindNext === 0 ? '0' : `-${behindNext}`})</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-1 text-center text-xs font-bold text-slate-700 italic border-r border-slate-100 bg-white">
+                        {!isWeekLocked && !adminForceReveal && !isMe ? (
+                          <span className="text-slate-300 text-[9px] font-black uppercase italic">HIDDEN</span>
+                        ) : user.wonTiebreaker ? (
+                          <span className="inline-flex items-center justify-center gap-0.5 bg-[#FFB81C] text-slate-900 px-1.5 py-0.5 rounded shadow-sm font-black text-xs">
+                            <Target className="w-3 h-3" /> {String(user.tiebreakers?.[week] || '')}
+                          </span>
+                        ) : (
+                          String(user.tiebreakers?.[week] || '')
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* PLAYER CARDS VIEW */
+          <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {processedData.map((user: any) => {
+              const isMe = currentUser && user.id === currentUser.id;
+              const activeScore = isProjection ? user.projectedScore : user.confidenceScore;
+              const activeRank = isProjection ? user.projectedRank : user.displayRank;
+
+              return (
+                <div
+                  key={user.id}
+                  className={`rounded-2xl p-4 border-2 transition-all ${
+                    isMe ? 'bg-[#FFB81C]/10 border-[#FFB81C] shadow-lg scale-[1.01]' : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl font-black italic text-[#FFB81C]">#{activeRank}</span>
+                      <div>
+                        <h3 className="font-black uppercase text-base text-slate-900 leading-tight">
+                          {formatFullName(user)}
+                        </h3>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                          Tiebreaker: {user.tiebreakers?.[week] || '-'} PTS
+                        </p>
+                      </div>
+                    </div>
+                    <div className="bg-slate-900 text-[#FFB81C] px-3.5 py-1 rounded-xl font-black italic text-xl shadow-md">
+                      {activeScore} <span className="text-xs font-normal">PTS</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(games || []).map((g: any) => {
+                      const pick = user.picks?.[week]?.[g.id];
+                      const rank = user.ranks?.[week]?.[g.id];
+                      const isHidden = !isWeekLocked && !adminForceReveal && !isMe;
+
+                      return (
+                        <div key={g.id} className="bg-white p-1.5 rounded-lg border border-slate-200 text-center shadow-sm">
+                          <div className="text-[9px] font-black uppercase text-slate-400 mb-0.5">
+                            {g.awayAbbr}@{g.homeAbbr}
+                          </div>
+                          {isHidden ? (
+                            <span className="text-xs font-black uppercase text-slate-300">LOCKED</span>
+                          ) : pick && rank ? (
+                            <div className="font-black uppercase text-xs text-slate-900">
+                              <span className="text-[#FFB81C] bg-slate-900 px-1 py-0.5 rounded text-[9px] mr-1">{rank}</span>
+                              {pick}
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 text-xs">-</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -367,26 +689,94 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
   );
 }
 
-function SeasonTrackerBoard({ data, view, bonuses, sortBy, onSortChange, currentUser, globalSettings }: any) {
+function SeasonTrackerBoard({ data, view, currentUser }: any) {
+  const ptsKey = view === '1st Half' ? 'cpFirstHalf' : view === '2nd Half' ? 'cpSecondHalf' : 'cpOverall';
+  const fpKey = view === '1st Half' ? 'fpFirstHalf' : view === '2nd Half' ? 'fpSecondHalf' : 'fpOverall';
+
+  const firstPlacePTS = data?.[0]?.[ptsKey] || 0;
+
   return (
     <div className="bg-white rounded-3xl shadow-xl border overflow-hidden border-t-8 border-[#FFB81C] max-w-4xl mx-auto">
-      <div className="p-6 bg-slate-50 border-b flex justify-between items-center">
-        <h2 className="text-2xl font-black italic uppercase tracking-tight flex items-center gap-2"><Trophy className="w-6 h-6 text-[#FFB81C]" /> {view} Standings</h2>
+      {/* HEADER */}
+      <div className="p-6 bg-slate-50 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h2 className="text-2xl font-black italic uppercase tracking-tight flex items-center gap-2">
+            <Trophy className="w-6 h-6 text-[#FFB81C]" /> {view} Leaderboard
+          </h2>
+          <p className="text-xs text-slate-500 font-bold mt-0.5">
+            {view === '1st Half' 
+              ? 'Weeks 1–9 Race' 
+              : view === '2nd Half' 
+              ? 'Weeks 10–18 Race' 
+              : 'Full Season Race (Weeks 1–18)'}
+          </p>
+        </div>
       </div>
-      <div className="divide-y">
-        {(data || []).map((user: any, index: number) => (
-          <div key={user.id} className={`p-4 flex items-center justify-between ${user.id === currentUser?.id ? 'bg-[#FFB81C]/10 font-bold' : 'hover:bg-slate-50'}`}>
-            <div className="flex items-center gap-4">
-              <span className="font-black italic text-xl text-slate-300 w-8 text-center">#{user.displayRank}</span>
-              <span className="font-black uppercase text-sm text-slate-800">{formatFullName(user)}</span>
+
+      {/* TABLE COLUMN DESCRIPTIONS HEADER BAR */}
+      <div className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between text-[11px] font-black uppercase tracking-widest border-b-2 border-[#FFB81C]">
+        <div className="w-1/2 sm:w-2/5">Player Identity</div>
+        <div className="flex items-center gap-4 sm:gap-8 justify-end w-1/2 sm:w-3/5 text-right">
+          <div className="w-16 text-center">Total PTS</div>
+          <div className="w-24 text-right">Behind (Leader / Ahead)</div>
+          <div className="w-20 text-right">Net Winnings</div>
+        </div>
+      </div>
+
+      {/* STANDINGS TABLE ROWS */}
+      <div className="divide-y divide-slate-100">
+        {(data || []).map((user: any, idx: number) => {
+          const isMe = user.id === currentUser?.id;
+          const pts = user[ptsKey] || 0;
+          const netDollars = user[fpKey] || 0;
+
+          const behindLeader = firstPlacePTS - pts;
+          const behindNext = idx > 0 ? (data[idx - 1]?.[ptsKey] || 0) - pts : 0;
+
+          return (
+            <div key={user.id} className={`px-4 py-3 flex items-center justify-between ${isMe ? 'bg-[#FFB81C]/15 font-black' : 'hover:bg-slate-50'}`}>
+              <div className="flex items-center gap-3 w-1/2 sm:w-2/5">
+                <span className="font-black italic text-lg text-slate-400 w-6 text-right flex-shrink-0">
+                  #{user.displayRank}
+                </span>
+                <div className="truncate">
+                  <span className="font-black uppercase text-sm text-slate-900 block leading-tight truncate">
+                    {formatFullName(user)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 sm:gap-8 justify-end w-1/2 sm:w-3/5 text-right">
+                <div className="text-center font-mono font-black text-sm text-slate-900 bg-slate-100 px-2.5 py-1.5 rounded-xl w-16 flex-shrink-0">
+                  {pts} <span className="text-[9px] font-black uppercase text-slate-400 block -mt-1">PTS</span>
+                </div>
+
+                <div className="text-right w-24 flex-shrink-0">
+                  {idx === 0 ? (
+                    <span className="text-slate-300 font-bold text-xs block text-right pr-2">-</span>
+                  ) : (
+                    <div className="flex flex-col items-end leading-tight">
+                      <span className={behindLeader === 0 ? 'text-slate-400 font-bold text-xs' : 'text-rose-600 font-black text-xs sm:text-sm'}>
+                        {behindLeader === 0 ? '0' : `-${behindLeader}`}
+                      </span>
+                      <span className="text-[9px] text-slate-400 font-bold mt-0.5">
+                        ({behindNext === 0 ? '0' : `-${behindNext}`})
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className={`text-right font-mono font-black text-xs sm:text-sm px-2.5 py-1.5 rounded-xl border w-20 flex-shrink-0 ${
+                  netDollars >= 0 
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                    : 'bg-rose-50 text-rose-700 border-rose-200'
+                }`}>
+                  {netDollars >= 0 ? `+$${netDollars}` : `-$${Math.abs(netDollars)}`}
+                </div>
+              </div>
             </div>
-            <div className="flex gap-4">
-               <div className="text-right font-mono font-black text-lg text-slate-900 bg-slate-100 px-4 py-1.5 rounded-xl">
-                 {user[view === '1st Half' ? 'cpFirstHalf' : view === '2nd Half' ? 'cpSecondHalf' : 'cpOverall'] || 0} <span className="text-[10px] font-black uppercase text-slate-400 ml-0.5">CP</span>
-               </div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -729,6 +1119,40 @@ function ParticipationAlert({ game }: any) {
   );
 }
 
+// --- DYNAMIC WHOLE-DOLLAR FANATICS PAYOUT GENERATOR ---
+function calculateFanaticsPayouts(numPlayers: number, totalWeeks = 18, half1Weeks = 9, half2Weeks = 9) {
+  const percentages = [0.22, 0.19, 0.16, 0.13, 0.09, 0.08, 0.07, 0.06];
+  
+  const roundAndBalance = (pot: number) => {
+    const raw = percentages.map(p => Math.round(pot * p));
+    const currentSum = raw.reduce((sum, v) => sum + v, 0);
+    const diff = Math.round(pot) - currentSum;
+    if (diff !== 0) raw[0] += diff; // Adjust 1st place by the $1 remainder to balance the pot
+    return raw;
+  };
+
+  const weeklyPot = numPlayers * 7.0;
+  const weeklyGross = roundAndBalance(weeklyPot);
+  const weeklyNet = weeklyGross.map(g => g - 12); // Gross minus $12 weekly fee
+
+  const half1Pot = half1Weeks * numPlayers * 1.75;
+  const half1Payouts = roundAndBalance(half1Pot);
+
+  const half2Pot = half2Weeks * numPlayers * 1.75;
+  const half2Payouts = roundAndBalance(half2Pot);
+
+  const seasonPot = totalWeeks * numPlayers * 1.25;
+  const seasonPayouts = roundAndBalance(seasonPot);
+
+  return {
+    weeklyGross,
+    weeklyNet,
+    half1Payouts,
+    half2Payouts,
+    seasonPayouts
+  };
+}
+
 // --- MAIN APP COMPONENT ---
 function MainApp() {
   const [user, setUser] = useState<any>(null), [dbReady, setDbReady] = useState(false), [authLoaded, setAuthLoaded] = useState(false), [sessionLoaded, setSessionLoaded] = useState(false), [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -744,6 +1168,64 @@ function MainApp() {
   const handleImgError = (key: string) => setImgErrors((prev: any) => ({ ...prev, [key]: true }));
 
   const maxActiveWeeks = globalSettings?.maxActiveWeeks || 18;
+  const [settlementPreview, setSettlementPreview] = useState<{
+    type: string;
+    title: string;
+    payouts: number[];
+    winners: any[];
+  } | null>(null);
+
+  const handlePrepareSettlement = (type: 'firstHalf' | 'secondHalf' | 'overall') => {
+    const activeCount = allUsers.filter(u => u.playsConfidence).length;
+    const matrix = calculateFanaticsPayouts(activeCount);
+  
+    let title = '';
+    let payouts: number[] = [];
+    let sortedUsers: any[] = [];
+  
+    const cpField = type === 'firstHalf' ? 'cpFirstHalf' : type === 'secondHalf' ? 'cpSecondHalf' : 'cpOverall';
+    const fpField = type === 'firstHalf' ? 'fpFirstHalf' : type === 'secondHalf' ? 'fpSecondHalf' : 'fpOverall';
+  
+    if (type === 'firstHalf') {
+      title = '1st Half Settlement (Weeks 4–12)';
+      payouts = globalSettings?.seasonBonuses?.firstHalf || matrix.half1Payouts;
+    } else if (type === 'secondHalf') {
+      title = '2nd Half Settlement (Weeks 13–21)';
+      payouts = globalSettings?.seasonBonuses?.secondHalf || matrix.half2Payouts;
+    } else {
+      title = 'Overall Season Settlement (Full Season)';
+      payouts = globalSettings?.seasonBonuses?.overall || matrix.seasonPayouts;
+    }
+  
+    sortedUsers = [...seasonStats].sort((a, b) => b[cpField] - a[cpField] || b[fpField] - a[fpField]).slice(0, 8);
+  
+    const winners = sortedUsers.map((u, idx) => ({
+      rank: idx + 1,
+      name: formatFullName(u),
+      points: u[cpField] || 0,
+      bonusAmount: payouts[idx] || 0
+    }));
+  
+    setSettlementPreview({ type, title, payouts, winners });
+  };
+  
+  const handleConfirmSettlement = async () => {
+    if (!settlementPreview) return;
+    setIsSaving(true);
+    
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+      [`settlements.${settlementPreview.type}`]: {
+        finalizedAt: new Date().toISOString(),
+        winners: settlementPreview.winners
+      }
+    });
+  
+    setIsSaving(false);
+    setHasSaved(true);
+    setTimeout(() => setHasSaved(false), 2000);
+    alert(`${settlementPreview.title} finalized and awarded successfully!`);
+    setSettlementPreview(null);
+  };
 
   useEffect(() => {
     const initAuth = async () => { try { if (typeof (window as any).__initial_auth_token !== 'undefined' && (window as any).__initial_auth_token) { await signInWithCustomToken(auth, (window as any).__initial_auth_token); } else { await signInAnonymously(auth); } } catch (err) { console.error(err); } };
@@ -840,20 +1322,80 @@ function MainApp() {
   const weeklyTrackerData = useMemo(() => {
     if (!globalSettings || !allUsers.length) return [];
     const actualTotal = globalSettings?.actualTiebreakers?.[selectedWeek] || 0;
-    const usersWithScores = allUsers.filter(u => u.playsConfidence).map(user => { return { ...user, confidenceScore: calculatePoints(user.picks?.[selectedWeek] || {}, user.ranks?.[selectedWeek] || {}, games), tbDiff: Math.abs(parseInt(user.tiebreakers?.[selectedWeek] || 0) - actualTotal) }; });
-    usersWithScores.forEach(user => { const tiedUsers = usersWithScores.filter(u => u.confidenceScore === user.confidenceScore); if (tiedUsers.length > 1) { const minTbDiff = Math.min(...tiedUsers.map(u => u.tbDiff)); if (minTbDiff !== Math.max(...tiedUsers.map(u => u.tbDiff)) && user.tbDiff === minTbDiff) user.wonTiebreaker = true; } });
-    usersWithScores.sort((a, b) => { if (b.confidenceScore !== a.confidenceScore) return b.confidenceScore - a.confidenceScore; if (isWeekClosed && a.tbDiff !== b.tbDiff) return a.tbDiff - b.tbDiff; return String(a.lastName || '').localeCompare(String(b.lastName || '')); });
+    
+    const usersWithScores = allUsers.filter(u => u.playsConfidence).map(user => { 
+      return { 
+        ...user, 
+        confidenceScore: calculatePoints(user.picks?.[selectedWeek] || {}, user.ranks?.[selectedWeek] || {}, games), 
+        tbDiff: Math.abs(parseInt(user.tiebreakers?.[selectedWeek] || 0) - actualTotal) 
+      }; 
+    });
+
+    usersWithScores.forEach(user => { 
+      const tiedUsers = usersWithScores.filter(u => u.confidenceScore === user.confidenceScore); 
+      if (tiedUsers.length > 1) { 
+        const minTbDiff = Math.min(...tiedUsers.map(u => u.tbDiff)); 
+        if (minTbDiff !== Math.max(...tiedUsers.map(u => u.tbDiff)) && user.tbDiff === minTbDiff) {
+          user.wonTiebreaker = true; 
+        }
+      } 
+    });
+
+    usersWithScores.sort((a, b) => { 
+      if (b.confidenceScore !== a.confidenceScore) return b.confidenceScore - a.confidenceScore; 
+      if (a.tbDiff !== b.tbDiff) return a.tbDiff - b.tbDiff; 
+      return String(a.lastName || '').localeCompare(String(b.lastName || '')); 
+    });
+
     const finalData = usersWithScores.map(u => ({ ...u, weeklyRank: 0, weeklyFP: -12 }));
     const grouped: any[] = [];
-    [...usersWithScores].sort((a, b) => { if (b.confidenceScore !== a.confidenceScore) return b.confidenceScore - a.confidenceScore; if (isWeekClosed) return a.tbDiff - b.tbDiff; return 0; }).forEach(u => { const key = isWeekClosed ? `${u.confidenceScore}-${u.tbDiff}` : `${u.confidenceScore}`; const group = grouped.find(g => g.key === key); if (group) group.members.push(u.id); else grouped.push({ key, members: [u.id] }); });
+
+    usersWithScores.forEach(u => { 
+      const key = `${u.confidenceScore}-${u.tbDiff}`; 
+      const group = grouped.find(g => g.key === key); 
+      if (group) group.members.push(u.id); 
+      else grouped.push({ key, members: [u.id] }); 
+    });
+
     let processedCount = 0;
+    let totalRoundingDollarsLost = 0;
+
     grouped.forEach((group) => {
-        const startRank = isWeekClosed ? (processedCount + 1) : 1, endRank = processedCount + group.members.length;
-        let pointsPool = 0; for (let r = startRank; r <= endRank; r++) if (r <= 8 && globalSettings?.fpPayouts) pointsPool += (globalSettings.fpPayouts[r - 1] || 0);
-        const pointsPerMember = group.members.length > 0 ? (pointsPool / group.members.length) : 0;
-        group.members.forEach((id: string) => { const ui = finalData.findIndex(d => d.id === id); if (ui === -1) return; finalData[ui].weeklyRank = startRank; finalData[ui].weeklyFP = (isWeekClosed && finalData[ui].weeklyFantasyHistory?.[selectedWeek] !== undefined) ? finalData[ui].weeklyFantasyHistory[selectedWeek] : (pointsPerMember > 0 ? pointsPerMember : -12); finalData[ui].displayRank = (!isWeekClosed && finalData[ui].confidenceScore === 0) ? 1 : startRank; });
+        const startRank = processedCount + 1;
+        const endRank = processedCount + group.members.length;
+        
+        let pointsPool = 0; 
+        for (let r = startRank; r <= endRank; r++) {
+          if (r <= 8 && globalSettings?.fpPayouts) {
+            pointsPool += (globalSettings.fpPayouts[r - 1] || 0);
+          }
+        }
+
+        const rawShare = group.members.length > 0 ? (pointsPool / group.members.length) : 0;
+        
+        const grossPayout = rawShare > 0 ? Math.ceil(rawShare) : 0;
+        const netFP = grossPayout - 12;
+
+        const totalPaidOutForGroup = grossPayout * group.members.length;
+        if (totalPaidOutForGroup > pointsPool) {
+          totalRoundingDollarsLost += (totalPaidOutForGroup - pointsPool);
+        }
+
+        group.members.forEach((id: string) => { 
+          const ui = finalData.findIndex(d => d.id === id); 
+          if (ui === -1) return; 
+          finalData[ui].weeklyRank = startRank; 
+          
+          finalData[ui].weeklyFP = (isWeekClosed && finalData[ui].weeklyFantasyHistory?.[selectedWeek] !== undefined) 
+            ? finalData[ui].weeklyFantasyHistory[selectedWeek] 
+            : netFP; 
+
+          finalData[ui].displayRank = (!isWeekClosed && finalData[ui].confidenceScore === 0) ? 1 : startRank; 
+        });
+
         processedCount += group.members.length;
     });
+
     return finalData;
   }, [allUsers, globalSettings, selectedWeek, games, isWeekClosed]);
 
@@ -876,33 +1418,66 @@ function MainApp() {
 
   const seasonStats = useMemo(() => {
     if (!globalSettings || !allUsers.length) return [];
-    const activeFpField = seasonView === '1st Half' ? 'fpFirstHalf' : seasonView === '2nd Half' ? 'fpSecondHalf' : 'fpOverall', activeCpField = seasonView === '1st Half' ? 'cpFirstHalf' : seasonView === '2nd Half' ? 'cpSecondHalf' : 'cpOverall';
-    let latestClosedWeek = 0; for (let wk = 1; wk <= 18; wk++) if (globalSettings.weekStates?.[wk] === 'closed') latestClosedWeek = wk;
+    
+    const activeCpField = seasonView === '1st Half' ? 'cpFirstHalf' : seasonView === '2nd Half' ? 'cpSecondHalf' : 'cpOverall';
+    const activeFpField = seasonView === '1st Half' ? 'fpFirstHalf' : seasonView === '2nd Half' ? 'fpSecondHalf' : 'fpOverall';
+
     const baseStats = allUsers.filter(u => u.playsConfidence).map(user => {
-      let fp1 = 0, fp2 = 0, fpo = 0, cp1 = 0, cp2 = 0, cpo = 0, prevCpo = 0;
-      for(let wk=1; wk<=18; wk++) if (globalSettings.weekStates?.[wk] === 'closed') {
-          const fp = parseFloat(user.weeklyFantasyHistory?.[wk]) || (user.playsConfidence ? -12 : 0), cp = parseFloat(user.weeklyConfidenceHistory?.[wk]) || 0;
-          if (wk <= 9) { fp1 += fp; cp1 += cp; } else { fp2 += fp; cp2 += cp; } fpo += fp; cpo += cp; if (wk < latestClosedWeek) prevCpo += cp;
+      let cp1 = 0, cp2 = 0, cpo = 0;
+      let fp1 = 0, fp2 = 0, fpo = 0;
+
+      for (let wk = 4; wk <= 21; wk++) {
+        if (globalSettings.weekStates?.[wk] === 'closed') {
+          const cp = parseFloat(user.weeklyConfidenceHistory?.[wk]) || 0;
+          const fp = parseFloat(user.weeklyFantasyHistory?.[wk]) || -12;
+
+          if (wk <= 12) {
+            cp1 += cp;
+            fp1 += fp;
+          } 
+          else {
+            cp2 += cp;
+            fp2 += fp;
+          }
+
+          cpo += cp;
+          fpo += fp;
+        }
       }
-      return { ...user, fpFirstHalf: fp1, fpSecondHalf: fp2, fpOverall: fpo, cpFirstHalf: cp1, cpSecondHalf: cp2, cpOverall: cpo, previousCpOverall: prevCpo };
+
+      return {
+        ...user,
+        cpFirstHalf: cp1,
+        cpSecondHalf: cp2,
+        cpOverall: cpo,
+        fpFirstHalf: fp1,
+        fpSecondHalf: fp2,
+        fpOverall: fpo
+      };
     });
-    [...baseStats].sort((a, b) => b.previousCpOverall - a.previousCpOverall).forEach((u, i) => { const ou = baseStats.find(b => b.id === u.id); if (ou) ou.previousRank = i + 1; });
-    const sorted = baseStats.sort((a, b) => seasonSortBy === 'points' ? (b[activeCpField] !== a[activeCpField] ? b[activeCpField] - a[activeCpField] : b[activeFpField] - a[activeFpField]) : (b[activeFpField] !== a[activeFpField] ? b[activeFpField] - a[activeFpField] : b[activeCpField] - a[activeCpField]));
+
+    const sorted = baseStats.sort((a, b) => {
+      if (seasonSortBy === 'points') {
+        return b[activeCpField] !== a[activeCpField] 
+          ? b[activeCpField] - a[activeCpField] 
+          : b[activeFpField] - a[activeFpField];
+      } else {
+        return b[activeFpField] !== a[activeFpField] 
+          ? b[activeFpField] - a[activeFpField] 
+          : b[activeCpField] - a[activeCpField];
+      }
+    });
+
     let rank = 1;
     sorted.forEach((u, i) => {
-      if (i > 0 && u[seasonSortBy === 'points' ? activeCpField : activeFpField] < sorted[i - 1][seasonSortBy === 'points' ? activeCpField : activeFpField]) rank = i + 1;
+      if (i > 0 && u[seasonSortBy === 'points' ? activeCpField : activeFpField] < sorted[i - 1][seasonSortBy === 'points' ? activeCpField : activeFpField]) {
+        rank = i + 1;
+      }
       u.displayRank = rank;
-      const isPeriodComplete = (seasonView === '1st Half' && globalSettings?.weekStates?.[9] === 'closed') || (seasonView === '2nd Half' && globalSettings?.weekStates?.[18] === 'closed') || (seasonView === 'Overall' && globalSettings?.weekStates?.[18] === 'closed');
-      
-      const bonusesObj = globalSettings?.seasonBonuses || {};
-      const bonusArray = Array.isArray(bonusesObj) ? bonusesObj : (bonusesObj[seasonView === '1st Half' ? 'firstHalf' : seasonView === '2nd Half' ? 'secondHalf' : 'overall'] || []);
-      const safeBonusArray = bonusArray || [];
-      
-      u.bonusFp = isPeriodComplete ? (safeBonusArray[rank - 1] || 0) : 0;
-      u.totalFp = u[activeFpField] + u.bonusFp;
     });
+
     return sorted;
-  }, [allUsers, globalSettings, seasonView, seasonSortBy]);
+  }, [allUsers, globalSettings, seasonView, seasonSortBy, maxActiveWeeks]);
 
   const fullyPickedCount = currentUser ? games.filter((g: any) => currentUser?.picks?.[selectedWeek]?.[g.id] && currentUser?.ranks?.[selectedWeek]?.[g.id]).length : 0;
   const totalItemsRequired = totalGames > 0 ? totalGames + 1 : 0;
@@ -952,7 +1527,7 @@ function MainApp() {
     }
   };
 
-  // --- QUICK PICKS AUTO-FILL HELPERS (RESTORED FOR TESTING) ---
+  // --- QUICK PICKS AUTO-FILL HELPERS ---
   const handleConfidenceQuickPicks = async (forAll = false) => { 
     const usersToUpdate = forAll ? allUsers.filter(u => u.playsConfidence) : [currentUser]; 
     const batch = writeBatch(db); 
@@ -1591,12 +2166,91 @@ function MainApp() {
       </nav>
 
       <main className="max-w-[1600px] mx-auto px-4 py-6 print:hidden">
-        {activeTab === 'dashboard' && (
+      {activeTab === 'dashboard' && (
+            
             <div className="space-y-6 max-w-5xl mx-auto">
-                <div className="bg-slate-900 rounded-3xl p-8 sm:p-12 text-white shadow-2xl border-b-8 border-[#FFB81C] relative overflow-hidden"><div className="absolute top-0 right-0 -mt-10 -mr-10 opacity-20 hidden md:block">{!imgErrors?.logo ? <img src="/hff-logo.png" alt="" className="w-96 h-96 object-contain" onError={() => handleImgError('logo')} /> : <Trophy className="w-96 h-96" />}</div><div className="relative z-10 flex items-center gap-6 mb-8">{!imgErrors?.logo && <img src="/hff-logo.png" alt="Logo" className="w-24 h-24 object-contain drop-shadow-xl md:hidden" onError={() => handleImgError('logo')} />}<div><h2 className="text-4xl sm:text-5xl font-black italic uppercase tracking-tighter mb-2">Welcome back,<br className="sm:hidden" /> <span className="text-[#FFB81C]">{String(currentUser.firstName)}!</span></h2><p className="text-slate-400 font-bold text-lg uppercase tracking-widest">Hanover Football Fanatics Portal</p></div></div>{globalSettings?.announcement && <div className="relative z-10 bg-white/10 border border-white/20 p-5 rounded-2xl max-w-3xl backdrop-blur-sm shadow-xl"><h4 className="flex items-center gap-2 font-black uppercase text-[#FFB81C] text-sm tracking-widest mb-2"><Megaphone className="w-5 h-5" /> Admin Announcement</h4><p className="text-slate-200 font-medium leading-relaxed">{String(globalSettings.announcement || '')}</p></div>}</div>
+                <div className="bg-slate-900 rounded-3xl p-8 sm:p-12 text-white shadow-2xl border-b-8 border-[#FFB81C] relative overflow-hidden">
+                    <div className="absolute top-0 right-0 -mt-10 -mr-10 opacity-20 hidden md:block">
+                        {!imgErrors?.logo ? <img src="/hff-logo.png" alt="" className="w-96 h-96 object-contain" onError={() => handleImgError('logo')} /> : <Trophy className="w-96 h-96" />}
+                    </div>
+                    <div className="relative z-10 flex items-center gap-6 mb-8">
+                        {!imgErrors?.logo && <img src="/hff-logo.png" alt="Logo" className="w-24 h-24 object-contain drop-shadow-xl md:hidden" onError={() => handleImgError('logo')} />}
+                        <div>
+                            <h2 className="text-4xl sm:text-5xl font-black italic uppercase tracking-tighter mb-2">Welcome back,<br className="sm:hidden" /> <span className="text-[#FFB81C]">{String(currentUser.firstName)}!</span></h2>
+                            <p className="text-slate-400 font-bold text-lg uppercase tracking-widest">Hanover Football Fanatics Portal</p>
+                        </div>
+                    </div>
+                    
+                    {globalSettings?.announcement && (
+                        <div className="relative z-10 bg-white/10 border border-white/20 p-5 rounded-2xl max-w-3xl backdrop-blur-sm shadow-xl mb-4">
+                            <h4 className="flex items-center gap-2 font-black uppercase text-[#FFB81C] text-sm tracking-widest mb-2"><Megaphone className="w-5 h-5" /> Admin Announcement</h4>
+                            <p className="text-slate-200 font-medium leading-relaxed">{String(globalSettings.announcement || '')}</p>
+                        </div>
+                    )}
+
+                    {/* 📍 MANUAL TIMEZONE-INDEPENDENT DATE & TIME FORMATTER 📍 */}
+                    {(() => {
+                        const isLiveNow = (games || []).some((g: any) => g.status === 'in_progress');
+                        if (isLiveNow) {
+                            return (
+                                <div className="relative z-10 inline-flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-wider shadow-md animate-pulse">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-white"></span>
+                                    GAMES LIVE NOW
+                                </div>
+                            );
+                        }
+
+                        const formatExactKickoff = (g: any) => {
+                            if (!g) return 'Thu, Aug 6 at 8:00 PM';
+
+                            const rawDate = String(g.kickoff || g.date || g.gameDate || '').trim();
+                            const rawTime = String(g.gameTime || g.statusDetail || g.time || '8:00 PM').trim();
+
+                            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+                            if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+                                const [y, m, d] = rawDate.split('-').map(Number);
+                                const dateObj = new Date(y, m - 1, d);
+                                const dayName = days[dateObj.getDay()];
+                                const monthName = months[dateObj.getMonth()];
+                                return `${dayName}, ${monthName} ${d} at ${rawTime}`;
+                            }
+
+                            if (rawDate && !rawDate.includes('12:00 AM')) {
+                                return `${rawDate} at ${rawTime}`;
+                            }
+
+                            return `Thu, Aug 6 at ${rawTime}`;
+                        };
+
+                        const nonFinalGames = (games || []).filter((g: any) => g.status !== 'final');
+
+                        if (nonFinalGames.length > 0) {
+                            const nextGame = nonFinalGames[0];
+                            const formattedDateTime = formatExactKickoff(nextGame);
+
+                            return (
+                                <div className="relative z-10 inline-flex items-center gap-2.5 bg-slate-800/90 border border-slate-700 text-slate-200 px-4 py-2.5 rounded-2xl font-bold text-xs uppercase tracking-wider backdrop-blur-sm shadow-lg">
+                                    <Clock className="w-4 h-4 text-[#FFB81C]" />
+                                    <span>Next Kickoff:</span>
+                                    <span className="font-black text-[#FFB81C]">{formattedDateTime}</span>
+                                    <span className="text-slate-400 font-bold">({nextGame.awayAbbr || nextGame.away} @ {nextGame.homeAbbr || nextGame.home})</span>
+                                </div>
+                            );
+                        }
+
+                        return (
+                            <div className="relative z-10 inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 text-slate-400 px-4 py-2 rounded-2xl font-bold text-xs uppercase tracking-wider">
+                                All Scheduled Games Complete
+                            </div>
+                        );
+                    })()}
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center"><CalendarDays className="w-10 h-10 text-indigo-500 mb-3" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Current Active Week</div><div className="text-4xl font-black italic text-slate-900">{selectedWeek <= 3 ? `Preseason W${selectedWeek}` : `Week ${selectedWeek - 3}`}</div></div>
-                    {currentUser.playsConfidence ? <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center cursor-pointer hover:border-[#FFB81C] transition-all" onClick={() => setActiveTab('standings')}><Trophy className="w-10 h-10 text-[#FFB81C] mb-3" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Rank</div><div className="text-4xl font-black italic text-slate-900 mb-1">#{String(myRank)}</div>{pointsBehind > 0 && <div className="text-xs font-bold text-slate-500">{String(pointsBehind)} pts behind 1st</div>}{pointsBehind === 0 && myPoints > 0 && <div className="text-xs font-bold text-green-600">You are in 1st!</div>}{rankChange > 0 && <div className="text-xs font-bold text-green-500 mt-1 flex items-center justify-center gap-1"><TrendingUp className="w-3 h-3"/> Up {String(rankChange)} spots</div>}{rankChange < 0 && <div className="text-xs font-bold text-red-500 mt-1 flex items-center justify-center gap-1"><TrendingDown className="w-3 h-3"/> Down {String(Math.abs(rankChange))} spots</div>}</div> : <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center opacity-50"><Trophy className="w-10 h-10 text-slate-400 mb-3" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Pool</div><div className="text-sm font-bold text-slate-500 uppercase">Not Registered</div></div>}
+                    {currentUser.playsConfidence ? <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center cursor-pointer hover:border-[#FFB81C] transition-all" onClick={() => setActiveTab('standings')}><Trophy className="w-10 h-10 text-[#FFB81C]" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Rank</div><div className="text-4xl font-black italic text-slate-900 mb-1">#{String(myRank)}</div>{pointsBehind > 0 && <div className="text-xs font-bold text-slate-500">{String(pointsBehind)} pts behind 1st</div>}{pointsBehind === 0 && myPoints > 0 && <div className="text-xs font-bold text-green-600">You are in 1st!</div>}{rankChange > 0 && <div className="text-xs font-bold text-green-500 mt-1 flex items-center justify-center gap-1"><TrendingUp className="w-3 h-3"/> Up {String(rankChange)} spots</div>}{rankChange < 0 && <div className="text-xs font-bold text-red-500 mt-1 flex items-center justify-center gap-1"><TrendingDown className="w-3 h-3"/> Down {String(Math.abs(rankChange))} spots</div>}</div> : <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center opacity-50"><Trophy className="w-10 h-10 text-slate-400 mb-3" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Pool</div><div className="text-sm font-bold text-slate-500 uppercase">Not Registered</div></div>}
                     {currentUser.playsKnockout ? <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center cursor-pointer hover:border-[#FFB81C] transition-all" onClick={() => setActiveTab('k-tracker')}><HeartPulse className={`w-10 h-10 mb-3 ${isKnockedOut ? 'text-red-500' : 'text-green-500'}`} /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">KnockOut Status</div><div className="text-2xl font-black italic text-slate-900 uppercase">{String(displayKnockoutStatus)}</div></div> : <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center opacity-50"><Skull className="w-10 h-10 text-slate-400 mb-3" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">KnockOut Pool</div><div className="text-sm font-bold text-slate-500 uppercase">Not Registered</div></div>}
                 </div>
                 <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
@@ -1714,8 +2368,9 @@ function MainApp() {
               <AdminNavButton icon={PieChart} label="Pick Status" active={adminTab === 'status'} onClick={() => setAdminTab('status')} />
               <AdminNavButton icon={UserCog} label="Manage Users" active={adminTab === 'users'} onClick={() => setAdminTab('users')} />
               <AdminNavButton icon={ListChecks} label="Manage Games" active={adminTab === 'games'} onClick={() => setAdminTab('games')} />
+              <AdminNavButton icon={DollarSign} label="Financials" active={adminTab === 'financials'} onClick={() => setAdminTab('financials')} />
               <AdminNavButton icon={Settings} label="Site Settings" active={adminTab === 'settings'} onClick={() => setAdminTab('settings')} />
-            </div>
+          </div>
             
             {adminTab === 'status' && (
               <div className="space-y-10 bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
@@ -2011,7 +2666,7 @@ function MainApp() {
                    </div>
 
                    <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                       <div className="p-6 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4"><div><h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 flex items-center gap-2"><ListChecks className="w-5 h-5 text-[#FFB81C]" /> Manage {selectedWeek <= 3 ? `Preseason Week ${selectedWeek}` : `Week ${selectedWeek - 3}`} Games</h3><p className="text-sm text-slate-500 font-bold mt-1">Manually update game statuses and winners.</p></div></div>
+                       <div className="p-6 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4"><div><h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 flex items-center gap-2"><ListChecks className="w-5 h-5 text-[#FFB81C]" /> Manage {selectedWeek <= 3 ? `Preseason Week ${selectedWeek}` : `Week ${selectedWeek - 3}`} Games</h3><p className="text-sm text-slate-500 font-bold mt-1">Manually update game statuses, winners, and designated tiebreaker.</p></div></div>
                        <div className="overflow-x-auto">
                          <table className="w-full text-left min-w-[600px]">
                            <thead><tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]"><th className="p-4 font-black tracking-widest">Matchup</th><th className="p-4 font-black tracking-widest text-center">Status</th><th className="p-4 font-black tracking-widest text-right">Game Result</th></tr></thead>
@@ -2019,7 +2674,32 @@ function MainApp() {
                              {(games || []).map((game: any) => (
                                <tr key={game.id} className="hover:bg-slate-50 transition-colors">
                                  <td className="p-4 font-black text-slate-900 text-lg">{String(game.awayName)} @ {String(game.homeName)}<div className="text-xs text-slate-400 uppercase font-bold tracking-widest mt-1">{String(game.date)} • {String(game.time)}</div></td>
-                                 <td className="p-4 text-center"><span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full ${game.status === 'final' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{String(game.status)}</span></td>
+                                 <td className="p-4 text-center">
+                                   <div className="flex items-center justify-center gap-3">
+                                     <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-200 transition-colors">
+                                       <input
+                                         type="checkbox"
+                                         checked={!!game.isTiebreaker}
+                                         onChange={async (e) => {
+                                           const isChecked = e.target.checked;
+                                           try {
+                                             const updatedGames = games.map((g: any) => 
+                                               g.id === game.id ? { ...g, isTiebreaker: isChecked } : g
+                                             );
+                                             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+                                               [`games.${selectedWeek}`]: updatedGames
+                                             });
+                                           } catch (err) {
+                                             console.error("Error updating tiebreaker flag:", err);
+                                           }
+                                         }}
+                                         className="rounded border-slate-300 text-[#FFB81C] focus:ring-[#FFB81C]"
+                                       />
+                                       <span>Tiebreaker (*)</span>
+                                     </label>
+                                     <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full ${game.status === 'final' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{String(game.status)}</span>
+                                   </div>
+                                 </td>
                                  <td className="p-4 text-right"><select value={game.winner === 'TIE' ? 'TIE' : (game.winner ? game.winner : (game.status === 'final' ? 'final-no-winner' : 'upcoming'))} onChange={(e) => updateGameResult(game.id, e.target.value, e.target.value)} className="border-2 rounded-xl px-4 py-2 text-xs font-black uppercase italic tracking-tighter outline-none focus:border-[#FFB81C] bg-white w-full max-w-[200px] cursor-pointer"><option value="upcoming">Upcoming</option><option value={game.away}>{String(game.awayName)} Won</option><option value={game.home}>{String(game.homeName)} Won</option><option value="TIE">Tie Game</option></select></td>
                                </tr>
                              ))}
@@ -2030,116 +2710,352 @@ function MainApp() {
                    </div>
                 </div>
             )}
+            {adminTab === 'financials' && (
+              <div className="space-y-6">
+                {(() => {
+                  const activePlayers = allUsers.filter(u => u.playsConfidence).length;
+                  let closedWeeksCount = 0;
+                  for (let wk = 4; wk <= 21; wk++) {
+                    if (globalSettings?.weekStates?.[wk] === 'closed') closedWeeksCount++;
+                  }
 
-            {adminTab === 'settings' && (
-                <div className="space-y-6">
-                    <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
-                      <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-2 flex items-center gap-2">
-                        <CalendarDays className="w-4 h-4 text-[#FFB81C]" /> Max Active Pool Weeks
-                      </h3>
-                      <p className="text-sm text-slate-500 font-bold mb-4">
-                        Controls how many weeks players can view and submit picks for in the week selector.
-                      </p>
-                      <div className="flex items-center gap-4">
-                        <input
-                          type="number"
-                          min="1"
-                          max="22"
-                          value={globalSettings?.maxActiveWeeks || 18}
-                          onChange={async (e) => {
-                            const val = parseInt(e.target.value) || 1;
-                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-                              maxActiveWeeks: val
-                            });
-                          }}
-                          className="w-24 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-2 font-black text-slate-900 text-lg outline-none focus:border-[#FFB81C]"
-                        />
-                        <span className="text-sm font-semibold text-slate-600">
-                          Weeks currently accessible to players (1 to {globalSettings?.maxActiveWeeks || 18})
-                        </span>
+                  const totalDuesCollected = activePlayers * 12 * closedWeeksCount;
+                  const weeklyPotPerWeek = activePlayers * 7;
+                  const totalWeeklyPotsPaid = weeklyPotPerWeek * closedWeeksCount;
+                  const halfPotAccumulated = activePlayers * 1.75 * closedWeeksCount;
+                  const seasonPotAccumulated = activePlayers * 1.25 * closedWeeksCount;
+                  const partyFundAccumulated = activePlayers * 2.0 * closedWeeksCount;
+
+                  return (
+                    <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-2xl border-b-8 border-[#FFB81C]">
+                      <div className="flex items-center justify-between mb-6">
+                        <div>
+                          <h2 className="text-3xl font-black italic uppercase text-[#FFB81C] flex items-center gap-2">
+                            <DollarSign className="w-8 h-8" /> League Financial Accounting Ledger
+                          </h2>
+                          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">
+                            Calculated across {activePlayers} Active Players &bull; {closedWeeksCount} Finalized Regular Season Weeks
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                        <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 text-center">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Total Dues Collected</span>
+                          <span className="text-2xl font-black italic text-emerald-400 font-mono">${totalDuesCollected}</span>
+                        </div>
+
+                        <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 text-center">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Weekly Pots Paid</span>
+                          <span className="text-2xl font-black italic text-[#FFB81C] font-mono">${totalWeeklyPotsPaid}</span>
+                        </div>
+
+                        <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 text-center">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Half Pots Accrued</span>
+                          <span className="text-2xl font-black italic text-sky-400 font-mono">${Math.round(halfPotAccumulated)}</span>
+                        </div>
+
+                        <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 text-center">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Season Pot Accrued</span>
+                          <span className="text-2xl font-black italic text-purple-400 font-mono">${Math.round(seasonPotAccumulated)}</span>
+                        </div>
+
+                        <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 text-center col-span-2 sm:col-span-1">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Party / Misc Fund</span>
+                          <span className="text-2xl font-black italic text-indigo-400 font-mono">${Math.round(partyFundAccumulated)}</span>
+                        </div>
                       </div>
                     </div>
+                  );
+                })()}
 
-                    <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm"><h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2"><Megaphone className="w-4 h-4" /> Global Announcement</h3><p className="text-xs text-slate-500 font-medium mb-3">This message will appear prominently on every player's Dashboard tab.</p><textarea value={globalSettings?.announcement || ''} onChange={(e) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { announcement: e.target.value }))} className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-4 font-medium text-slate-900 outline-none focus:border-[#FFB81C] min-h-[100px]" placeholder="Welcome to Hanover Football Fanatics!" /></div>
-                    
-                    <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm mt-6">
-                        <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2">
-                            <KeyRound className="w-4 h-4 text-[#FFB81C]" /> API-Sports Integration Configuration
-                        </h3>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Secret API Key</label>
-                            <input 
-                                type="text" 
-                                value={globalSettings?.apiSportsKey || ''} 
-                                onChange={(e) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { apiSportsKey: e.target.value }))} 
-                                className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-4 font-bold text-slate-900 outline-none focus:border-[#FFB81C]" 
-                                placeholder="Paste your API-Sports v1 Key here..." 
-                            />
-                        </div>
+                <div className="bg-white border-2 border-slate-100 rounded-3xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-black uppercase text-sm text-slate-900 flex items-center gap-2">
+                        <Coins className="w-5 h-5 text-amber-500" /> Rounding & Tie Variance Tracker
+                      </h4>
+                      <p className="text-xs text-slate-500 font-bold mt-1">
+                        Tracks extra dollars absorbed by the house when true ties round up payouts.
+                      </p>
                     </div>
-
-                    <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm"><h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2"><Coins className="w-4 h-4" /> Weekly FP Payouts (Top 1-8)</h3><div className="grid grid-cols-4 md:grid-cols-8 gap-4">{(globalSettings?.fpPayouts || Array(8).fill(0)).map((val: any, i: number) => <AdminNumberInput key={i} label={`Rank ${i+1}`} value={val} onSave={(newVal: any) => updateFpPayouts(i, newVal)} />)}</div></div>
-                    
-                    <div className="bg-[#FFB81C]/10 p-8 rounded-3xl border-2 border-[#FFB81C]/30 shadow-sm">
-                        <h3 className="font-black uppercase tracking-widest text-slate-900 text-xs mb-6 flex items-center gap-2"><Trophy className="w-4 h-4 text-[#FFB81C]" /> Season/Half Payouts (Top 1-8)</h3>
-                        <div className="flex flex-col gap-8">
-                            {(['firstHalf', 'secondHalf', 'overall']).map(key => {
-                                const bonusesObj = globalSettings?.seasonBonuses || {};
-                                const safeArray = Array.isArray(bonusesObj) ? bonusesObj : (bonusesObj[key === 'firstHalf' ? 'firstHalf' : key === 'secondHalf' ? 'secondHalf' : 'overall'] || Array(8).fill(0));
-                                return (
-                                    <div key={key}><label className="block text-[12px] font-black uppercase text-slate-900 border-b-2 border-slate-200 pb-2 mb-3">{key === 'firstHalf' ? 'First Half' : key === 'secondHalf' ? 'Second Half' : 'Overall Season'}</label><div className="grid grid-cols-4 md:grid-cols-8 gap-4">{(safeArray || Array(8).fill(0)).map((val: any, i: number) => <AdminNumberInput key={`${key}-${i}`} label={`Rank ${i+1}`} value={val} onSave={(newVal: any) => updateSeasonBonuses(key, i, newVal)} />)}</div></div>
-                                );
-                            })}
-                        </div>
+                    <div className="text-right">
+                      <span className="text-[10px] font-black uppercase text-slate-400 block">Rounding Variance (This Week)</span>
+                      <span className="text-2xl font-black italic text-rose-600 font-mono">
+                        -${weeklyTrackerData.roundingDollarsLost || 0}.00
+                      </span>
                     </div>
+                  </div>
+                </div>
 
-                    <div className="bg-white p-8 rounded-3xl border-4 border-slate-100 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 mt-12">
-                        <div className="text-center md:text-left">
-                            <h3 className="text-2xl font-black italic uppercase text-slate-900">Reset Fanatics Pool</h3>
-                            <p className="text-slate-500 font-medium">Wipes all picks, ranks, tiebreakers, and history for a new season.</p>
-                        </div>
-                        {!showFanaticsResetConfirm ? (
-                            <button onClick={() => setShowFanaticsResetConfirm(true)} className="px-10 py-4 bg-slate-900 text-[#FFB81C] rounded-2xl font-black italic uppercase tracking-tighter flex items-center justify-center gap-3 hover:scale-105 transition-all w-full md:w-auto shadow-lg">
-                                <RefreshCw className="w-6 h-6" /> Reset Fanatics
-                            </button>
-                        ) : (
-                            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                                <button onClick={() => setShowFanaticsResetConfirm(false)} className="px-6 py-4 bg-white text-slate-700 rounded-2xl font-black italic uppercase tracking-tighter hover:bg-slate-100 transition-all w-full sm:w-auto border-2 border-slate-200">
-                                    Cancel
-                                </button>
-                                <button onClick={handleResetFanatics} className="px-6 py-4 bg-red-900 text-white rounded-2xl font-black italic uppercase tracking-tighter shadow-xl hover:bg-red-800 transition-all flex items-center justify-center gap-2 w-full sm:w-auto animate-pulse">
-                                    Confirm Reset
-                                </button>
-                            </div>
-                        )}
+                <div className="bg-[#FFB81C]/10 p-8 rounded-3xl border-2 border-[#FFB81C]/30 shadow-sm">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                      <h3 className="font-black uppercase tracking-widest text-slate-900 text-sm flex items-center gap-2">
+                        <Coins className="w-4 h-4 text-[#FFB81C]" /> Whole-Dollar Payout Auto-Generator
+                      </h3>
+                      <p className="text-xs text-slate-600 font-medium mt-1">
+                        Calculates rounded whole-dollar payouts based on your spreadsheet matrix for the {allUsers.filter(u => u.playsConfidence).length} active Fanatics players.
+                      </p>
                     </div>
+                    <button
+                      onClick={() => {
+                        const activeCount = allUsers.filter(u => u.playsConfidence).length;
+                        if (activeCount === 0) return alert("No active Fanatics players found!");
+                        
+                        const payouts = calculateFanaticsPayouts(activeCount);
+                        
+                        updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+                          fpPayouts: payouts.weeklyGross,
+                          seasonBonuses: {
+                            firstHalf: payouts.half1Payouts,
+                            secondHalf: payouts.half2Payouts,
+                            overall: payouts.seasonPayouts
+                          }
+                        });
+                        alert(`Generated whole-dollar payouts for ${activeCount} active players!`);
+                      }}
+                      className="bg-slate-900 text-[#FFB81C] px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-md hover:bg-slate-800 transition-all whitespace-nowrap"
+                    >
+                      Recalculate Matrix ({allUsers.filter(u => u.playsConfidence).length} Players)
+                    </button>
+                  </div>
+                </div>
 
-                    <div className="bg-white p-8 rounded-3xl border-4 border-slate-100 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 mt-6">
-                        <div className="text-center md:text-left">
-                            <h3 className="text-2xl font-black italic uppercase text-slate-900">Reset KnockOut Pool</h3>
-                            <p className="text-slate-500 font-medium">Completely wipes all KnockOut picks and statuses to restart the pool for the season.</p>
-                        </div>
-                        {!showResetConfirm ? (
-                            <button onClick={() => setShowResetConfirm(true)} className="px-10 py-4 bg-slate-900 text-[#FFB81C] rounded-2xl font-black italic uppercase tracking-tighter flex items-center justify-center gap-3 hover:scale-105 transition-all w-full md:w-auto shadow-lg">
-                                <RefreshCw className="w-6 h-6" /> Reset KnockOut Season
-                            </button>
-                        ) : (
-                            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                                <button onClick={() => setShowResetConfirm(false)} className="px-6 py-4 bg-white text-slate-700 rounded-2xl font-black italic uppercase tracking-tighter hover:bg-slate-100 transition-all w-full sm:w-auto border-2 border-slate-200">
-                                    Cancel
-                                </button>
-                                <button onClick={handleResetKnockout} className="px-6 py-4 bg-red-900 text-white rounded-2xl font-black italic uppercase tracking-tighter shadow-xl hover:bg-red-800 transition-all flex items-center justify-center gap-2 w-full sm:w-auto animate-pulse">
-                                    Confirm Reset
-                                </button>
-                            </div>
-                        )}
+                <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
+                  <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2">
+                    <Coins className="w-4 h-4" /> Weekly FP Gross Payouts (Top 1-8)
+                  </h3>
+                  <div className="grid grid-cols-4 md:grid-cols-8 gap-4">
+                    {(globalSettings?.fpPayouts || Array(8).fill(0)).map((val: any, i: number) => (
+                      <AdminNumberInput key={i} label={`Rank ${i+1}`} value={val} onSave={(newVal: any) => updateFpPayouts(i, newVal)} />
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
+                    <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2">
+                      <Trophy className="w-4 h-4" /> Season/Half Payouts (Top 1-8)
+                    </h3>
+                    <div className="flex flex-col gap-8">
+                        {(['firstHalf', 'secondHalf', 'overall']).map(key => {
+                            const bonusesObj = globalSettings?.seasonBonuses || {};
+                            const safeArray = Array.isArray(bonusesObj) ? bonusesObj : (bonusesObj[key === 'firstHalf' ? 'firstHalf' : key === 'secondHalf' ? 'secondHalf' : 'overall'] || Array(8).fill(0));
+                            return (
+                                <div key={key}>
+                                  <label className="block text-[12px] font-black uppercase text-slate-900 border-b-2 border-slate-100 pb-2 mb-3">
+                                    {key === 'firstHalf' ? 'First Half (Weeks 4-12)' : key === 'secondHalf' ? 'Second Half (Weeks 13-21)' : 'Overall Season (Weeks 4-21)'}
+                                  </label>
+                                  <div className="grid grid-cols-4 md:grid-cols-8 gap-4">
+                                    {(safeArray || Array(8).fill(0)).map((val: any, i: number) => (
+                                      <AdminNumberInput key={`${key}-${i}`} label={`Rank ${i+1}`} value={val} onSave={(newVal: any) => updateSeasonBonuses(key, i, newVal)} />
+                                    ))}
+                                  </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
+
+                <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
+                  <h3 className="font-black uppercase tracking-widest text-slate-900 text-sm mb-2">
+                    Period Settlement & Bonus Payout Actions
+                  </h3>
+                  <p className="text-xs text-slate-500 font-bold mb-6">
+                    Click any period to preview the top 8 standings and dollar awards before finalizing.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <button
+                      onClick={() => handlePrepareSettlement('firstHalf')}
+                      className="bg-indigo-600 text-white p-4 rounded-2xl font-black uppercase text-xs tracking-wider shadow-md hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2"
+                    >
+                      <Trophy className="w-4 h-4 text-[#FFB81C]" /> Award 1st Half Pot
+                    </button>
+
+                    <button
+                      onClick={() => handlePrepareSettlement('secondHalf')}
+                      className="bg-indigo-600 text-white p-4 rounded-2xl font-black uppercase text-xs tracking-wider shadow-md hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2"
+                    >
+                      <Trophy className="w-4 h-4 text-[#FFB81C]" /> Award 2nd Half Pot
+                    </button>
+
+                    <button
+                      onClick={() => handlePrepareSettlement('overall')}
+                      className="bg-amber-500 text-slate-900 p-4 rounded-2xl font-black uppercase text-xs tracking-wider shadow-md hover:bg-amber-400 transition-all text-center flex items-center justify-center gap-2"
+                    >
+                      <Trophy className="w-4 h-4 text-slate-900" /> Award Overall Season Pot
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
+
+{adminTab === 'settings' && (
+  <div className="space-y-6">
+    <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
+      <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-2 flex items-center gap-2">
+        <CalendarDays className="w-4 h-4 text-[#FFB81C]" /> Max Active Pool Weeks
+      </h3>
+      <p className="text-sm text-slate-500 font-bold mb-4">
+        Controls how many weeks players can view and submit picks for in the week selector.
+      </p>
+      <div className="flex items-center gap-4">
+        <input
+          type="number"
+          min="1"
+          max="22"
+          value={globalSettings?.maxActiveWeeks || 18}
+          onChange={async (e) => {
+            const val = parseInt(e.target.value) || 1;
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+              maxActiveWeeks: val
+            });
+          }}
+          className="w-24 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-2 font-black text-slate-900 text-lg outline-none focus:border-[#FFB81C]"
+        />
+        <span className="text-sm font-semibold text-slate-600">
+          Weeks currently accessible to players (1 to {globalSettings?.maxActiveWeeks || 18})
+        </span>
+      </div>
+    </div>
+
+    <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
+      <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2">
+        <Megaphone className="w-4 h-4" /> Global Announcement
+      </h3>
+      <p className="text-xs text-slate-500 font-medium mb-3">
+        This message will appear prominently on every player's Dashboard tab.
+      </p>
+      <textarea 
+        value={globalSettings?.announcement || ''} 
+        onChange={(e) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { announcement: e.target.value }))} 
+        className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-4 font-medium text-slate-900 outline-none focus:border-[#FFB81C] min-h-[100px]" 
+        placeholder="Welcome to Hanover Football Fanatics!" 
+      />
+    </div>
+    
+    <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
+      <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2">
+        <KeyRound className="w-4 h-4 text-[#FFB81C]" /> API-Sports Integration Configuration
+      </h3>
+      <div className="space-y-2">
+        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Secret API Key</label>
+        <input 
+          type="text" 
+          value={globalSettings?.apiSportsKey || ''} 
+          onChange={(e) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { apiSportsKey: e.target.value }))} 
+          className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-4 font-bold text-slate-900 outline-none focus:border-[#FFB81C]" 
+          placeholder="Paste your API-Sports v1 Key here..." 
+        />
+      </div>
+    </div>
+
+    <div className="bg-white p-8 rounded-3xl border-4 border-slate-100 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 mt-12">
+      <div className="text-center md:text-left">
+        <h3 className="text-2xl font-black italic uppercase text-slate-900">Reset Fanatics Pool</h3>
+        <p className="text-slate-500 font-medium">Wipes all picks, ranks, tiebreakers, and history for a new season.</p>
+      </div>
+      {!showFanaticsResetConfirm ? (
+        <button onClick={() => setShowFanaticsResetConfirm(true)} className="px-10 py-4 bg-slate-900 text-[#FFB81C] rounded-2xl font-black italic uppercase tracking-tighter flex items-center justify-center gap-3 hover:scale-105 transition-all w-full md:w-auto shadow-lg">
+          <RefreshCw className="w-6 h-6" /> Reset Fanatics
+        </button>
+      ) : (
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          <button onClick={() => setShowFanaticsResetConfirm(false)} className="px-6 py-4 bg-white text-slate-700 rounded-2xl font-black italic uppercase tracking-tighter hover:bg-slate-100 transition-all w-full sm:w-auto border-2 border-slate-200">
+            Cancel
+          </button>
+          <button onClick={handleResetFanatics} className="px-6 py-4 bg-red-900 text-white rounded-2xl font-black italic uppercase tracking-tighter shadow-xl hover:bg-red-800 transition-all flex items-center justify-center gap-2 w-full sm:w-auto animate-pulse">
+            Confirm Reset
+          </button>
+        </div>
+      )}
+    </div>
+
+    <div className="bg-white p-8 rounded-3xl border-4 border-slate-100 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+      <div className="text-center md:text-left">
+        <h3 className="text-2xl font-black italic uppercase text-slate-900">Reset KnockOut Pool</h3>
+        <p className="text-slate-500 font-medium">Completely wipes all KnockOut picks and statuses to restart the pool for the season.</p>
+      </div>
+      {!showResetConfirm ? (
+        <button onClick={() => setShowResetConfirm(true)} className="px-10 py-4 bg-slate-900 text-[#FFB81C] rounded-2xl font-black italic uppercase tracking-tighter flex items-center justify-center gap-3 hover:scale-105 transition-all w-full md:w-auto shadow-lg">
+          <RefreshCw className="w-6 h-6" /> Reset KnockOut Season
+        </button>
+      ) : (
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          <button onClick={() => setShowResetConfirm(false)} className="px-6 py-4 bg-white text-slate-700 rounded-2xl font-black italic uppercase tracking-tighter hover:bg-slate-100 transition-all w-full sm:w-auto border-2 border-slate-200">
+            Cancel
+          </button>
+          <button onClick={handleResetKnockout} className="px-6 py-4 bg-red-900 text-white rounded-2xl font-black italic uppercase tracking-tighter shadow-xl hover:bg-red-800 transition-all flex items-center justify-center gap-2 w-full sm:w-auto animate-pulse">
+            Confirm Reset
+          </button>
+        </div>
+      )}
+    </div>
+  </div>
+)}
           </div>
         )}
       </main>
       {showPrintModal && <PrintModal user={currentUser} week={selectedWeek} games={games} onClose={() => setShowPrintModal(false)} bannerImg={imgErrors.logo ? null : "/hff-logo.png"} />}
+{settlementPreview && (
+  <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+    <div className="bg-white max-w-2xl w-full rounded-3xl shadow-2xl overflow-hidden border-t-8 border-[#FFB81C]">
+      <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
+        <div>
+          <h2 className="text-xl font-black italic uppercase text-[#FFB81C] flex items-center gap-2">
+            <Trophy className="w-6 h-6" /> Settlement Preview
+          </h2>
+          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
+            {settlementPreview.title}
+          </p>
+        </div>
+        <button onClick={() => setSettlementPreview(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+          <X className="w-6 h-6 text-slate-400" />
+        </button>
+      </div>
+
+      <div className="p-6 max-h-[60vh] overflow-y-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b-2 border-slate-200 text-[10px] font-black uppercase text-slate-400">
+              <th className="pb-3 italic">Rank</th>
+              <th className="pb-3">Player Name</th>
+              <th className="pb-3 text-center">Period CP</th>
+              <th className="pb-3 text-right">Award Amount</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-sm">
+            {settlementPreview.winners.map((w) => (
+              <tr key={w.rank} className="font-bold">
+                <td className="py-3 font-black italic text-slate-400">#{w.rank}</td>
+                <td className="py-3 text-slate-900 font-black">{w.name}</td>
+                <td className="py-3 text-center font-mono text-slate-600">{w.points} CP</td>
+                <td className="py-3 text-right font-black italic text-emerald-600 text-base">
+                  +${w.bonusAmount}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="p-6 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row justify-end gap-3">
+        <button
+          onClick={() => setSettlementPreview(null)}
+          className="px-6 py-3 bg-slate-200 text-slate-700 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-slate-300 transition-all"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleConfirmSettlement}
+          className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
+        >
+          <CheckCircle className="w-4 h-4" /> Confirm & Apply Payouts
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
