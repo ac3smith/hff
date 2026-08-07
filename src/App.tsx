@@ -828,14 +828,14 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
   const firstPlacePTS = data?.[0]?.[ptsKey] || 0;
 
   return (
-    <div className="bg-white rounded-3xl shadow-xl border overflow-hidden border-t-8 border-[#FFB81C] max-w-4xl mx-auto">
+    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl border overflow-hidden border-t-6 sm:border-t-8 border-[#FFB81C] max-w-4xl mx-auto">
       {/* HEADER */}
-      <div className="p-6 bg-slate-50 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+      <div className="p-4 sm:p-6 bg-slate-50 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 sm:gap-2">
         <div>
-          <h2 className="text-2xl font-black italic uppercase tracking-tight flex items-center gap-2">
-            <Trophy className="w-6 h-6 text-[#FFB81C]" /> {view} Leaderboard
+          <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tight flex items-center gap-2 text-slate-900">
+            <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-[#FFB81C]" /> {view} Leaderboard
           </h2>
-          <p className="text-xs text-slate-500 font-bold mt-0.5">
+          <p className="text-[10px] sm:text-xs text-slate-500 font-bold mt-0.5">
             {view === '1st Half' 
               ? 'Weeks 1–9 Race' 
               : view === '2nd Half' 
@@ -846,12 +846,12 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
       </div>
 
       {/* TABLE COLUMN DESCRIPTIONS HEADER BAR */}
-      <div className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between text-[11px] font-black uppercase tracking-widest border-b-2 border-[#FFB81C]">
-        <div className="w-1/2 sm:w-2/5">Player Identity</div>
-        <div className="flex items-center gap-4 sm:gap-8 justify-end w-1/2 sm:w-3/5 text-right">
-          <div className="w-16 text-center">Total PTS</div>
-          <div className="w-24 text-right">Behind (Leader / Ahead)</div>
-          <div className="w-20 text-right">Net Winnings</div>
+      <div className="bg-slate-900 text-white px-3 sm:px-5 py-2.5 flex items-center justify-between text-[9px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-widest border-b-2 border-[#FFB81C]">
+        <div className="w-5/12 sm:w-2/5 truncate">Player</div>
+        <div className="flex items-center gap-2 sm:gap-6 justify-end w-7/12 sm:w-3/5 text-right">
+          <div className="w-12 sm:w-16 text-center">PTS</div>
+          <div className="w-16 sm:w-24 text-right">Behind</div>
+          <div className="w-16 sm:w-20 text-right">Net $</div>
         </div>
       </div>
 
@@ -866,39 +866,47 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
           const behindNext = idx > 0 ? (data[idx - 1]?.[ptsKey] || 0) - pts : 0;
 
           return (
-            <div key={user.id} className={`px-4 py-3 flex items-center justify-between ${isMe ? 'bg-[#FFB81C]/15 font-black' : 'hover:bg-slate-50'}`}>
-              <div className="flex items-center gap-3 w-1/2 sm:w-2/5">
-                <span className="font-black italic text-lg text-slate-400 w-6 text-right flex-shrink-0">
+            <div key={user.id} className={`px-3 sm:px-5 py-2.5 sm:py-3.5 flex items-center justify-between transition-colors ${isMe ? 'bg-[#FFB81C]/20 font-black border-l-4 border-[#FFB81C]' : 'hover:bg-slate-50'}`}>
+              {/* Player Info */}
+              <div className="flex items-center gap-1.5 sm:gap-3 w-5/12 sm:w-2/5 min-w-0">
+                <span className="font-black italic text-xs sm:text-lg text-slate-400 w-4 sm:w-6 text-right shrink-0">
                   #{user.displayRank}
                 </span>
-                <div className="truncate">
-                  <span className="font-black uppercase text-sm text-slate-900 block leading-tight truncate">
-                    {formatFullName(user)}
+                <div className="truncate min-w-0">
+                  <span className="font-black uppercase text-xs sm:text-sm text-slate-900 block leading-tight truncate">
+                    {user.firstName} {user.nickname ? `"${user.nickname}"` : ''}
+                  </span>
+                  <span className="text-[10px] sm:text-xs text-slate-500 font-bold block truncate">
+                    {user.lastName}
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 sm:gap-8 justify-end w-1/2 sm:w-3/5 text-right">
-                <div className="text-center font-mono font-black text-sm text-slate-900 bg-slate-100 px-2.5 py-1.5 rounded-xl w-16 flex-shrink-0">
-                  {pts} <span className="text-[9px] font-black uppercase text-slate-400 block -mt-1">PTS</span>
+              {/* Numerical Metrics */}
+              <div className="flex items-center gap-2 sm:gap-6 justify-end w-7/12 sm:w-3/5 text-right shrink-0">
+                {/* Points Badge */}
+                <div className="text-center font-mono font-black text-xs sm:text-sm text-slate-900 bg-slate-100 px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl w-12 sm:w-16 shrink-0">
+                  {pts} <span className="text-[8px] sm:text-[9px] font-black uppercase text-slate-400 block -mt-0.5 sm:-mt-1">PTS</span>
                 </div>
 
-                <div className="text-right w-24 flex-shrink-0">
+                {/* Behind Column */}
+                <div className="text-right w-16 sm:w-24 shrink-0">
                   {idx === 0 ? (
                     <span className="text-slate-300 font-bold text-xs block text-right pr-2">-</span>
                   ) : (
                     <div className="flex flex-col items-end leading-tight">
-                      <span className={behindLeader === 0 ? 'text-slate-400 font-bold text-xs' : 'text-rose-600 font-black text-xs sm:text-sm'}>
+                      <span className={behindLeader === 0 ? 'text-slate-400 font-bold text-[11px] sm:text-xs' : 'text-rose-600 font-black text-[11px] sm:text-sm'}>
                         {behindLeader === 0 ? '0' : `-${behindLeader}`}
                       </span>
-                      <span className="text-[9px] text-slate-400 font-bold mt-0.5">
+                      <span className="text-[8px] sm:text-[9px] text-slate-400 font-bold mt-0.5">
                         ({behindNext === 0 ? '0' : `-${behindNext}`})
                       </span>
                     </div>
                   )}
                 </div>
 
-                <div className={`text-right font-mono font-black text-xs sm:text-sm px-2.5 py-1.5 rounded-xl border w-20 flex-shrink-0 ${
+                {/* Net Winnings Badge */}
+                <div className={`text-right font-mono font-black text-[11px] sm:text-sm px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border w-16 sm:w-20 shrink-0 ${
                   netDollars >= 0 
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                     : 'bg-rose-50 text-rose-700 border-rose-200'
