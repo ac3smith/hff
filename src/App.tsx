@@ -343,7 +343,7 @@ function getProjectedWinner(game: any) {
   return null;
 }
 
-function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser, isWeekLocked, adminForceReveal }: any) {
+function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser, isWeekLocked, adminForceReveal, globalSettings }: any) {
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [isProjection, setIsProjection] = useState<boolean>(false); // Default to Official Results view
 
@@ -445,6 +445,8 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
       .sort((a: any, b: any) => b.myRank - a.myRank)
       .slice(0, 3); // Top 3 highest stakes games
   }, [currentUser, games, week]);
+
+  const actualTB = globalSettings?.actualTiebreakers?.[week] ?? undefined;
 
   return (
     <div className="space-y-6">
@@ -575,7 +577,6 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
         {/* OFFICIAL TIEBREAKER BANNER */}
         {(() => {
           const tbGame = (games || []).find((g: any) => g.isTiebreaker) || games?.[games.length - 1];
-          const actualTB = typeof actualTiebreaker !== 'undefined' ? actualTiebreaker : undefined;
 
           return (
             <div className="bg-slate-900 text-white p-4 border-b-2 border-[#FFB81C] flex items-center justify-between px-6">
@@ -646,20 +647,20 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                   const isMe = currentUser && user.id === currentUser.id;
 
                   return (
-                    <tr key={user.id} className={`${isMe ? 'bg-[#FFB81C]/20 border-l-4 border-[#FFB81C]' : isProjection ? 'hover:bg-amber-100/40' : 'hover:bg-slate-50'} transition-colors group relative`}>
+                    <tr key={user.id} className={`${isMe ? 'bg-[#FFB81C]/20 border-l-4 border-[#FFB81C] font-black' : isProjection ? 'hover:bg-amber-100/40' : 'hover:bg-slate-50'} transition-colors group relative`}>
                       {/* Sticky Name Column */}
-                      <td className={`p-2 sticky left-0 z-20 ${isProjection ? 'bg-amber-50 group-hover:bg-amber-100/60' : 'bg-white group-hover:bg-slate-50'} border-r-2 border-slate-200 shadow-[3px_0_10px_rgba(0,0,0,0.05)] ${isMe ? 'bg-[#FFB81C]/20 group-hover:bg-[#FFB81C]/30 border-l-4 border-[#FFB81C]' : ''}`}>
-                        <div className="flex items-center gap-3">
+                      <td className={`p-2 sticky left-0 z-20 ${isMe ? 'bg-[#FFB81C]/30 group-hover:bg-[#FFB81C]/40 border-l-4 border-[#FFB81C]' : isProjection ? 'bg-amber-50 group-hover:bg-amber-100/60' : 'bg-white group-hover:bg-slate-50'} border-r-2 border-slate-200 shadow-[3px_0_10px_rgba(0,0,0,0.05)]`}>
+                        <div className="flex items-center gap-2 sm:gap-3">
                           <div className="flex items-center justify-end w-7 flex-shrink-0">
-                            <span className="text-black font-semibold italic text-xs sm:text-sm">
+                            <span className={`font-black italic text-xs sm:text-sm ${isMe ? 'text-slate-900 scale-105' : 'text-black'}`}>
                               {activeRank}.
                             </span>
                           </div>
                           <div className="flex flex-col leading-tight truncate">
-                            <span className="text-black font-normal text-xs sm:text-sm truncate">
+                            <span className={`text-xs sm:text-sm truncate ${isMe ? 'font-black text-slate-900' : 'font-normal text-black'}`}>
                               {String(user.firstName)} {user.nickname ? `"${user.nickname}"` : ''}
                             </span>
-                            <span className="text-slate-600 font-normal text-xs truncate">
+                            <span className={`text-xs truncate ${isMe ? 'font-bold text-slate-800' : 'font-normal text-slate-600'}`}>
                               {String(user.lastName)}
                             </span>
                           </div>
@@ -673,7 +674,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                         const isHidden = !isWeekLocked && !adminForceReveal && !isMe;
 
                         return (
-                          <td key={g.id} className={`p-0.5 border-r border-slate-100 text-center ${isProjection ? 'bg-amber-50/50' : 'bg-white'}`}>
+                          <td key={g.id} className={`p-0.5 border-r border-slate-100 text-center ${isMe ? 'bg-[#FFB81C]/10' : isProjection ? 'bg-amber-50/50' : 'bg-white'}`}>
                             {isHidden ? (
                               <div className="text-center text-[8px] font-black italic text-slate-300 bg-slate-50 py-1.5 rounded uppercase border border-slate-100">
                                 Lock
@@ -686,10 +687,10 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                       })}
 
                       {/* Score & Standings Columns */}
-                      <td className={`p-1 text-center font-black tabular-nums text-sm sm:text-base border-l-2 border-r border-slate-100 text-slate-900 ${isProjection ? 'bg-amber-50' : 'bg-white'}`}>
+                      <td className={`p-1 text-center font-black tabular-nums text-sm sm:text-base border-l-2 border-r border-slate-100 text-slate-900 ${isMe ? 'bg-[#FFB81C]/20' : isProjection ? 'bg-amber-50' : 'bg-white'}`}>
                         {activeScore}
                       </td>
-                      <td className={`p-1 text-right font-black italic tabular-nums text-xs border-r border-slate-100 ${isProjection ? 'bg-amber-50' : 'bg-white'}`}>
+                      <td className={`p-1 text-right font-black italic tabular-nums text-xs border-r border-slate-100 ${isMe ? 'bg-[#FFB81C]/20' : isProjection ? 'bg-amber-50' : 'bg-white'}`}>
                         {idx === 0 ? (
                           <span className="text-slate-300 font-bold block text-center">-</span>
                         ) : (
@@ -701,7 +702,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                           </div>
                         )}
                       </td>
-                      <td className={`p-1 text-center text-xs font-bold text-slate-700 italic border-r border-slate-100 ${isProjection ? 'bg-amber-50' : 'bg-white'}`}>
+                      <td className={`p-1 text-center text-xs font-bold text-slate-700 italic border-r border-slate-100 ${isMe ? 'bg-[#FFB81C]/20' : isProjection ? 'bg-amber-50' : 'bg-white'}`}>
                         {!isWeekLocked && !adminForceReveal && !isMe ? (
                           <span className="text-slate-300 text-[9px] font-black uppercase italic">HIDDEN</span>
                         ) : (isWeekComplete && !isProjection && user.wonTiebreaker) ? (
@@ -720,63 +721,63 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
               </tbody>
             </table>
           </div>
-) : (
-  /* PLAYER CARDS VIEW */
-  <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-    {processedData.map((user: any) => {
-      const isMe = currentUser && user.id === currentUser.id;
-      const activeScore = user.activeScore ?? 0;
-      const activeRank = user.displayRank ?? 1;
-
-      return (
-        <div
-          key={user.id}
-          className={`rounded-2xl p-4 border-2 transition-all ${
-            isMe ? 'bg-[#FFB81C]/10 border-[#FFB81C] shadow-lg scale-[1.01]' : 'bg-slate-50 border-slate-200'
-          }`}
-        >
-          <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-black italic text-[#FFB81C]">#{activeRank}</span>
-              <div>
-                <h3 className="font-black uppercase text-base text-slate-900 leading-tight">
-                  {formatFullName(user)}
-                </h3>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                  Tiebreaker: {user.tiebreakers?.[week] || '-'} PTS
-                </p>
-              </div>
-            </div>
-            <div className="bg-slate-900 text-[#FFB81C] px-3.5 py-1 rounded-xl font-black italic text-xl shadow-md">
-              {activeScore} <span className="text-xs font-normal">PTS</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            {(games || []).map((g: any) => {
-              const pick = user.picks?.[week]?.[g.id];
-              const rank = user.ranks?.[week]?.[g.id];
-              const isHidden = !isWeekLocked && !adminForceReveal && !isMe;
+        ) : (
+          /* PLAYER CARDS VIEW */
+          <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {processedData.map((user: any) => {
+              const isMe = currentUser && user.id === currentUser.id;
+              const activeScore = user.activeScore ?? 0;
+              const activeRank = user.displayRank ?? 1;
 
               return (
-                <div key={g.id} className="bg-white p-1 rounded-lg border border-slate-200 text-center shadow-sm flex flex-col items-center">
-                  <div className="text-[9px] font-black uppercase text-slate-400 mb-1 truncate w-full">
-                    {g.awayAbbr}@{g.homeAbbr}
+                <div
+                  key={user.id}
+                  className={`rounded-2xl p-4 border-2 transition-all ${
+                    isMe ? 'bg-[#FFB81C]/20 border-[#FFB81C] ring-4 ring-[#FFB81C]/30 shadow-xl scale-[1.01] relative z-10' : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl font-black italic text-[#FFB81C]">#{activeRank}</span>
+                      <div>
+                        <h3 className="font-black uppercase text-base text-slate-900 leading-tight">
+                          {formatFullName(user)}
+                        </h3>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                          Tiebreaker: {user.tiebreakers?.[week] || '-'} PTS
+                        </p>
+                      </div>
+                    </div>
+                    <div className="bg-slate-900 text-[#FFB81C] px-3.5 py-1 rounded-xl font-black italic text-xl shadow-md">
+                      {activeScore} <span className="text-xs font-normal">PTS</span>
+                    </div>
                   </div>
-                  {isHidden ? (
-                    <span className="text-[10px] font-black uppercase text-slate-300 py-1">LOCKED</span>
-                  ) : (
-                    <LiveTrackerCell game={g} pick={pick} rank={rank} isProjection={isProjection} />
-                  )}
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {(games || []).map((g: any) => {
+                      const pick = user.picks?.[week]?.[g.id];
+                      const rank = user.ranks?.[week]?.[g.id];
+                      const isHidden = !isWeekLocked && !adminForceReveal && !isMe;
+
+                      return (
+                        <div key={g.id} className="bg-white p-1 rounded-lg border border-slate-200 text-center shadow-sm flex flex-col items-center">
+                          <div className="text-[9px] font-black uppercase text-slate-400 mb-1 truncate w-full">
+                            {g.awayAbbr}@{g.homeAbbr}
+                          </div>
+                          {isHidden ? (
+                            <span className="text-[10px] font-black uppercase text-slate-300 py-1">LOCKED</span>
+                          ) : (
+                            <LiveTrackerCell game={g} pick={pick} rank={rank} isProjection={isProjection} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}
           </div>
-        </div>
-      );
-    })}
-  </div>
-)}
+        )}
       </div>
     </div>
   );
