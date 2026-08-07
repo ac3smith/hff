@@ -212,27 +212,93 @@ function TeamButton({ team, abbr, name, selected, isLocked, onClick }: any) {
 
 function GameCard({ game, selectedPick, selectedRank, totalGames, usedRanks, isLocked, onPick, onRankChange }: any) {
   const isFullyPicked = selectedPick && selectedRank;
+
   return (
-    <div className={`bg-white rounded-2xl border-2 transition-all duration-300 overflow-hidden flex flex-col lg:flex-row ${isFullyPicked && !isLocked ? 'border-slate-900 shadow-md scale-[1.005]' : selectedPick && !isLocked ? 'border-[#FFB81C]/40' : 'border-slate-100 hover:border-slate-200'}`}>
-      <div className={`p-4 lg:w-48 flex flex-row lg:flex-col justify-between lg:justify-center items-center lg:items-start border-b lg:border-b-0 lg:border-r-2 border-slate-50 ${isLocked ? 'bg-slate-100' : 'bg-slate-50'}`}>
-        <div className="flex items-center gap-2 text-sm font-black text-slate-400 uppercase tracking-widest">
-          {isLocked ? <Lock className="w-4 h-4 text-red-500" /> : <Clock className="w-4 h-4 text-[#FFB81C]" />}
-          {game?.date}
-          {game?.isTiebreaker && <span className="text-[#FFB81C] font-black text-base leading-none" title="Official Tiebreaker Game">*</span>}
+    <div className={`bg-white rounded-2xl border-2 transition-all duration-300 overflow-hidden flex flex-col sm:flex-row ${
+      isFullyPicked && !isLocked 
+        ? 'border-slate-900 shadow-md' 
+        : selectedPick && !isLocked 
+        ? 'border-[#FFB81C]/50' 
+        : 'border-slate-100 hover:border-slate-200'
+    }`}>
+      {/* GAME INFO BAR: Horizontal on mobile, vertical sidebar on desktop */}
+      <div className={`px-3 py-2 sm:p-4 sm:w-44 flex flex-row sm:flex-col justify-between items-center sm:justify-center border-b sm:border-b-0 sm:border-r-2 border-slate-100 ${
+        isLocked ? 'bg-slate-100' : 'bg-slate-50'
+      }`}>
+        <div className="flex items-center gap-1.5 text-xs font-black text-slate-500 uppercase tracking-wider">
+          {isLocked ? <Lock className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <Clock className="w-3.5 h-3.5 text-[#FFB81C] shrink-0" />}
+          <span className="truncate">{game?.date}</span>
+          {game?.isTiebreaker && <span className="text-[#FFB81C] font-black text-sm leading-none" title="Tiebreaker Game">*</span>}
         </div>
-        <div className="text-sm font-bold text-slate-300">{game?.time}</div>
+        <div className="text-xs font-bold text-slate-400">{game?.time}</div>
       </div>
-      <div className={`p-4 flex-1 flex flex-col sm:flex-row items-center gap-3 sm:gap-6 w-full ${isLocked ? 'opacity-75' : ''}`}><TeamButton team={game?.away} abbr={game?.awayAbbr} name={game?.awayName} selected={selectedPick === game?.away} isLocked={isLocked} onClick={() => onPick(game?.away)} /><div className="text-sm font-black text-slate-200 uppercase italic tracking-widest hidden sm:block">VS</div><TeamButton team={game?.home} abbr={game?.homeAbbr} name={game?.homeName} selected={selectedPick === game?.home} isLocked={isLocked} onClick={() => onPick(game?.home)} /></div>
-      <div className={`p-4 lg:w-64 flex flex-row lg:flex-col justify-between items-center lg:justify-center border-t lg:border-t-0 lg:border-l-2 border-slate-50 ${isLocked ? 'bg-slate-100' : 'bg-slate-50/50'}`}>
-        <label className="text-[10px] font-black text-slate-400 flex items-center gap-1.5 uppercase tracking-[0.2em] lg:mb-2">Fanatics Rank</label>
+
+      {/* TEAM PICK SELECTION AREA */}
+      <div className={`p-2.5 sm:p-4 flex-1 flex items-center justify-between gap-2 ${isLocked ? 'opacity-75' : ''}`}>
+        {/* Away Team */}
+        <button
+          onClick={() => onPick(game?.away)}
+          disabled={isLocked}
+          className={`flex-1 flex items-center justify-between p-2 sm:p-3 rounded-xl border-2 transition-all ${
+            selectedPick === game?.away
+              ? 'border-[#FFB81C] bg-[#FFB81C]/10 text-slate-900 shadow-sm font-black'
+              : 'border-transparent bg-slate-50 hover:bg-slate-100 text-slate-700'
+          }`}
+        >
+          <div className="flex items-center gap-2 truncate">
+            <div 
+              className="w-7 h-7 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-black text-[10px] sm:text-xs shrink-0 shadow-sm"
+              style={{ backgroundColor: NFL_COLORS[game?.away] || '#1e293b' }}
+            >
+              {game?.awayAbbr || game?.away}
+            </div>
+            <span className="font-black uppercase italic text-xs sm:text-base truncate">{game?.awayName}</span>
+          </div>
+          {selectedPick === game?.away && <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFB81C] shrink-0 ml-1" strokeWidth={3} />}
+        </button>
+
+        <span className="text-[10px] sm:text-xs font-black text-slate-300 italic uppercase shrink-0">@</span>
+
+        {/* Home Team */}
+        <button
+          onClick={() => onPick(game?.home)}
+          disabled={isLocked}
+          className={`flex-1 flex items-center justify-between p-2 sm:p-3 rounded-xl border-2 transition-all ${
+            selectedPick === game?.home
+              ? 'border-[#FFB81C] bg-[#FFB81C]/10 text-slate-900 shadow-sm font-black'
+              : 'border-transparent bg-slate-50 hover:bg-slate-100 text-slate-700'
+          }`}
+        >
+          <div className="flex items-center gap-2 truncate">
+            <div 
+              className="w-7 h-7 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-black text-[10px] sm:text-xs shrink-0 shadow-sm"
+              style={{ backgroundColor: NFL_COLORS[game?.home] || '#1e293b' }}
+            >
+              {game?.homeAbbr || game?.home}
+            </div>
+            <span className="font-black uppercase italic text-xs sm:text-base truncate">{game?.homeName}</span>
+          </div>
+          {selectedPick === game?.home && <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFB81C] shrink-0 ml-1" strokeWidth={3} />}
+        </button>
+      </div>
+
+      {/* RANK SELECTOR DROPDOWN */}
+      <div className={`p-2.5 sm:p-4 sm:w-48 flex items-center justify-between sm:justify-center border-t sm:border-t-0 sm:border-l-2 border-slate-100 ${
+        isLocked ? 'bg-slate-100' : 'bg-slate-50/50'
+      }`}>
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest sm:hidden">Rank:</label>
         <select 
           value={selectedRank || ''} 
           onChange={(e) => onRankChange(e.target.value)} 
           disabled={isLocked} 
-          className={`appearance-none bg-white border-2 ${selectedRank && !isLocked ? 'border-[#FFB81C] text-[#FFB81C] bg-slate-900' : 'border-slate-200 text-slate-400'} text-base font-black italic uppercase rounded-xl block w-36 px-4 py-3 text-center outline-none transition-all cursor-pointer`}
+          className={`appearance-none bg-white border-2 ${
+            selectedRank && !isLocked 
+              ? 'border-[#FFB81C] text-[#FFB81C] bg-slate-900' 
+              : 'border-slate-200 text-slate-500'
+          } text-xs sm:text-base font-black italic uppercase rounded-xl block w-28 sm:w-36 px-2 py-2 sm:px-4 sm:py-3 text-center outline-none transition-all cursor-pointer`}
         >
           <option value="" disabled>-- PTS --</option>
-          {selectedRank && <option value="">-- Clear Rank --</option>}
+          {selectedRank && <option value="">-- Clear --</option>}
           {Array.from({ length: totalGames }, (_, i) => i + 1)
             .filter(num => !(usedRanks || []).includes(num) || num === parseInt(selectedRank) || isLocked)
             .map(num => <option key={num} value={num}>{num} PTS</option>)}
@@ -1232,10 +1298,35 @@ function TiebreakerCard({ val, game, isLocked, onSave }: any) {
   const [localVal, setLocalVal] = useState(val);
   useEffect(() => setLocalVal(val), [val]);
   const isFilled = localVal.toString().trim() !== '';
+
   return (
-    <div className={`rounded-3xl border-4 p-6 flex flex-col sm:flex-row items-center justify-between gap-6 transition-all duration-500 relative overflow-hidden ${isFilled ? 'border-slate-900 bg-white shadow-2xl scale-[1.01]' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
-      <div className="flex items-center gap-5 relative z-10"><div className={`p-4 rounded-2xl transition-all duration-500 shadow-xl ${isFilled ? 'bg-slate-900 text-[#FFB81C] rotate-[5deg]' : 'bg-slate-50 text-slate-300'}`}><Target className="w-8 h-8" /></div><div><h3 className={`text-2xl font-black italic uppercase tracking-tighter transition-colors ${isFilled ? 'text-slate-900' : 'text-slate-800'}`}>Tiebreaker</h3><p className="text-[11px] text-slate-400 uppercase font-black tracking-widest">{game?.awayName} @ {game?.homeName} Total Pts</p></div></div>
-      <input type="number" value={localVal} onChange={(e) => setLocalVal(e.target.value)} onBlur={() => onSave(localVal)} disabled={isLocked} placeholder="PTS" className={`w-full sm:w-32 h-16 border-4 rounded-2xl px-4 py-2 text-center font-black italic text-3xl tracking-tighter outline-none transition-all relative z-10 ${isFilled ? 'bg-slate-900 border-[#FFB81C] text-[#FFB81C] shadow-2xl' : 'bg-slate-50 border-slate-100 text-slate-300 focus:border-[#FFB81C]'}`} />
+    <div className={`rounded-2xl sm:rounded-3xl border-2 sm:border-4 p-4 sm:p-6 flex items-center justify-between gap-3 transition-all duration-300 ${
+      isFilled ? 'border-slate-900 bg-white shadow-lg' : 'border-slate-100 bg-white'
+    }`}>
+      <div className="flex items-center gap-3">
+        <div className={`p-2.5 sm:p-4 rounded-xl sm:rounded-2xl transition-all ${
+          isFilled ? 'bg-slate-900 text-[#FFB81C]' : 'bg-slate-50 text-slate-300'
+        }`}>
+          <Target className="w-5 h-5 sm:w-8 sm:h-8" />
+        </div>
+        <div>
+          <h3 className="text-base sm:text-2xl font-black italic uppercase tracking-tight text-slate-900">Tiebreaker</h3>
+          <p className="text-[10px] sm:text-xs text-slate-400 font-bold uppercase tracking-wider truncate max-w-[180px] sm:max-w-none">
+            {game?.awayName} @ {game?.homeName} Points
+          </p>
+        </div>
+      </div>
+      <input 
+        type="number" 
+        value={localVal} 
+        onChange={(e) => setLocalVal(e.target.value)} 
+        onBlur={() => onSave(localVal)} 
+        disabled={isLocked} 
+        placeholder="PTS" 
+        className={`w-20 sm:w-32 h-11 sm:h-16 border-2 sm:border-4 rounded-xl sm:rounded-2xl px-2 py-1 text-center font-black italic text-lg sm:text-3xl outline-none transition-all ${
+          isFilled ? 'bg-slate-900 border-[#FFB81C] text-[#FFB81C]' : 'bg-slate-50 border-slate-100 text-slate-400 focus:border-[#FFB81C]'
+        }`} 
+      />
     </div>
   );
 }
