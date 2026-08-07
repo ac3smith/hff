@@ -1,3 +1,27 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* Automatically hide bottom navigation bars when device is in landscape orientation */
+@media (max-height: 500px) and (orientation: landscape) {
+    .mobile-bottom-nav,
+    footer.fixed {
+      display: none !important;
+    }
+  }
+/* Automatically fix landscape orientation on mobile devices */
+@media (max-height: 500px) and (orientation: landscape) {
+    /* 1. Pin any fixed bottom bar to the TOP instead */
+    div[class*="fixed bottom-0"],
+    footer[class*="fixed bottom-0"],
+    nav[class*="fixed bottom-0"] {
+      top: 0 !important;
+      bottom: auto !important;
+      position: sticky !important;
+      z-index: 9999 !important;
+    }
+  
+    /* 2. Shrink vertical padding on landscape screens to maximize space */
+    body {
+      padding-bottom: 0 !important;
+    }
+  }
