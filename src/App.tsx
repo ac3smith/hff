@@ -509,10 +509,10 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
       )}
 
       {/* MAIN TRACKER BOARD */}
-      <div className={`rounded-2xl sm:rounded-3xl shadow-xl border overflow-hidden relative w-full transition-colors duration-300 ${
+      <div className={`rounded-2xl sm:rounded-3xl shadow-xl border relative w-full transition-colors duration-300 ${
         isProjection 
           ? 'bg-amber-50/60 border-2 border-amber-200 border-t-6 sm:border-t-8 border-t-amber-500' 
-          : 'bg-white border overflow-hidden border-t-6 sm:border-t-8 border-slate-900'
+          : 'bg-white border border-t-6 sm:border-t-8 border-slate-900'
       }`}>
         {/* HEADER & TOGGLE CONTROLS */}
         <div className={`p-3.5 sm:p-5 border-b flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 ${
@@ -589,7 +589,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
               </div>
               <div className="text-right">
                 <span className="text-[9px] sm:text-[10px] font-black uppercase text-slate-400 block">Total</span>
-                <span className="text-sm sm:text-lg font-black italic text-white font-mono">
+                <span className="text-sm sm:text-lg font-black italic text-[#FFB81C] font-mono">
                   {actualTB !== undefined && actualTB !== null && actualTB > 0 ? `${actualTB} PTS` : 'Pending'}
                 </span>
               </div>
@@ -599,7 +599,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
 
         {/* COMPACT TABLE VIEW */}
         {viewMode === 'table' ? (
-          <div className="overflow-x-auto scrollbar-hide relative z-0 touch-pan-x">
+          <div className="overflow-x-auto scrollbar-hide relative z-0 style-touch-scroll" style={{ touchAction: 'pan-y' }}>
             <table className="w-full text-left border-collapse table-fixed">
               <thead>
                 <tr className="bg-slate-900 text-white uppercase border-b-4 border-[#FFB81C]">
@@ -713,7 +713,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
             </table>
           </div>
         ) : (
-          /* PLAYER CARDS VIEW (2 Columns on mobile, 3 on larger screens) */
+          /* PLAYER CARDS VIEW */
           <div className="p-3 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {processedData.map((user: any) => {
               const isMe = currentUser && user.id === currentUser.id;
