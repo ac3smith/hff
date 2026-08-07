@@ -8,6 +8,8 @@ import {
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, updateDoc, writeBatch, deleteDoc, deleteField } from 'firebase/firestore';
+import { StatsAndInsightsView } from './StatsAndInsightsView';
+import { CloseWeekPreviewModal } from './CloseWeekPreviewModal';
 
 // --- FIREBASE INITIALIZATION ---
 const firebaseConfig = {
@@ -39,6 +41,60 @@ const NFL_COLORS: any = {
   LV:  '#000000', LAC: '#0080C6', LAR: '#003594', MIA: '#008E97', MIN: '#4F2683', NE:  '#002244', NO:  '#101820', NYG: '#0B2265',
   NYJ: '#125740', PHI: '#004C54', PIT: '#101820', SF:  '#AA0000', SEA: '#002244', TB:  '#D50A0A', TEN: '#0C2340', WAS: '#5A1414'
 };
+
+const OFFICIAL_NFL_ABBR: Record<string, string> = {
+  'New York Giants': 'NYG',
+  'New York Jets': 'NYJ',
+  'Los Angeles Rams': 'LAR',
+  'Los Angeles Chargers': 'LAC',
+  'San Francisco 49ers': 'SF',
+  'Green Bay Packers': 'GB',
+  'New England Patriots': 'NE',
+  'New Orleans Saints': 'NO',
+  'Tampa Bay Buccaneers': 'TB',
+  'Kansas City Chiefs': 'KC',
+  'Las Vegas Raiders': 'LV',
+  'Jacksonville Jaguars': 'JAX',
+  'Miami Dolphins': 'MIA',
+  'Minnesota Vikings': 'MIN',
+  'Carolina Panthers': 'CAR',
+  'Baltimore Ravens': 'BAL',
+  'Buffalo Bills': 'BUF',
+  'Cincinnati Bengals': 'CIN',
+  'Cleveland Browns': 'CLE',
+  'Dallas Cowboys': 'DAL',
+  'Denver Broncos': 'DEN',
+  'Detroit Lions': 'DET',
+  'Houston Texans': 'HOU',
+  'Indianapolis Colts': 'IND',
+  'Philadelphia Eagles': 'PHI',
+  'Pittsburgh Steelers': 'PIT',
+  'Seattle Seahawks': 'SEA',
+  'Tennessee Titans': 'TEN',
+  'Washington Commanders': 'WAS',
+  'Arizona Cardinals': 'ARI',
+  'Atlanta Falcons': 'ATL',
+  'Chicago Bears': 'CHI'
+};
+
+// Helper function to resolve team codes reliably
+function getCleanTeamAbbr(rawCode: string, teamName: string): string {
+  if (teamName && OFFICIAL_NFL_ABBR[teamName]) {
+    return OFFICIAL_NFL_ABBR[teamName];
+  }
+  // Fallbacks for edge cases
+  if (rawCode === 'NEW') {
+    if (teamName?.toLowerCase().includes('giants')) return 'NYG';
+    if (teamName?.toLowerCase().includes('jets')) return 'NYJ';
+    if (teamName?.toLowerCase().includes('patriots')) return 'NE';
+    if (teamName?.toLowerCase().includes('saints')) return 'NO';
+  }
+  if (rawCode === 'LOS' || rawCode === 'LA') {
+    if (teamName?.toLowerCase().includes('rams')) return 'LAR';
+    if (teamName?.toLowerCase().includes('chargers')) return 'LAC';
+  }
+  return rawCode || 'TBD';
+}
 
 const INITIAL_USERS = [
   { id: 'admin-1', firstName: 'Admin', lastName: 'Account', nickname: 'The Admin', username: 'admin', password: 'admin', requiresPasswordChange: true, email: '', role: 'admin', paymentStatus: 'paid', playsConfidence: true, playsKnockout: true, picks: {1:{},2:{},3:{},4:{}}, ranks: {1:{},2:{},3:{},4:{}}, tiebreakers: {1:'',2:'',3:'',4:''}, knockoutPicks: {}, knockoutStatuses: {}, weeklyFantasyHistory: {}, weeklyConfidenceHistory: {} },
@@ -209,12 +265,15 @@ function LiveTrackerCell({ game, pick, rank, isProjection }: any) {
   const inProgress = game?.status === 'in_progress';
 
   let bg = 'bg-white text-slate-900 border-slate-300 shadow-sm';
+  
   if (isWinner) {
     bg = inProgress && isProjection
-      ? 'bg-emerald-500 text-white font-black shadow-sm border-emerald-400 animate-pulse'
+      ? 'bg-emerald-500 text-white font-black shadow-md border-emerald-400 animate-pulse'
       : 'bg-emerald-600 text-white font-black shadow-sm border-emerald-500';
   } else if (isLoser) {
-    bg = 'bg-rose-50 text-rose-700 border-rose-200 line-through opacity-60';
+    bg = inProgress && isProjection
+      ? 'bg-rose-100 text-rose-800 border-rose-300 font-bold'
+      : 'bg-rose-50 text-rose-700 border-rose-200 line-through opacity-60';
   }
 
   const displayPick = pick === game?.away ? (game?.awayAbbr || pick) : (pick === game?.home ? (game?.homeAbbr || pick) : pick);
@@ -224,12 +283,13 @@ function LiveTrackerCell({ game, pick, rank, isProjection }: any) {
       <span className="text-xs font-black tracking-tighter">
         {String(displayPick)}
       </span>
-      <span className={`text-[10px] mt-0.5 px-1 py-0.2 rounded font-black italic ${isWinner ? 'bg-black/30 text-white' : 'bg-slate-100 text-slate-800'}`}>
+      <span className={`text-[10px] mt-0.5 px-1 py-0.2 rounded font-black italic ${isWinner ? 'bg-black/30 text-white' : inProgress && isLoser ? 'bg-rose-200 text-rose-900' : 'bg-slate-100 text-slate-800'}`}>
         {String(rank)}
       </span>
     </div>
   );
 }
+
 
 function LiveScoreTicker({ games }: any) {
   if (!games || games.length === 0) return null;
@@ -264,57 +324,108 @@ function LiveScoreTicker({ games }: any) {
   );
 }
 
-// --- HELPER TO CALCULATE LIVE PROJECTED GAME WINNERS ---
 function getProjectedWinner(game: any) {
   if (!game) return null;
+  
+  // If the game is final, return official winner
   if (game.status === 'final') return game.winner;
+  
+  // ONLY calculate a live winner if the game is actively in progress
   if (game.status === 'in_progress') {
-    const awayScore = parseInt(game.awayScore || 0);
-    const homeScore = parseInt(game.homeScore || 0);
+    const awayScore = parseInt(game.awayScore || 0, 10);
+    const homeScore = parseInt(game.homeScore || 0, 10);
     if (awayScore > homeScore) return game.away;
     if (homeScore > awayScore) return game.home;
-    return null; // Tie in progress
+    return null; // Tied in progress
   }
+  
+  // Upcoming / Scheduled games have no winner yet
   return null;
 }
 
 function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser, isWeekLocked, adminForceReveal }: any) {
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
-  const [isProjection, setIsProjection] = useState<boolean>(true); // Default to live projected view
+  const [isProjection, setIsProjection] = useState<boolean>(false); // Default to Official Results view
 
-  // Calculate live projected scores for every user
+  // Calculate confidence points for each user based on games
   const processedData = useMemo(() => {
     if (!data) return [];
     
+    // 1. Calculate max possible points (standard vs deadbeat)
+    const standardMaxPossible = (games || []).reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
+    const hasActiveLiveGames = (games || []).some((g: any) => g.status === 'in_progress');
+
+    // 2. Calculate score per user
     const calculated = data.map((user: any) => {
-      let liveScore = 0;
-      (games || []).forEach((g: any) => {
-        const pick = user.picks?.[week]?.[g.id];
-        const rank = parseInt(user.ranks?.[week]?.[g.id] || 0);
-        
-        if (pick && rank) {
-          const winner = isProjection ? getProjectedWinner(g) : (g.status === 'final' ? g.winner : null);
-          if (winner && pick === winner) {
-            liveScore += rank;
-          }
+      const userPicks = user.picks?.[week] || {};
+      const userRanks = user.ranks?.[week] || {};
+
+      // Check if player is a deadbeat (assigned 5 PTS across all games or has '0' tiebreaker)
+      const isDeadbeat = user.tiebreakers?.[week] === '0' || 
+        ((games || []).length > 0 && (games || []).every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
+
+      // Deadbeat max potential is 5 * total games (e.g. 17 games * 5 = 85 PTS)
+      const userMaxPossible = isDeadbeat ? (games || []).length * 5 : standardMaxPossible;
+
+      const pointsLost = (games || []).reduce((lost: number, g: any) => {
+        const pick = userPicks[g.id];
+        const rank = parseInt(userRanks[g.id] || 0, 10);
+
+        if (!pick || !rank) return lost;
+
+        // In projection mode during active games, evaluate live leader or final winner.
+        const activeWinner = (isProjection && hasActiveLiveGames)
+          ? getProjectedWinner(g) 
+          : (g.status === 'final' ? g.winner : null);
+
+        // A point is lost ONLY if a game has a settled winner/leader and the pick doesn't match
+        if (activeWinner && pick !== activeWinner) {
+          return lost + rank;
         }
-      });
-      return { ...user, projectedScore: liveScore };
+
+        return lost;
+      }, 0);
+
+      const activeScore = userMaxPossible - pointsLost;
+
+      return {
+        ...user,
+        activeScore,
+        confidenceScore: activeScore,
+        projectedScore: activeScore
+      };
     });
 
-    // Sort by projected score
-    calculated.sort((a: any, b: any) => b.projectedScore - a.projectedScore || a.tbDiff - b.tbDiff);
+    // 3. Sort by Points descending
+    calculated.sort((a: any, b: any) => {
+      if (b.activeScore !== a.activeScore) return b.activeScore - a.activeScore;
 
-    let rank = 1;
-    calculated.forEach((u: any, i: number) => {
-      if (i > 0 && u.projectedScore < calculated[i - 1].projectedScore) {
-        rank = i + 1;
+      // Apply tiebreaker sorting ONLY when week is closed and viewing official results
+      if (isWeekComplete && !isProjection && a.tbDiff !== undefined && b.tbDiff !== undefined && a.tbDiff !== b.tbDiff) {
+        return a.tbDiff - b.tbDiff;
       }
-      u.projectedRank = rank;
+
+      return String(a.lastName || '').localeCompare(String(b.lastName || ''));
+    });
+
+    // 4. Assign Rankings: Shared rank for identical scores
+    let currentRank = 1;
+    calculated.forEach((u: any, i: number) => {
+      const activeScore = u.activeScore;
+      const prevScore = i > 0 ? calculated[i - 1].activeScore : null;
+
+      if (i > 0 && activeScore < prevScore) {
+        currentRank = i + 1; // Standard competition rank (1, 1, 1, 4...)
+      } else if (isWeekComplete && !isProjection && i > 0 && activeScore === prevScore && u.tbDiff !== calculated[i - 1].tbDiff) {
+        currentRank = i + 1;
+      }
+
+      u.projectedRank = currentRank;
+      u.displayRank = currentRank;
     });
 
     return calculated;
-  }, [data, games, week, isProjection]);
+  }, [data, games, week, isProjection, isWeekComplete]);
 
   // Find high stakes games for the logged in user
   const highStakesGames = useMemo(() => {
@@ -400,9 +511,15 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
       )}
 
       {/* MAIN TRACKER BOARD */}
-      <div className="bg-white rounded-3xl shadow-xl border overflow-hidden border-t-8 border-slate-900 relative w-full">
+      <div className={`rounded-3xl shadow-xl border overflow-hidden relative w-full transition-colors duration-300 ${
+        isProjection 
+          ? 'bg-amber-50/60 border-2 border-amber-200 border-t-8 border-t-amber-500' 
+          : 'bg-white border overflow-hidden border-t-8 border-slate-900'
+      }`}>
         {/* HEADER & TOGGLE CONTROLS */}
-        <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className={`p-4 sm:p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${
+          isProjection ? 'bg-amber-100/50 border-amber-200' : 'bg-slate-50 border-slate-200'
+        }`}>
           <div>
             <h2 className="text-xl sm:text-2xl font-black italic uppercase text-slate-900 tracking-tight leading-tight flex items-center gap-2">
               {week <= 3 ? `Preseason Week ${week}` : `Week ${week - 3}`} {isProjection ? 'Live Projection' : 'Official Results'}
@@ -413,16 +530,8 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* PROJECTION TOGGLE */}
+            {/* PROJECTION TOGGLE: OFFICIAL ONLY FIRST, IF ENDED NOW SECOND */}
             <div className="flex bg-slate-200 p-1 rounded-xl border border-slate-300">
-              <button
-                onClick={() => setIsProjection(true)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
-                  isProjection ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5" /> If Ended Now
-              </button>
               <button
                 onClick={() => setIsProjection(false)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
@@ -430,6 +539,14 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                 }`}
               >
                 Official Only
+              </button>
+              <button
+                onClick={() => setIsProjection(true)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                  isProjection ? 'bg-amber-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5" /> If Ended Now
               </button>
             </div>
 
@@ -455,6 +572,34 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
           </div>
         </div>
 
+        {/* OFFICIAL TIEBREAKER BANNER */}
+        {(() => {
+          const tbGame = (games || []).find((g: any) => g.isTiebreaker) || games?.[games.length - 1];
+          const actualTB = typeof actualTiebreaker !== 'undefined' ? actualTiebreaker : undefined;
+
+          return (
+            <div className="bg-slate-900 text-white p-4 border-b-2 border-[#FFB81C] flex items-center justify-between px-6">
+              <div className="flex items-center gap-3">
+                <Target className="w-5 h-5 text-[#FFB81C]" />
+                <div>
+                  <h4 className="font-black uppercase italic text-sm text-[#FFB81C] flex items-center gap-2">
+                    Official Week Tiebreaker
+                  </h4>
+                  <p className="text-xs text-slate-400 font-bold">
+                    {tbGame ? `${tbGame.awayName || tbGame.away} @ ${tbGame.homeName || tbGame.home} Total Points` : 'Last Game of Week'}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-black uppercase text-slate-400 block">Combined Total</span>
+                <span className="text-lg font-black italic text-white font-mono">
+                  {actualTB !== undefined && actualTB !== null && actualTB > 0 ? `${actualTB} PTS` : 'Pending Final'}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* COMPACT TABLE VIEW */}
         {viewMode === 'table' ? (
           <div className="overflow-x-auto scrollbar-hide relative z-0">
@@ -466,18 +611,23 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                   </th>
 
                   {(games || []).map((g: any) => (
-                    <th key={g.id} className="p-0.5 text-center border-r border-slate-800 font-black italic leading-tight w-10 sm:w-11">
+                    <th key={g.id} className={`p-0.5 text-center border-r border-slate-800 font-black italic leading-tight w-10 sm:w-11 ${g.isTiebreaker ? 'bg-amber-500/20' : ''}`}>
                       <div className="text-[#FFB81C] text-xs truncate flex items-center justify-center gap-0.5">
                         <span>{String(g.awayAbbr || g.away)}</span>
                         {g.isTiebreaker && <span className="text-[#FFB81C] font-black text-sm leading-none" title="Official Tiebreaker Game">*</span>}
                       </div>
                       <div className="text-slate-500 text-[9px]">@</div>
                       <div className="text-white text-xs truncate">{String(g.homeAbbr || g.home)}</div>
+                      {g.isTiebreaker && (
+                        <div className="text-[7px] bg-[#FFB81C] text-slate-900 rounded px-0.5 font-black uppercase tracking-tighter mt-0.5">
+                          TB
+                        </div>
+                      )}
                     </th>
                   ))}
 
                   <th className="p-1 text-center border-l-2 border-r border-slate-800 w-14 text-[#FFB81C] font-black italic text-xs sm:text-sm">
-                    {isProjection ? 'Proj PTS' : 'CP'}
+                    PTS
                   </th>
                   <th className="p-1 text-center border-r border-slate-800 w-14 italic text-xs">Behind</th>
                   <th className="p-1 text-center border-r border-slate-800 w-16 italic text-xs">TB</th>
@@ -486,31 +636,24 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
               <tbody className="divide-y divide-slate-100">
                 {processedData.map((user: any, idx: number) => {
                   if (!user) return null;
-                  const activeScore = isProjection ? user.projectedScore : user.confidenceScore;
-                  const activeRank = isProjection ? user.projectedRank : user.displayRank;
-                  const firstScore = processedData[0]?.[isProjection ? 'projectedScore' : 'confidenceScore'] || 0;
-                  
+
+                  const activeScore = user.activeScore ?? 0;
+                  const activeRank = user.displayRank ?? 1;
+                  const firstScore = processedData[0]?.activeScore ?? 0;
+
                   const behindFirst = firstScore - activeScore;
-                  const behindNext = idx > 0 ? (processedData[idx - 1]?.[isProjection ? 'projectedScore' : 'confidenceScore'] - activeScore) : 0;
+                  const behindNext = idx > 0 ? ((processedData[idx - 1]?.activeScore ?? 0) - activeScore) : 0;
                   const isMe = currentUser && user.id === currentUser.id;
 
-                  // Rank Shift Indicator
-                  const rankShift = user.displayRank - activeRank;
-
                   return (
-                    <tr key={user.id} className={`${isMe ? 'bg-[#FFB81C]/20 border-l-4 border-[#FFB81C]' : 'hover:bg-slate-50'} transition-colors group relative`}>
+                    <tr key={user.id} className={`${isMe ? 'bg-[#FFB81C]/20 border-l-4 border-[#FFB81C]' : isProjection ? 'hover:bg-amber-100/40' : 'hover:bg-slate-50'} transition-colors group relative`}>
                       {/* Sticky Name Column */}
-                      <td className={`p-2 sticky left-0 z-20 bg-white group-hover:bg-slate-50 border-r-2 border-slate-200 shadow-[3px_0_10px_rgba(0,0,0,0.05)] ${isMe ? 'bg-[#FFB81C]/20 group-hover:bg-[#FFB81C]/30 border-l-4 border-[#FFB81C]' : ''}`}>
+                      <td className={`p-2 sticky left-0 z-20 ${isProjection ? 'bg-amber-50 group-hover:bg-amber-100/60' : 'bg-white group-hover:bg-slate-50'} border-r-2 border-slate-200 shadow-[3px_0_10px_rgba(0,0,0,0.05)] ${isMe ? 'bg-[#FFB81C]/20 group-hover:bg-[#FFB81C]/30 border-l-4 border-[#FFB81C]' : ''}`}>
                         <div className="flex items-center gap-3">
                           <div className="flex items-center justify-end w-7 flex-shrink-0">
                             <span className="text-black font-semibold italic text-xs sm:text-sm">
                               {activeRank}.
                             </span>
-                            {isProjection && rankShift !== 0 && (
-                              <span className={`text-[9px] font-black ml-1 ${rankShift > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                {rankShift > 0 ? `▲${rankShift}` : `▼${Math.abs(rankShift)}`}
-                              </span>
-                            )}
                           </div>
                           <div className="flex flex-col leading-tight truncate">
                             <span className="text-black font-normal text-xs sm:text-sm truncate">
@@ -530,7 +673,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                         const isHidden = !isWeekLocked && !adminForceReveal && !isMe;
 
                         return (
-                          <td key={g.id} className="p-0.5 border-r border-slate-100 text-center bg-white">
+                          <td key={g.id} className={`p-0.5 border-r border-slate-100 text-center ${isProjection ? 'bg-amber-50/50' : 'bg-white'}`}>
                             {isHidden ? (
                               <div className="text-center text-[8px] font-black italic text-slate-300 bg-slate-50 py-1.5 rounded uppercase border border-slate-100">
                                 Lock
@@ -543,10 +686,10 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                       })}
 
                       {/* Score & Standings Columns */}
-                      <td className="p-1 text-center font-black tabular-nums text-sm sm:text-base border-l-2 border-r border-slate-100 text-slate-900 bg-white">
+                      <td className={`p-1 text-center font-black tabular-nums text-sm sm:text-base border-l-2 border-r border-slate-100 text-slate-900 ${isProjection ? 'bg-amber-50' : 'bg-white'}`}>
                         {activeScore}
                       </td>
-                      <td className="p-1 text-right font-black italic tabular-nums text-xs border-r border-slate-100 bg-white">
+                      <td className={`p-1 text-right font-black italic tabular-nums text-xs border-r border-slate-100 ${isProjection ? 'bg-amber-50' : 'bg-white'}`}>
                         {idx === 0 ? (
                           <span className="text-slate-300 font-bold block text-center">-</span>
                         ) : (
@@ -558,15 +701,17 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                           </div>
                         )}
                       </td>
-                      <td className="p-1 text-center text-xs font-bold text-slate-700 italic border-r border-slate-100 bg-white">
+                      <td className={`p-1 text-center text-xs font-bold text-slate-700 italic border-r border-slate-100 ${isProjection ? 'bg-amber-50' : 'bg-white'}`}>
                         {!isWeekLocked && !adminForceReveal && !isMe ? (
                           <span className="text-slate-300 text-[9px] font-black uppercase italic">HIDDEN</span>
-                        ) : user.wonTiebreaker ? (
+                        ) : (isWeekComplete && !isProjection && user.wonTiebreaker) ? (
                           <span className="inline-flex items-center justify-center gap-0.5 bg-[#FFB81C] text-slate-900 px-1.5 py-0.5 rounded shadow-sm font-black text-xs">
                             <Target className="w-3 h-3" /> {String(user.tiebreakers?.[week] || '')}
                           </span>
                         ) : (
-                          String(user.tiebreakers?.[week] || '')
+                          <span className="text-slate-600 font-mono">
+                            {String(user.tiebreakers?.[week] || '-')}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -575,68 +720,63 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
               </tbody>
             </table>
           </div>
-        ) : (
-          /* PLAYER CARDS VIEW */
-          <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {processedData.map((user: any) => {
-              const isMe = currentUser && user.id === currentUser.id;
-              const activeScore = isProjection ? user.projectedScore : user.confidenceScore;
-              const activeRank = isProjection ? user.projectedRank : user.displayRank;
+) : (
+  /* PLAYER CARDS VIEW */
+  <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {processedData.map((user: any) => {
+      const isMe = currentUser && user.id === currentUser.id;
+      const activeScore = user.activeScore ?? 0;
+      const activeRank = user.displayRank ?? 1;
+
+      return (
+        <div
+          key={user.id}
+          className={`rounded-2xl p-4 border-2 transition-all ${
+            isMe ? 'bg-[#FFB81C]/10 border-[#FFB81C] shadow-lg scale-[1.01]' : 'bg-slate-50 border-slate-200'
+          }`}
+        >
+          <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-black italic text-[#FFB81C]">#{activeRank}</span>
+              <div>
+                <h3 className="font-black uppercase text-base text-slate-900 leading-tight">
+                  {formatFullName(user)}
+                </h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                  Tiebreaker: {user.tiebreakers?.[week] || '-'} PTS
+                </p>
+              </div>
+            </div>
+            <div className="bg-slate-900 text-[#FFB81C] px-3.5 py-1 rounded-xl font-black italic text-xl shadow-md">
+              {activeScore} <span className="text-xs font-normal">PTS</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            {(games || []).map((g: any) => {
+              const pick = user.picks?.[week]?.[g.id];
+              const rank = user.ranks?.[week]?.[g.id];
+              const isHidden = !isWeekLocked && !adminForceReveal && !isMe;
 
               return (
-                <div
-                  key={user.id}
-                  className={`rounded-2xl p-4 border-2 transition-all ${
-                    isMe ? 'bg-[#FFB81C]/10 border-[#FFB81C] shadow-lg scale-[1.01]' : 'bg-slate-50 border-slate-200'
-                  }`}
-                >
-                  <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl font-black italic text-[#FFB81C]">#{activeRank}</span>
-                      <div>
-                        <h3 className="font-black uppercase text-base text-slate-900 leading-tight">
-                          {formatFullName(user)}
-                        </h3>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                          Tiebreaker: {user.tiebreakers?.[week] || '-'} PTS
-                        </p>
-                      </div>
-                    </div>
-                    <div className="bg-slate-900 text-[#FFB81C] px-3.5 py-1 rounded-xl font-black italic text-xl shadow-md">
-                      {activeScore} <span className="text-xs font-normal">PTS</span>
-                    </div>
+                <div key={g.id} className="bg-white p-1 rounded-lg border border-slate-200 text-center shadow-sm flex flex-col items-center">
+                  <div className="text-[9px] font-black uppercase text-slate-400 mb-1 truncate w-full">
+                    {g.awayAbbr}@{g.homeAbbr}
                   </div>
-
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(games || []).map((g: any) => {
-                      const pick = user.picks?.[week]?.[g.id];
-                      const rank = user.ranks?.[week]?.[g.id];
-                      const isHidden = !isWeekLocked && !adminForceReveal && !isMe;
-
-                      return (
-                        <div key={g.id} className="bg-white p-1.5 rounded-lg border border-slate-200 text-center shadow-sm">
-                          <div className="text-[9px] font-black uppercase text-slate-400 mb-0.5">
-                            {g.awayAbbr}@{g.homeAbbr}
-                          </div>
-                          {isHidden ? (
-                            <span className="text-xs font-black uppercase text-slate-300">LOCKED</span>
-                          ) : pick && rank ? (
-                            <div className="font-black uppercase text-xs text-slate-900">
-                              <span className="text-[#FFB81C] bg-slate-900 px-1 py-0.5 rounded text-[9px] mr-1">{rank}</span>
-                              {pick}
-                            </div>
-                          ) : (
-                            <span className="text-slate-300 text-xs">-</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {isHidden ? (
+                    <span className="text-[10px] font-black uppercase text-slate-300 py-1">LOCKED</span>
+                  ) : (
+                    <LiveTrackerCell game={g} pick={pick} rank={rank} isProjection={isProjection} />
+                  )}
                 </div>
               );
             })}
           </div>
-        )}
+        </div>
+      );
+    })}
+  </div>
+)}
       </div>
     </div>
   );
@@ -971,7 +1111,7 @@ function StatsView({ allUsers, globalSettings }: any) {
   );
 }
 
-function AdminLifecycleCard({ week, status, onLock, onClose, onOpen }: any) {
+function AdminLifecycleCard({ week, status, onLock, onClose, onOpen, onPreviewClose }: any) {
   const label = week <= 3 ? `Preseason Week ${week}` : `Week ${week - 3}`;
   return (
     <div className="bg-white p-8 rounded-2xl border-2 border-slate-100 shadow-sm relative overflow-hidden group h-full">
@@ -980,7 +1120,12 @@ function AdminLifecycleCard({ week, status, onLock, onClose, onOpen }: any) {
         <div className={`text-2xl font-black italic uppercase tracking-tighter ${status === 'closed' ? 'text-white' : status === 'locked' ? 'text-red-700' : 'text-slate-900'}`}>Status: {(status || 'open').toUpperCase()}</div>
         <div className="flex flex-wrap justify-center gap-2">
             {status === 'open' && <button onClick={onLock} className="px-6 py-3 bg-red-600 text-white rounded-xl font-black italic uppercase shadow-xl hover:bg-red-700 transition-all text-xs sm:text-sm">Lock Week & Apply Deadbeat</button>}
-            {status === 'locked' && <><button onClick={onOpen} className="px-4 py-3 bg-slate-200 text-slate-700 rounded-xl font-black italic uppercase hover:bg-slate-300 transition-all text-xs sm:text-sm">Unlock</button><button onClick={onClose} className="px-6 py-3 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase shadow-xl hover:scale-105 transition-all text-xs sm:text-sm">Close Week & Finalize</button></>}
+            {status === 'locked' && (
+              <>
+                <button onClick={onOpen} className="px-4 py-3 bg-slate-200 text-slate-700 rounded-xl font-black italic uppercase hover:bg-slate-300 transition-all text-xs sm:text-sm">Unlock</button>
+                <button onClick={onPreviewClose} className="px-6 py-3 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase shadow-xl hover:scale-105 transition-all text-xs sm:text-sm">Close Week & Finalize</button>
+              </>
+            )}
             {status === 'closed' && <button onClick={onOpen} className="px-4 py-3 bg-slate-800 text-slate-300 rounded-xl font-black italic uppercase hover:bg-slate-700 transition-all text-xs sm:text-sm">Re-Open (Edit)</button>}
         </div>
       </div>
@@ -1153,6 +1298,67 @@ function calculateFanaticsPayouts(numPlayers: number, totalWeeks = 18, half1Week
   };
 }
 
+function AutoSyncStatusBadge({ globalSettings }: { globalSettings: any }) {
+  const syncStatus = globalSettings?.syncStatus;
+
+  if (!syncStatus) {
+    return (
+      <div className="flex items-center gap-2 text-[10px] text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 font-bold uppercase tracking-wider">
+        <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+        Auto-Sync: Initializing
+      </div>
+    );
+  }
+
+  const { isActivePolling, activeGameCount, lastCheckedAt } = syncStatus;
+  const formattedTime = lastCheckedAt 
+    ? new Date(lastCheckedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+    : 'Never';
+
+  return (
+    <div className={`flex items-center gap-2 text-[10px] px-3 py-1 rounded-full border font-bold uppercase tracking-wider transition-all ${
+      isActivePolling 
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-300' 
+        : 'bg-slate-100 text-slate-600 border-slate-200'
+    }`}>
+      {/* Pulsing Dot */}
+      <span className="relative flex h-2 w-2">
+        {isActivePolling && (
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+        )}
+        <span className={`relative inline-flex rounded-full h-2 w-2 ${
+          isActivePolling ? 'bg-emerald-500' : 'bg-slate-400'
+        }`}></span>
+      </span>
+
+      <span>
+        {isActivePolling ? `Live Sync (${activeGameCount} Active)` : 'Auto-Sync Standby'}
+      </span>
+      <span className="text-slate-300">|</span>
+      <span className="text-slate-500">Checked {formattedTime}</span>
+    </div>
+  );
+}
+
+// Helper to automatically flag the last chronological game as the tiebreaker
+function ensureAutoTiebreaker(gamesList: any[]) {
+  if (!gamesList || gamesList.length === 0) return [];
+
+  // Parse game date/time for sorting
+  const sorted = [...gamesList].sort((a, b) => {
+    const timeA = new Date(`${a.apiDate || a.date} ${a.time}`).getTime() || 0;
+    const timeB = new Date(`${b.apiDate || b.date} ${b.time}`).getTime() || 0;
+    return timeA - timeB;
+  });
+
+  const lastGameId = sorted[sorted.length - 1]?.id;
+
+  return gamesList.map(g => ({
+    ...g,
+    isTiebreaker: g.id === lastGameId
+  }));
+}
+
 // --- MAIN APP COMPONENT ---
 function MainApp() {
   const [user, setUser] = useState<any>(null), [dbReady, setDbReady] = useState(false), [authLoaded, setAuthLoaded] = useState(false), [sessionLoaded, setSessionLoaded] = useState(false), [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -1167,6 +1373,22 @@ function MainApp() {
   const [imgErrors, setImgErrors] = useState<any>({ logo: false });
   const handleImgError = (key: string) => setImgErrors((prev: any) => ({ ...prev, [key]: true }));
 
+
+  // 📍 PREVIEW CLOSE WEEK MODAL STATE & HANDLER 📍
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  const handleFinalizeCloseWeek = async (finalData: any) => {
+    const { week, finalTiebreakerScore, winners } = finalData;
+
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+      [`weekStates.${week}`]: 'closed',
+      [`actualTiebreakers.${week}`]: finalTiebreakerScore,
+      [`weeklyWinners.${week}`]: winners
+    });
+
+    alert(`Week ${week} has been officially locked and finalized!`);
+  };
+
   const maxActiveWeeks = globalSettings?.maxActiveWeeks || 18;
   const [settlementPreview, setSettlementPreview] = useState<{
     type: string;
@@ -1174,6 +1396,7 @@ function MainApp() {
     payouts: number[];
     winners: any[];
   } | null>(null);
+
 
   const handlePrepareSettlement = (type: 'firstHalf' | 'secondHalf' | 'overall') => {
     const activeCount = allUsers.filter(u => u.playsConfidence).length;
@@ -1277,27 +1500,20 @@ function MainApp() {
   const isAdmin = sessionUser?.role === 'admin';
   const games = useMemo(() => {
     const rawGames = globalSettings?.games?.[selectedWeek] || [];
-    return [...rawGames].sort((a: any, b: any) => {
-      const parseTime = (t: string) => {
-        if (!t) return 0;
-        const match = t.match(/(\d+):(\d+)\s*(AM|PM)/i);
-        if (!match) return 0;
-        let h = parseInt(match[1], 10);
-        const m = parseInt(match[2], 10);
-        if (match[3].toUpperCase() === 'PM' && h !== 12) h += 12;
-        if (match[3].toUpperCase() === 'AM' && h === 12) h = 0;
-        return h * 60 + m;
-      };
-      
-      const timeA = parseTime(a.time);
-      const timeB = parseTime(b.time);
-      if (a.date === b.date) return timeA - timeB;
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
-      
-      if (!isNaN(dateA) && !isNaN(dateB)) return (dateA + timeA * 60000) - (dateB + timeB * 60000);
-      return 0;
+    if (rawGames.length === 0) return [];
+  
+    const sorted = [...rawGames].sort((a: any, b: any) => {
+      const timeA = new Date(`${a.apiDate || a.date} ${a.time}`).getTime() || 0;
+      const timeB = new Date(`${b.apiDate || b.date} ${b.time}`).getTime() || 0;
+      return timeA - timeB;
     });
+  
+    const lastGameId = sorted[sorted.length - 1]?.id;
+  
+    return sorted.map((g: any) => ({
+      ...g,
+      isTiebreaker: g.id === lastGameId
+    }));
   }, [globalSettings?.games, selectedWeek]);
   
   const currentWeekState = globalSettings?.weekStates?.[selectedWeek] || 'open';
@@ -1487,7 +1703,7 @@ function MainApp() {
 
   const isCompleteFanatics = fullyPickedCount === totalGames && totalGames > 0 && hasTiebreaker;
   const isCompleteKnockout = !!currentUser?.knockoutPicks?.[selectedWeek];
-  const isKnockedOut = wasAlreadyOut(currentUser, selectedWeek, globalSettings?.weekStates);
+  let isKnockedOut = wasAlreadyOut(currentUser, selectedWeek, globalSettings?.weekStates);
 
   const statusSummary = useMemo(() => {
     if (!allUsers || !allUsers.length) return { completed: [], inProgress: [], notStarted: [] };
@@ -1713,20 +1929,45 @@ function MainApp() {
       });
       const cleanGames = Array.from(uniqueMap.values());
 
-      const newGames = cleanGames.map((match: any) => {
-        const awayCode = match.teams?.away?.code || match.teams?.away?.name?.substring(0, 3).toUpperCase() || 'AWY';
-        const homeCode = match.teams?.home?.code || match.teams?.home?.name?.substring(0, 3).toUpperCase() || 'HME';
-        
-        const { dateStr, timeStr, isoDate } = parseApiGameTime(match.game);
+      // Helper to automatically flag the last chronological game as the tiebreaker
+function ensureAutoTiebreaker(gamesList: any[]) {
+  if (!gamesList || gamesList.length === 0) return [];
 
+  // Parse game date/time for sorting
+  const sorted = [...gamesList].sort((a, b) => {
+    const timeA = new Date(`${a.apiDate || a.date} ${a.time}`).getTime() || 0;
+    const timeB = new Date(`${b.apiDate || b.date} ${b.time}`).getTime() || 0;
+    return timeA - timeB;
+  });
+
+  const lastGameId = sorted[sorted.length - 1]?.id;
+
+  return gamesList.map(g => ({
+    ...g,
+    isTiebreaker: g.id === lastGameId
+  }));
+}
+
+      const newGames = cleanGames.map((match: any) => {
+        const rawAwayCode = match.teams?.away?.code || '';
+        const rawHomeCode = match.teams?.home?.code || '';
+        const awayName = match.teams?.away?.name || 'Away';
+        const homeName = match.teams?.home?.name || 'Home';
+      
+        // Apply clean NFL abbreviations
+        const awayAbbr = getCleanTeamAbbr(rawAwayCode, awayName);
+        const homeAbbr = getCleanTeamAbbr(rawHomeCode, homeName);
+      
+        const { dateStr, timeStr, isoDate } = parseApiGameTime(match.game);
+      
         return {
           id: match.game?.id || Math.floor(Math.random() * 100000),
-          away: awayCode,
-          home: homeCode,
-          awayAbbr: awayCode,
-          homeAbbr: homeCode,
-          awayName: match.teams?.away?.name || 'Away',
-          homeName: match.teams?.home?.name || 'Home',
+          away: awayAbbr,
+          home: homeAbbr,
+          awayAbbr: awayAbbr,
+          homeAbbr: homeAbbr,
+          awayName: awayName,
+          homeName: homeName,
           date: dateStr,
           apiDate: isoDate.split('T')[0],
           time: timeStr,
@@ -1897,73 +2138,126 @@ function MainApp() {
   };
 
   const handleSyncScores = async () => {
-    if (!globalSettings?.apiSportsKey) return alert("Please enter your API-Sports Key in the Admin Settings tab.");
-    if (globalSettings?.blockLiveSync) return alert("Sync is locked by Admin Site Settings.");
+    if (!globalSettings?.apiSportsKey?.trim()) {
+      return alert("Please enter your API-Sports Key in the Admin Settings tab.");
+    }
+    if (globalSettings?.blockLiveSync) {
+      return alert("Sync is locked by Admin Site Settings.");
+    }
 
     setIsSyncing(true);
     try {
-        const datesToFetch = [...new Set(games.map((g: any) => g.apiDate).filter(Boolean))];
-        if (datesToFetch.length === 0) {
-             alert("No games found to sync. Import a schedule first.");
-             setIsSyncing(false);
-             return;
-        }
-        
-        let apiGames: any[] = [];
-        for (const date of datesToFetch) {
-            const season = String(date).split('-')[0];
-            const res = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=${season}&date=${date}`, {
-                headers: { 'x-apisports-key': globalSettings.apiSportsKey }
-            });
-            const json = await res.json();
-            if (json.response) apiGames = [...apiGames, ...json.response];
-        }
-        
-        const updatedGames = games.map((g: any) => {
-            const match = apiGames.find(ag => String(ag.game?.id) === String(g.id) || (ag.teams?.away?.code === g.away && ag.teams?.home?.code === g.home));
+      const apiKey = globalSettings.apiSportsKey.trim();
+      const headers = { 'x-apisports-key': apiKey };
 
-            if (match) {
-                const shortStatus = match.game?.status?.short || '';
-                const isFinal = ['FT', 'AOT'].includes(shortStatus);
-                const isLive = ['Q1', 'Q2', 'Q3', 'Q4', 'OT', 'HT', 'LIVE'].includes(shortStatus);
-                
-                const homeTotal = match.scores?.home?.total;
-                const awayTotal = match.scores?.away?.total;
-                
-                let winner = g.winner;
-                if (isFinal && homeTotal !== null && awayTotal !== null) {
-                    if (homeTotal > awayTotal) winner = g.home;
-                    else if (awayTotal > homeTotal) winner = g.away;
-                    else winner = 'TIE';
-                }
-                
-                let statusText = 'upcoming';
-                if (isFinal) {
-                    statusText = 'final';
-                } else if (isLive) {
-                    statusText = shortStatus === 'HT' ? 'HALFTIME' : (match.game?.status?.long || shortStatus);
-                }
-
-                return { 
-                    ...g, 
-                    status: statusText, 
-                    homeScore: homeTotal !== undefined ? homeTotal : null, 
-                    awayScore: awayTotal !== undefined ? awayTotal : null,
-                    winner: winner
-                };
-            }
-            return g;
-        });
-        
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { 
-          [`games.${selectedWeek}`]: updatedGames 
-        });
-        alert("NFL scores synced successfully!");
-    } catch (e) {
-        console.error("Score Sync Error:", e);
-        alert("Failed to sync live scores.");
-    } finally {
+      if (!games || games.length === 0) {
+        alert("No games loaded for this week to sync.");
         setIsSyncing(false);
+        return;
+      }
+
+      // Collect valid API dates (YYYY-MM-DD)
+      let datesToFetch = [...new Set(games.map((g: any) => g.apiDate).filter(Boolean))];
+
+      let apiGames: any[] = [];
+
+      if (datesToFetch.length > 0) {
+        for (const date of datesToFetch) {
+          const season = String(date).split('-')[0] || "2026";
+          const res = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=${season}&date=${date}`, { headers });
+          
+          if (!res.ok) {
+            throw new Error(`API returned HTTP ${res.status}: ${res.statusText}`);
+          }
+
+          const json = await res.json();
+          if (json.errors && Object.keys(json.errors).length > 0) {
+            throw new Error(`API-Sports Error: ${JSON.stringify(json.errors)}`);
+          }
+
+          if (json.response && Array.isArray(json.response)) {
+            apiGames = [...apiGames, ...json.response];
+          }
+        }
+      } else {
+        const res = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=2026`, { headers });
+        if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+        const json = await res.json();
+        if (json.errors && Object.keys(json.errors).length > 0) {
+          throw new Error(`API-Sports Error: ${JSON.stringify(json.errors)}`);
+        }
+        if (json.response) apiGames = json.response;
+      }
+
+      if (apiGames.length === 0) {
+        alert("API-Sports returned 0 game records for the requested dates.");
+        setIsSyncing(false);
+        return;
+      }
+
+      // 📍 FIRESTORE-SAFE GAME MATCHING (REPLACES undefined WITH null) 📍
+      let updatedCount = 0;
+      const updatedGames = games.map((g: any) => {
+        const match = apiGames.find((ag: any) => 
+          String(ag.game?.id) === String(g.id) || 
+          (ag.teams?.away?.code === g.away && ag.teams?.home?.code === g.home) ||
+          (ag.teams?.away?.name?.toLowerCase().includes(String(g.awayName || '').toLowerCase()) && 
+           ag.teams?.home?.name?.toLowerCase().includes(String(g.homeName || '').toLowerCase()))
+        );
+
+        if (match) {
+          updatedCount++;
+          const shortStatus = match.game?.status?.short || '';
+          const isFinal = ['FT', 'AOT'].includes(shortStatus);
+          const isLive = ['Q1', 'Q2', 'Q3', 'Q4', 'OT', 'HT', 'LIVE'].includes(shortStatus);
+
+          const homeTotal = match.scores?.home?.total ?? null;
+          const awayTotal = match.scores?.away?.total ?? null;
+
+          let winner = g.winner || null;
+          if (isFinal && homeTotal !== null && awayTotal !== null) {
+            if (homeTotal > awayTotal) winner = g.home;
+            else if (awayTotal > homeTotal) winner = g.away;
+            else winner = 'TIE';
+          }
+
+          let statusText = g.status || 'upcoming';
+          if (isFinal) {
+            statusText = 'final';
+          } else if (isLive) {
+            statusText = shortStatus === 'HT' ? 'HALFTIME' : (match.game?.status?.long || shortStatus);
+          }
+
+          return {
+            ...g,
+            status: statusText,
+            homeScore: homeTotal !== null ? homeTotal : (g.homeScore ?? null),
+            awayScore: awayTotal !== null ? awayTotal : (g.awayScore ?? null),
+            winner: winner ?? null,
+            isTiebreaker: !!g.isTiebreaker
+          };
+        }
+        
+        // Ensure no existing undefined fields remain on unmatched games
+        return {
+          ...g,
+          homeScore: g.homeScore ?? null,
+          awayScore: g.awayScore ?? null,
+          winner: g.winner ?? null,
+          isTiebreaker: !!g.isTiebreaker
+        };
+      });
+
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+        [`games.${selectedWeek}`]: updatedGames
+      });
+
+      alert(`Scores synced successfully! Updated ${updatedCount} of ${games.length} games.`);
+    } catch (e: any) {
+      console.error("Score Sync Error:", e);
+      alert(`Sync Failed: ${e?.message || 'Check console logs.'}`);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -2124,8 +2418,18 @@ function MainApp() {
   if (!isLoggedIn) return <LoginView users={allUsers} onLogin={async (id: string) => { setCurrentUserId(id); setOverrideUserId(null); setIsLoggedIn(true); setActiveTab('dashboard'); if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'session', 'current'), { currentUserId: id }); }} imgError={imgErrors.logo} handleImgError={handleImgError} onChangePassword={handleChangePassword} />;
   if (isLoggedIn && !currentUser) return <div className="min-h-screen flex flex-col items-center justify-center text-white" style={fieldBackgroundStyle}><RefreshCw className="w-12 h-12 text-[#FFB81C] animate-spin mb-4" /><h1 className="text-2xl font-black italic uppercase tracking-widest text-[#FFB81C]">Loading Account...</h1></div>;
 
-  const userPaymentStatus = currentUser.paymentStatus || 'unpaid', myStat = seasonStats.find(u => u.id === currentUser.id), firstPlacePoints = seasonStats[0]?.[seasonView === '1st Half' ? 'cpFirstHalf' : seasonView === '2nd Half' ? 'cpSecondHalf' : 'cpOverall'] || 0, knockoutStatus = knockoutTrackerData.find(u => u.id === currentUser.id)?.currentStatus, myRank = myStat?.displayRank || '-', myPoints = myStat?.cpOverall || 0, pointsBehind = firstPlacePoints - myPoints, rankChange = (myStat?.previousRank && myStat?.previousCpOverall > 0) ? (myStat.previousRank - myStat.displayRank) : 0;
-  let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
+  const userPaymentStatus = currentUser.paymentStatus || 'unpaid', 
+  myStat = seasonStats.find(u => u.id === currentUser.id), 
+  firstPlacePoints = seasonStats[0]?.[seasonView === '1st Half' ? 'cpFirstHalf' : seasonView === '2nd Half' ? 'cpSecondHalf' : 'cpOverall'] || 0, 
+  liveKoStatus = knockoutTrackerData.find(u => u.id === currentUser.id)?.currentStatus, 
+  myRank = myStat?.displayRank || '-', 
+  myPoints = myStat?.cpOverall || 0, 
+  pointsBehind = firstPlacePoints - myPoints, 
+  rankChange = (myStat?.previousRank && myStat?.previousCpOverall > 0) ? (myStat.previousRank - myStat.displayRank) : 0;
+
+// Remove 'const' here:
+isKnockedOut = liveKoStatus === 'Knocked Out' || wasAlreadyOut(currentUser, selectedWeek, globalSettings?.weekStates);
+let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 
   return (
     <div className="min-h-screen font-sans text-slate-900 pb-24 md:pb-0 relative" style={fieldBackgroundStyle}>
@@ -2358,9 +2662,16 @@ function MainApp() {
           </div>
         )}
 
-        {activeTab === 'stats' && (
-          <StatsView allUsers={allUsers} globalSettings={globalSettings} />
-        )}
+{activeTab === 'stats' && (
+  <StatsAndInsightsView
+    allUsers={allUsers}
+    globalSettings={globalSettings}
+    selectedWeek={selectedWeek}
+    setSelectedWeek={setSelectedWeek}
+    currentUser={currentUser}
+    maxActiveWeeks={maxActiveWeeks}
+  />
+)}
 
         {activeTab === 'admin' && isAdmin && (
           <div className="space-y-6 max-w-[1200px] mx-auto">
@@ -2559,7 +2870,14 @@ function MainApp() {
             {adminTab === 'games' && (
                 <div className="space-y-6">
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                       <AdminLifecycleCard week={selectedWeek} status={currentWeekState} onLock={handleLockWeek} onClose={handleCloseWeek} onOpen={handleOpenWeek} />
+                   <AdminLifecycleCard 
+  week={selectedWeek} 
+  status={currentWeekState} 
+  onLock={handleLockWeek} 
+  onClose={handleCloseWeek} 
+  onOpen={handleOpenWeek}
+  onPreviewClose={() => setIsPreviewOpen(true)}
+/>
                        <AdminWeekCard week={selectedWeek} onChange={(e: any) => setSelectedWeek(Number(e.target.value))} maxActiveWeeks={maxActiveWeeks} />
                    </div>
 
@@ -2648,22 +2966,32 @@ function MainApp() {
                      </div>
                    </div>
                    
-                   <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
-                       <div>
-                           <h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 flex items-center gap-2">
-                               <Zap className="w-5 h-5 text-[#FFB81C]" /> Live Scores Sync
-                           </h3>
-                           <p className="text-sm text-slate-500 font-bold mt-1">Pull live scores and updates for currently loaded games.</p>
-                       </div>
-                       <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-                           <button onClick={handleForceFixGames} disabled={isSaving} className="px-6 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-md hover:bg-red-700 disabled:opacity-50 transition-colors w-full sm:w-auto">
-                               Force-Fix Duplicates
-                           </button>
-                           <button onClick={handleSyncScores} disabled={isSyncing} className="px-6 py-3 bg-slate-900 text-[#FFB81C] rounded-xl font-black uppercase text-xs tracking-widest shadow-md hover:bg-slate-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">
-                               {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin"/> : 'Sync Live Scores'}
-                           </button>
-                       </div>
-                   </div>
+                   
+                       
+<div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
+    <div>
+        <h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 flex items-center gap-2">
+            <Zap className="w-5 h-5 text-[#FFB81C]" /> Live Scores Sync
+        </h3>
+        <p className="text-sm text-slate-500 font-bold mt-1">Pull live scores and updates for currently loaded games.</p>
+    </div>
+    
+    {/* Buttons + Badge Container stacked vertically */}
+    <div className="flex flex-col items-center md:items-end gap-2 w-full md:w-auto">
+        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+            <button onClick={handleForceFixGames} disabled={isSaving} className="px-6 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-md hover:bg-red-700 disabled:opacity-50 transition-colors w-full sm:w-auto">
+                Force-Fix Duplicates
+            </button>
+            <button onClick={handleSyncScores} disabled={isSyncing} className="px-6 py-3 bg-slate-900 text-[#FFB81C] rounded-xl font-black uppercase text-xs tracking-widest shadow-md hover:bg-slate-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">
+                {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin"/> : 'Sync Live Scores'}
+            </button>
+        </div>
+
+        {/* 📍 PLACED DIRECTLY BELOW THE SYNC BUTTON 📍 */}
+        <AutoSyncStatusBadge globalSettings={globalSettings} />
+    </div>
+</div>
+                  
 
                    <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
                        <div className="p-6 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4"><div><h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 flex items-center gap-2"><ListChecks className="w-5 h-5 text-[#FFB81C]" /> Manage {selectedWeek <= 3 ? `Preseason Week ${selectedWeek}` : `Week ${selectedWeek - 3}`} Games</h3><p className="text-sm text-slate-500 font-bold mt-1">Manually update game statuses, winners, and designated tiebreaker.</p></div></div>
@@ -2996,6 +3324,15 @@ function MainApp() {
           </div>
         )}
       </main>
+      {/* CLOSE WEEK PREVIEW MODAL */}
+      <CloseWeekPreviewModal
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        onConfirmCloseWeek={handleFinalizeCloseWeek}
+        selectedWeek={selectedWeek}
+        games={games}
+        allUsers={allUsers}
+      />
       {showPrintModal && <PrintModal user={currentUser} week={selectedWeek} games={games} onClose={() => setShowPrintModal(false)} bannerImg={imgErrors.logo ? null : "/hff-logo.png"} />}
 {settlementPreview && (
   <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
