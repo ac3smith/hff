@@ -221,7 +221,7 @@ function GameCard({ game, selectedPick, selectedRank, totalGames, usedRanks, isL
         ? 'border-[#FFB81C]/50' 
         : 'border-slate-100 hover:border-slate-200'
     }`}>
-      {/* GAME INFO BAR: Horizontal on mobile, vertical sidebar on desktop */}
+      {/* GAME INFO BAR */}
       <div className={`px-3 py-2 sm:p-4 sm:w-44 flex flex-row sm:flex-col justify-between items-center sm:justify-center border-b sm:border-b-0 sm:border-r-2 border-slate-100 ${
         isLocked ? 'bg-slate-100' : 'bg-slate-50'
       }`}>
@@ -235,7 +235,7 @@ function GameCard({ game, selectedPick, selectedRank, totalGames, usedRanks, isL
 
       {/* TEAM PICK SELECTION AREA */}
       <div className={`p-2.5 sm:p-4 flex-1 flex items-center justify-between gap-2 ${isLocked ? 'opacity-75' : ''}`}>
-        {/* Away Team */}
+        {/* Away Team Button */}
         <button
           onClick={() => onPick(game?.away)}
           disabled={isLocked}
@@ -252,14 +252,20 @@ function GameCard({ game, selectedPick, selectedRank, totalGames, usedRanks, isL
             >
               {game?.awayAbbr || game?.away}
             </div>
-            <span className="font-black uppercase italic text-xs sm:text-base truncate">{game?.awayName}</span>
+            {/* Abbreviation shown on Mobile, Full Name shown on SM+ screens */}
+            <span className="font-black uppercase italic text-xs sm:text-base truncate sm:hidden">
+              {game?.awayAbbr || game?.away}
+            </span>
+            <span className="font-black uppercase italic text-xs sm:text-base truncate hidden sm:inline">
+              {game?.awayName}
+            </span>
           </div>
           {selectedPick === game?.away && <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFB81C] shrink-0 ml-1" strokeWidth={3} />}
         </button>
 
         <span className="text-[10px] sm:text-xs font-black text-slate-300 italic uppercase shrink-0">@</span>
 
-        {/* Home Team */}
+        {/* Home Team Button */}
         <button
           onClick={() => onPick(game?.home)}
           disabled={isLocked}
@@ -276,7 +282,13 @@ function GameCard({ game, selectedPick, selectedRank, totalGames, usedRanks, isL
             >
               {game?.homeAbbr || game?.home}
             </div>
-            <span className="font-black uppercase italic text-xs sm:text-base truncate">{game?.homeName}</span>
+            {/* Abbreviation shown on Mobile, Full Name shown on SM+ screens */}
+            <span className="font-black uppercase italic text-xs sm:text-base truncate sm:hidden">
+              {game?.homeAbbr || game?.home}
+            </span>
+            <span className="font-black uppercase italic text-xs sm:text-base truncate hidden sm:inline">
+              {game?.homeName}
+            </span>
           </div>
           {selectedPick === game?.home && <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFB81C] shrink-0 ml-1" strokeWidth={3} />}
         </button>
