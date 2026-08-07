@@ -51,3 +51,27 @@
       padding-bottom: 0 !important;
     }
   }
+
+/* Compact Top Header & Navigation Fix */
+header.sticky,
+header[class*="sticky"] {
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  min-height: unset !important;
+}
+
+/* Shrink header branding text and icon padding */
+header.sticky h1,
+header.sticky span,
+header[class*="sticky"] span {
+  font-size: 0.85rem !important;
+  line-height: 1.1 !important;
+}
+
+/* Tighten header navigation buttons */
+header.sticky button,
+header[class*="sticky"] button {
+  padding: 3px 8px !important;
+  font-size: 0.7rem !important;
+  height: 28px !important;
+}
