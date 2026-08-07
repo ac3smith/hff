@@ -599,7 +599,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
 
         {/* COMPACT TABLE VIEW */}
         {viewMode === 'table' ? (
-          <div className="overflow-x-auto scrollbar-hide relative z-0 style-touch-scroll" style={{ touchAction: 'pan-y' }}>
+          <div className="overflow-x-auto scrollbar-hide relative z-0 overscroll-x-contain" style={{ touchAction: 'pan-x pan-y', WebkitOverflowScrolling: 'touch' }}>
             <table className="w-full text-left border-collapse table-fixed">
               <thead>
                 <tr className="bg-slate-900 text-white uppercase border-b-4 border-[#FFB81C]">
