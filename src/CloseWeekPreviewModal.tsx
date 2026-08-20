@@ -8,7 +8,8 @@ interface CloseWeekPreviewModalProps {
   selectedWeek: number;
   games: any[];
   allUsers: any[];
-  payoutStructure?: number[]; // e.g. [100, 60, 40, 20, 10, 10, 10, 10]
+  globalSettings?: any;
+  payoutStructure?: number[];
 }
 
 export function CloseWeekPreviewModal({
@@ -18,12 +19,13 @@ export function CloseWeekPreviewModal({
   selectedWeek,
   games,
   allUsers,
-  payoutStructure = [100, 60, 40, 20, 10, 10, 10, 10]
+  globalSettings,
+  payoutStructure
 }: CloseWeekPreviewModalProps) {
   if (!isOpen) return null;
 
-  // 1. Find last game automatically & calculate total points
-  const tbGame = games.find((g: any) => g.isTiebreaker) || games[games.length - 1];
+  // 1. Find last game automatically & calculate total points for tiebreaker
+  const tbGame = (games || []).find((g: any) => g.isTiebreaker) || (games || [])[games.length - 1];
   const autoCalculatedTotal = tbGame && tbGame.status === 'final'
     ? (parseInt(tbGame.awayScore || '0', 10) + parseInt(tbGame.homeScore || '0', 10))
     : 0;
@@ -31,45 +33,91 @@ export function CloseWeekPreviewModal({
   const [overrideTBScore, setOverrideTBScore] = useState<number>(autoCalculatedTotal);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 2. Rank users based on points and absolute tiebreaker proximity
-  const rankedUsers = [...allUsers]
+  // 2. Read exact weekly payout structure saved in Financials tab (`globalSettings.fpPayouts`)
+  const fpPayoutsArray: number[] = payoutStructure || globalSettings?.fpPayouts || [100, 80, 70, 60, 50, 40, 30, 20];
+
+  const standardMaxPossible = (games || []).reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
+
+  // 3. Compute accurate confidence points for each player
+  const rankedUsers = [...(allUsers || [])]
     .filter((u: any) => u.playsConfidence)
     .map((u: any) => {
-      const currentPts = u.weeklyPoints?.[selectedWeek] || 0;
-      const tbGuess = parseInt(u.tiebreakerGuesses?.[selectedWeek] || '0', 10);
+      // Check saved confidence score history first, or compute dynamically from picks/ranks
+      let currentPts = u.weeklyConfidenceHistory?.[selectedWeek];
+
+      if (currentPts === undefined || currentPts === null) {
+        const userPicks = u.picks?.[selectedWeek] || {};
+        const userRanks = u.ranks?.[selectedWeek] || {};
+
+        const isDeadbeat = u.tiebreakers?.[selectedWeek] === '0' || 
+          ((games || []).length > 0 && (games || []).every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
+
+        const userMaxPossible = isDeadbeat ? (games || []).length * 5 : standardMaxPossible;
+
+        const pointsLost = (games || []).reduce((lost: number, g: any) => {
+          const pick = userPicks[g.id];
+          const rank = parseInt(userRanks[g.id] || 0, 10);
+          if (!pick || !rank) return lost;
+
+          if (g.status === 'final' && g.winner && pick !== g.winner) {
+            return lost + rank;
+          }
+          return lost;
+        }, 0);
+
+        currentPts = userMaxPossible - pointsLost;
+      }
+
+      const tbGuess = parseInt(u.tiebreakers?.[selectedWeek] || '0', 10);
       const absDiff = Math.abs(tbGuess - overrideTBScore);
 
       return {
         ...u,
-        currentPts,
+        currentPts: Number(currentPts) || 0,
         tbGuess,
         absDiff
       };
     })
     .sort((a, b) => {
-      // Primary: Most Confidence Points
+      // Primary Sort: Most Confidence Points (Higher wins)
       if (b.currentPts !== a.currentPts) return b.currentPts - a.currentPts;
-      // Secondary: Closest Absolute Tiebreaker Difference (No penalty for going over)
-      return a.absDiff - b.absDiff;
+      // Secondary Sort: Closest Tiebreaker Difference (Smaller diff wins)
+      if (a.absDiff !== b.absDiff) return a.absDiff - b.absDiff;
+      // Tertiary Sort: Alphabetical
+      return String(a.lastName || '').localeCompare(String(b.lastName || ''));
     });
 
-  // 3. Detect splits for ties in Top 8
-  const top8WithPayouts = rankedUsers.slice(0, 8).map((user, idx, arr) => {
-    let basePayout = payoutStructure[idx] || 0;
+  // 4. Assign true rank positions and handle pooled payout splits for exact ties
+  let currentRank = 1;
+  const processedRankings = rankedUsers.map((user, idx, arr) => {
+    if (idx > 0) {
+      const prev = arr[idx - 1];
+      if (user.currentPts < prev.currentPts || (user.currentPts === prev.currentPts && user.absDiff > prev.absDiff)) {
+        currentRank = idx + 1;
+      }
+    }
 
-    // Check for identical point and tiebreaker score ties
+    // Check for exact ties (same points AND same tiebreaker diff)
     const tiedGroup = arr.filter(
       other => other.currentPts === user.currentPts && other.absDiff === user.absDiff
     );
 
     if (tiedGroup.length > 1) {
-      // Calculate pooled payout split
-      const tiedIndices = tiedGroup.map(item => arr.indexOf(item));
-      const totalPool = tiedIndices.reduce((sum, i) => sum + (payoutStructure[i] || 0), 0);
+      const firstTiedIdx = arr.findIndex(
+        other => other.currentPts === user.currentPts && other.absDiff === user.absDiff
+      );
+
+      let totalPool = 0;
+      for (let i = 0; i < tiedGroup.length; i++) {
+        const posIdx = firstTiedIdx + i;
+        totalPool += fpPayoutsArray[posIdx] || 0;
+      }
+
       const splitPayout = Math.round((totalPool / tiedGroup.length) * 100) / 100;
 
       return {
         ...user,
+        calculatedRank: currentRank,
         calculatedPayout: splitPayout,
         isTied: true,
         tiedCount: tiedGroup.length
@@ -78,11 +126,14 @@ export function CloseWeekPreviewModal({
 
     return {
       ...user,
-      calculatedPayout: basePayout,
+      calculatedRank: currentRank,
+      calculatedPayout: fpPayoutsArray[idx] || 0,
       isTied: false,
       tiedCount: 1
     };
   });
+
+  const top8WithPayouts = processedRankings.slice(0, 8);
 
   const handleConfirm = async () => {
     setIsSubmitting(true);
@@ -139,9 +190,9 @@ export function CloseWeekPreviewModal({
           </div>
         </div>
 
-        {/* TOP 8 WINNERS & PAYOUT PREVIEW TABLE */}
+        {/* TOP STANDINGS & PAYOUT PREVIEW TABLE */}
         <div className="space-y-2">
-          <h4 className="text-xs font-black uppercase text-slate-400 tracking-widest">Top 8 Standings & Payout Splits</h4>
+          <h4 className="text-xs font-black uppercase text-slate-400 tracking-widest">Top Standings & Financials Payouts</h4>
           <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden">
             <table className="w-full text-left text-xs">
               <thead>
@@ -154,9 +205,9 @@ export function CloseWeekPreviewModal({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 font-bold">
-                {top8WithPayouts.map((u, idx) => (
+                {top8WithPayouts.map((u) => (
                   <tr key={u.id} className={u.isTied ? 'bg-amber-500/10' : ''}>
-                    <td className="p-3 italic text-slate-400">#{idx + 1}</td>
+                    <td className="p-3 italic text-slate-400">#{u.calculatedRank}</td>
                     <td className="p-3 text-white font-black">
                       {u.firstName} {u.lastName}
                       {u.isTied && (
