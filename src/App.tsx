@@ -27,7 +27,7 @@ function wkStrToInt(val: any): number {
 }
 
 // 🏈 CENTRAL NFL TEAM DIRECTORY & ALIAS MAPPER
-export const NFL_TEAMS: Record<string, { abbr: string; name: string; city: string; color: string; aliases: string[] }> = {
+const NFL_TEAMS: Record<string, { abbr: string; name: string; city: string; color: string; aliases: string[] }> = {
   ARI: { abbr: 'ARI', name: 'Cardinals', city: 'Arizona', color: '#97233F', aliases: ['ARI', 'ARIZONA'] },
   ATL: { abbr: 'ATL', name: 'Falcons', city: 'Atlanta', color: '#A71930', aliases: ['ATL', 'ATLANTA'] },
   BAL: { abbr: 'BAL', name: 'Ravens', city: 'Baltimore', color: '#241773', aliases: ['BAL', 'BALTIMORE'] },
@@ -199,10 +199,43 @@ function wasAlreadyOut(user: any, currentWeek: number, weekStates: any) {
 }
 
 function getLockdownTime(gamesList: any[]) {
-    if (!gamesList || gamesList.length === 0) return null;
-    let earliest = Infinity;
-    gamesList.forEach(g => { if(g?.date && g?.time && g.date.split(', ')[1]) earliest = Math.min(earliest, new Date(`${g.date.split(', ')[1]}, ${new Date().getFullYear()} ${g.time}`).getTime()); });
-    return earliest === Infinity ? null : earliest - (60 * 60 * 1000); 
+  if (!gamesList || gamesList.length === 0) return null;
+  
+  const now = new Date().getTime();
+  let earliest = Infinity;
+
+  gamesList.forEach(g => {
+    if (!g) return;
+
+    // 1. Try apiDate first (e.g., "2026-08-20"), then fallback to g.date
+    let dateStr = g.apiDate || g.date || '';
+    if (dateStr.includes(',')) {
+      dateStr = dateStr.split(', ')[1]; // Extract "Aug 20" from "Thu, Aug 20"
+    }
+
+    let timeStr = (g.time || '20:15').trim();
+
+    // 2. Convert 12-hour AM/PM to 24-hour time string
+    if (timeStr.toLowerCase().includes('pm') || timeStr.toLowerCase().includes('am')) {
+      const isPM = timeStr.toLowerCase().includes('pm');
+      let [hours, minutes] = timeStr.replace(/(am|pm)/i, '').trim().split(':');
+      let h = parseInt(hours, 10);
+      if (isPM && h < 12) h += 12;
+      if (!isPM && h === 12) h = 0;
+      timeStr = `${String(h).padStart(2, '0')}:${minutes || '00'}`;
+    }
+
+    // 3. Parse date safely
+    const gameMs = new Date(`${dateStr} ${new Date().getFullYear()} ${timeStr}`).getTime() 
+      || new Date(`${dateStr}T${timeStr}:00`).getTime();
+
+    // 4. Only consider future kickoffs
+    if (!isNaN(gameMs) && gameMs > now) {
+      earliest = Math.min(earliest, gameMs);
+    }
+  });
+
+  return earliest === Infinity ? null : earliest - (60 * 60 * 1000);
 }
 
 const fieldBackgroundStyle = { backgroundColor: '#285233', backgroundImage: `repeating-linear-gradient(to bottom, transparent, transparent 80px, rgba(0, 0, 0, 0.1) 80px, rgba(0, 0, 0, 0.1) 160px), repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.4) 0px, rgba(255, 255, 255, 0.4) 3px, transparent 3px, transparent 160px)`, backgroundAttachment: 'fixed' as const };
@@ -2085,36 +2118,63 @@ function MainApp() {
   const currentUserPicks = currentUser?.picks?.[selectedWeek] || {};
   const currentUserRanks = currentUser?.ranks?.[selectedWeek] || {};
 
-// 📍 AUTOMATIC BACKGROUND SCORE POLLING (EVERY 60 SECONDS) 📍
+// 📍 AUTOMATIC BACKGROUND SCORE POLLING (ACTIVE KICKOFF WINDOW) 📍
 useEffect(() => {
-  if (!globalSettings || globalSettings?.blockLiveSync) return;
+  if (!globalSettings) return;
 
-  const currentWeekGames = globalSettings?.games?.[selectedWeek] || [];
-  if (currentWeekGames.length === 0) return;
+  // Flatten games across ALL schedule slots so slot indexing doesn't matter
+  const allGames = Object.values(globalSettings?.games || {}).flat() as any[];
+  if (allGames.length === 0) return;
 
   const now = new Date().getTime();
+  const currentYear = new Date().getFullYear();
 
-  const shouldPoll = currentWeekGames.some((g: any) => {
-    const status = String(g.status || '').toLowerCase();
-    const isLiveStatus = ['in_progress', 'ht', 'q1', 'q2', 'q3', 'q4', 'ot', 'live', 'halftime'].includes(status);
-    if (isLiveStatus) return true;
+  const shouldPoll = allGames.some((g: any) => {
+    if (!g) return false;
+    const status = String(g?.status || '').toLowerCase();
 
-    const kickoffTime = new Date(`${g.apiDate || g.date} ${g.time}`).getTime();
-    if (!isNaN(kickoffTime)) {
-      const fiveHoursAfter = kickoffTime + (5 * 60 * 60 * 1000);
-      return now >= (kickoffTime - 15 * 60 * 1000) && now <= fiveHoursAfter;
+    // 1. Poll immediately if any game in the system is marked as live
+    const isLive = ['in_progress', 'ht', 'q1', 'q2', 'q3', 'q4', 'ot', 'live', 'halftime'].includes(status);
+    if (isLive) return true;
+
+    // 2. Parse Date & Time safely with current year (2026)
+    let datePart = g?.apiDate || g?.date || '';
+    if (datePart.includes(',')) {
+      datePart = datePart.split(', ')[1]; // Extract "Aug 20" from "Thu, Aug 20"
     }
-    return false;
+
+    let timeStr = (g?.time || '20:00').trim();
+    if (timeStr.toLowerCase().includes('pm') || timeStr.toLowerCase().includes('am')) {
+      const isPM = timeStr.toLowerCase().includes('pm');
+      let [hours, minutes] = timeStr.replace(/(am|pm)/i, '').trim().split(':');
+      let h = parseInt(hours, 10);
+      if (isPM && h < 12) h += 12;
+      if (!isPM && h === 12) h = 0;
+      timeStr = `${String(h).padStart(2, '0')}:${minutes || '00'}`;
+    }
+
+    // Explicit date string: "Aug 20, 2026 20:00:00"
+    let kickoffMs = new Date(`${datePart}, ${currentYear} ${timeStr}:00`).getTime();
+    if (isNaN(kickoffMs)) {
+      kickoffMs = new Date(`${datePart}T${timeStr}:00`).getTime();
+    }
+
+    if (isNaN(kickoffMs)) return false;
+
+    // Poll if current time is between 1 hour before kickoff and 5 hours after
+    return now >= (kickoffMs - 60 * 60 * 1000) && now <= (kickoffMs + 5 * 60 * 60 * 1000);
   });
 
   if (!shouldPoll) return;
 
+  // Run IMMEDIATELY on load, then repeat every 60 seconds
+  handleSyncScores();
   const interval = setInterval(() => {
     handleSyncScores();
   }, 60000);
 
   return () => clearInterval(interval);
-}, [globalSettings, selectedWeek]);
+}, [globalSettings]);
 
   const weeklyTrackerData = useMemo(() => {
     if (!globalSettings || !allUsers.length) return [];
@@ -2861,14 +2921,16 @@ const updatedGames = games.map((g: any) => {
       return alert("This player has already been eliminated.");
     }
 
-    // Get all teams used by this player in previous weeks
+    const canonicalTarget = getCanonicalTeamCode(team);
+
+    // Get all teams used by this player in previous weeks (resolved canonically)
     const pastPicks = Object.entries(targetUser.knockoutPicks || {})
       .filter(([wk]) => Number(wk) < week)
-      .map(([_, teamPicked]) => teamPicked);
+      .map(([_, teamPicked]) => getCanonicalTeamCode(String(teamPicked)));
 
     // Prevent duplicate selection
-    if (pastPicks.includes(team)) {
-      return alert(`You have already picked ${getCleanTeamAbbr(team, '')} in a previous week! Please choose a different team.`);
+    if (pastPicks.includes(canonicalTarget)) {
+      return alert(`You have already picked ${canonicalTarget} in a previous week! Please choose a different team.`);
     }
 
     trackSaving(
@@ -3285,8 +3347,8 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                         </div>
                     )}
 
-                    {/* 📍 MANUAL TIMEZONE-INDEPENDENT DATE & TIME FORMATTER 📍 */}
-                    {(() => {
+{/* 📍 MANUAL TIMEZONE-INDEPENDENT DATE & TIME FORMATTER 📍 */}
+{(() => {
                         const isLiveNow = (games || []).some((g: any) => g.status === 'in_progress');
                         if (isLiveNow) {
                             return (
@@ -3297,42 +3359,22 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                             );
                         }
 
-                        const formatExactKickoff = (g: any) => {
-                            if (!g) return 'Thu, Aug 6 at 8:00 PM';
+                        // Pick first non-final game
+                        const upcomingGames = (games || []).filter((g: any) => 
+                          g.status !== 'final' && g.status !== 'CLOSED' && g.status !== 'closed'
+                        );
 
-                            const rawDate = String(g.kickoff || g.date || g.gameDate || '').trim();
-                            const rawTime = String(g.gameTime || g.statusDetail || g.time || '8:00 PM').trim();
-
-                            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-                            if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
-                                const [y, m, d] = rawDate.split('-').map(Number);
-                                const dateObj = new Date(y, m - 1, d);
-                                const dayName = days[dateObj.getDay()];
-                                const monthName = months[dateObj.getMonth()];
-                                return `${dayName}, ${monthName} ${d} at ${rawTime}`;
-                            }
-
-                            if (rawDate && !rawDate.includes('12:00 AM')) {
-                                return `${rawDate} at ${rawTime}`;
-                            }
-
-                            return `Thu, Aug 6 at ${rawTime}`;
-                        };
-
-                        const nonFinalGames = (games || []).filter((g: any) => g.status !== 'final');
-
-                        if (nonFinalGames.length > 0) {
-                            const nextGame = nonFinalGames[0];
-                            const formattedDateTime = formatExactKickoff(nextGame);
+                        if (upcomingGames.length > 0) {
+                            const nextGame = upcomingGames[0];
+                            const awayCode = getCanonicalTeamCode(nextGame.away);
+                            const homeCode = getCanonicalTeamCode(nextGame.home);
 
                             return (
                                 <div className="relative z-10 inline-flex items-center gap-2.5 bg-slate-800/90 border border-slate-700 text-slate-200 px-4 py-2.5 rounded-2xl font-bold text-xs uppercase tracking-wider backdrop-blur-sm shadow-lg">
                                     <Clock className="w-4 h-4 text-[#FFB81C]" />
                                     <span>Next Kickoff:</span>
-                                    <span className="font-black text-[#FFB81C]">{formattedDateTime}</span>
-                                    <span className="text-slate-400 font-bold">({nextGame.awayAbbr || nextGame.away} @ {nextGame.homeAbbr || nextGame.home})</span>
+                                    <span className="font-black text-[#FFB81C]">{nextGame.date} at {nextGame.time}</span>
+                                    <span className="text-slate-400 font-bold">({awayCode} @ {homeCode})</span>
                                 </div>
                             );
                         }
