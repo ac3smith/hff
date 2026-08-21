@@ -802,7 +802,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
       )}
 
       {/* MAIN TRACKER BOARD */}
-      <div className={`rounded-2xl sm:rounded-3xl shadow-xl border relative w-full transition-colors duration-300 ${
+      <div className={`rounded-3xl sm:rounded-[2rem] shadow-xl border overflow-hidden relative w-full transition-colors duration-300 ${
         isProjection 
           ? 'bg-amber-50/60 border-2 border-amber-200 border-t-6 sm:border-t-8 border-t-amber-500' 
           : 'bg-white border border-t-6 sm:border-t-8 border-slate-900'
@@ -1072,101 +1072,53 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
   const maxWeeks = globalSettings?.maxActiveWeeks || 18;
   const activeWeeks = Array.from({ length: maxWeeks }, (_, i) => i + 1);
 
-  // Helper map to clean raw city codes (NEW, LOS, LA, NY) into official team abbreviations
-  const resolveAbbr = (rawCode: string): string => {
-    if (!rawCode) return 'NO PICK';
-    const code = rawCode.trim().toUpperCase();
+  // Process rows safely with central canonical resolver
+  const sortedGridData = useMemo(() => {
+    if (!data || !Array.isArray(data)) return [];
 
-    const abbrMap: Record<string, string> = {
-      'NEW': 'NYG', // Default ambiguity fallback
-      'NY': 'NYG',
-      'NYG': 'NYG',
-      'NYJ': 'NYJ',
-      'LOS': 'LAR',
-      'LA': 'LAR',
-      'LAR': 'LAR',
-      'LAC': 'LAC',
-      'SF': 'SF',
-      'GB': 'GB',
-      'NE': 'NE',
-      'NO': 'NO',
-      'TB': 'TB',
-      'KC': 'KC',
-      'LV': 'LV',
-      'JAX': 'JAX',
-      'BAL': 'BAL',
-      'BUF': 'BUF',
-      'CAR': 'CAR',
-      'CHI': 'CHI',
-      'CIN': 'CIN',
-      'CLE': 'CLE',
-      'DAL': 'DAL',
-      'DEN': 'DEN',
-      'DET': 'DET',
-      'HOU': 'HOU',
-      'IND': 'IND',
-      'MIA': 'MIA',
-      'MIN': 'MIN',
-      'PHI': 'PHI',
-      'PIT': 'PIT',
-      'SEA': 'SEA',
-      'TEN': 'TEN',
-      'WAS': 'WAS',
-      'ARI': 'ARI',
-      'ATL': 'ATL',
-      'GRE': 'GB',
-      'GNB': 'GB'
-    };
+    return [...data].map((user: any) => {
+      if (!user) return null;
 
-    return abbrMap[code] || code;
-  };
+      let eliminatedWeek: number | null = null;
+      const statuses = user.knockoutStatuses || {};
 
-  // Process rows safely
-  const sortedGridData = (data || []).map((user: any) => {
-    if (!user) return null;
+      for (let wk = 1; wk <= maxWeeks; wk++) {
+        const wkStatus = statuses[wk];
+        const wkState = globalSettings?.weekStates?.[wk];
 
-    let eliminatedWeek: number | null = null;
-    const statuses = user.knockoutStatuses || {};
+        if (['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) {
+          eliminatedWeek = wk;
+          break;
+        }
 
-    // Determine week of elimination
-    for (let wk = 1; wk <= maxWeeks; wk++) {
-      const wkStatus = statuses[wk];
-      const wkState = globalSettings?.weekStates?.[wk];
-
-      if (['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) {
-        eliminatedWeek = wk;
-        break;
+        if ((wkState === 'locked' || wkState === 'closed') && (wkStatus === 'No Pick' || !user.knockoutPicks?.[wk])) {
+          eliminatedWeek = wk;
+          break;
+        }
       }
 
-      if ((wkState === 'locked' || wkState === 'closed') && (wkStatus === 'No Pick' || !user.knockoutPicks?.[wk])) {
-        eliminatedWeek = wk;
-        break;
+      if (user.paymentStatus === 'disqualified') {
+        eliminatedWeek = eliminatedWeek || 1;
       }
-    }
 
-    if (user.paymentStatus === 'disqualified') {
-      eliminatedWeek = eliminatedWeek || 1;
-    }
-
-    const isAlive = eliminatedWeek === null;
-
-    return {
-      ...user,
-      isAlive,
-      eliminatedWeek
-    };
-  }).filter(Boolean).sort((a: any, b: any) => {
-    if (a.isAlive && !b.isAlive) return -1;
-    if (!a.isAlive && b.isAlive) return 1;
-    if (b.eliminatedWeek !== a.eliminatedWeek) {
-      return (b.eliminatedWeek || 0) - (a.eliminatedWeek || 0);
-    }
-    return String(a.lastName || '').localeCompare(String(b.lastName || ''));
-  });
+      return {
+        ...user,
+        isAlive: eliminatedWeek === null,
+        eliminatedWeek
+      };
+    }).filter(Boolean).sort((a: any, b: any) => {
+      if (a.isAlive && !b.isAlive) return -1;
+      if (!a.isAlive && b.isAlive) return 1;
+      if (b.eliminatedWeek !== a.eliminatedWeek) {
+        return (b.eliminatedWeek || 0) - (a.eliminatedWeek || 0);
+      }
+      return String(a.lastName || '').localeCompare(String(b.lastName || ''));
+    });
+  }, [data, maxWeeks, globalSettings?.weekStates]);
 
   return (
-    <div className="bg-white rounded-3xl shadow-xl border overflow-hidden border-t-8 border-red-600 max-w-full mx-auto">
-      {/* HEADER */}
+    
+    <div className="bg-white rounded-3xl sm:rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden border-t-8 border-red-600 max-w-full mx-auto">    {/* HEADER */}
       <div className="p-4 sm:p-6 bg-slate-50 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
           <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tight flex items-center gap-2 text-slate-900">
@@ -1183,7 +1135,7 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
         <table className="w-full text-left border-collapse table-auto">
           <thead>
             <tr className="bg-slate-900 text-white uppercase border-b-4 border-[#FFB81C]">
-              <th className="p-3 sticky left-0 bg-slate-900 z-30 w-44 sm:w-56 shadow-[3px_0_10px_rgba(0,0,0,0.3)] tracking-widest italic font-black text-xs sm:text-sm">
+            <th className="p-3 sticky left-0 bg-slate-900 z-30 w-44 sm:w-56 shadow-[3px_0_10px_rgba(0,0,0,0.3)] tracking-widest italic font-black text-xs sm:text-sm rounded-tl-3xl">
                 Player
               </th>
 
@@ -1238,46 +1190,51 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
                   {/* Week-by-Week Pick Cells */}
                   {activeWeeks.map((wk) => {
                     const rawPick = user.knockoutPicks?.[wk];
-                    const wkStatus = user.knockoutStatuses?.[wk];
                     const wkState = globalSettings?.weekStates?.[wk];
                     const isCurrentWeek = wk === week;
 
-                    // Was player eliminated BEFORE this week?
-                    const wasOutBefore = user.eliminatedWeek !== null && wk > user.eliminatedWeek;
-                    const wasEliminatedThisWeek = user.eliminatedWeek === wk;
-
-                    // Lookup clean team abbreviation
+                    // Match game via canonical team codes
                     const weekGamesList = globalSettings?.games?.[wk] || [];
-                    const game = weekGamesList.find((g: any) => g.away === rawPick || g.home === rawPick);
-                    const rawAbbr = game 
-                      ? (rawPick === game.away ? (game.awayAbbr || game.away) : (game.homeAbbr || game.home)) 
-                      : rawPick;
-                    
-                    const displayPick = resolveAbbr(rawAbbr);
+                    const canonicalPick = getCanonicalTeamCode(rawPick);
+                    const game = weekGamesList.find((g: any) => 
+                      getCanonicalTeamCode(g.away) === canonicalPick || 
+                      getCanonicalTeamCode(g.home) === canonicalPick
+                    );
 
-// Reveal rules: Show picks if week is closed, locked, past week index, or past lockdown time
-const isCurrentWeekLocked = isLocked || isPastOrLockedWeek;
-const isPastOrLockedWeek = wk < week || wkState === 'locked' || wkState === 'closed' || (wk === week && isCurrentWeekLocked);
-const isHidden = !isPastOrLockedWeek && !adminForceReveal && !isMe;
+                    // Compute winner status dynamically from schedule
+                    let wkStatus = user.knockoutStatuses?.[wk] || 'Pending';
+                    if (game && rawPick && (game.status === 'final' || game.winner)) {
+                      const winnerCanonical = getCanonicalTeamCode(game.winner);
+                      if (winnerCanonical && winnerCanonical === canonicalPick) {
+                        wkStatus = 'Winner';
+                      } else if (winnerCanonical && winnerCanonical !== 'TIE') {
+                        wkStatus = 'Loser';
+                      }
+                    }
 
-// Cell Background Styling (Strict Hierarchy)
-let cellBg = 'bg-white text-slate-800';
+                    const wasOutBefore = user.eliminatedWeek !== null && wk > user.eliminatedWeek;
+                    const wasEliminatedThisWeek = user.eliminatedWeek === wk || ['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus);
 
-const isWeekClosed = wkState === 'closed' || wk < week;
+                    // Reveal rules: Show if week is past, closed, locked, admin forced, or current user
+                    const isPastOrLockedWeek = wk < week || wkState === 'locked' || wkState === 'closed' || (wk === week && (isLocked || globalSettings?.isLocked));
+                    const canRevealPick = isPastOrLockedWeek || adminForceReveal || isMe;
+                    const isHidden = !canRevealPick;
 
-if (wasOutBefore) {
-  // Eliminated in a prior week
-  cellBg = 'bg-slate-100/60 text-slate-300';
-} else if (wasEliminatedThisWeek || ['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) {
-  // Officially lost / eliminated this week (Red)
-  cellBg = 'bg-rose-600 text-white font-black';
-} else if (rawPick && (wkStatus === 'Winner' || isWeekClosed)) {
-  // Completed / Closed week survivor (Green)
-  cellBg = 'bg-emerald-600 text-white font-black shadow-sm';
-} else if (rawPick && isCurrentWeekLocked) {
-  // Active locked / in-progress pick for current week (Amber)
-  cellBg = 'bg-amber-500/20 text-slate-900 border-2 border-amber-400 font-black';
-}
+                    const displayPick = canonicalPick || 'NO PICK';
+
+                    // Cell Background Styling
+                    let cellBg = 'bg-white text-slate-800';
+                    const isWeekClosed = wkState === 'closed' || wk < week;
+
+                    if (wasOutBefore) {
+                      cellBg = 'bg-slate-100/60 text-slate-300';
+                    } else if (wasEliminatedThisWeek) {
+                      cellBg = 'bg-rose-600 text-white font-black';
+                    } else if (rawPick && (wkStatus === 'Winner' || isWeekClosed)) {
+                      cellBg = 'bg-emerald-600 text-white font-black shadow-sm';
+                    } else if (rawPick && isPastOrLockedWeek) {
+                      cellBg = 'bg-amber-500/20 text-slate-900 border-2 border-amber-400 font-black';
+                    }
 
                     return (
                       <td 
@@ -2129,54 +2086,27 @@ function MainApp() {
   const currentUserPicks = currentUser?.picks?.[selectedWeek] || {};
   const currentUserRanks = currentUser?.ranks?.[selectedWeek] || {};
 
-// 📍 AUTOMATIC BACKGROUND SCORE POLLING (EXTENDED LIVE WINDOW) 📍
+// 📍 SAFE 60-SECOND BACKGROUND POLLER (UNREGISTERED FROM STATE RE-RENDERS) 📍
 useEffect(() => {
-  if (!globalSettings) return;
-
-  const allGames = Object.values(globalSettings?.games || {}).flat() as any[];
-  if (allGames.length === 0) return;
-
-  const now = new Date().getTime();
-  const currentYear = new Date().getFullYear();
-
-  const shouldPoll = allGames.some((g: any) => {
-    if (!g) return false;
-    const status = String(g?.status || '').toLowerCase();
-
-    // 1. Keep polling as long as any game in Firestore is marked in_progress or has live quarters
-    const isLive = ['in_progress', 'ht', 'q1', 'q2', 'q3', 'q4', 'ot', 'live', 'halftime', '1q', '2q', '3q', '4q'].includes(status) || g?.gameQuarter;
-    if (isLive && status !== 'final') return true;
-
-    // 2. Window: 60 mins before kickoff to 5 hours after kickoff
-    let datePart = g?.apiDate || g?.date || '';
-    if (datePart.includes(',')) datePart = datePart.split(', ')[1];
-
-    let timeStr = (g?.time || '20:00').trim();
-    if (timeStr.toLowerCase().includes('pm') || timeStr.toLowerCase().includes('am')) {
-      const isPM = timeStr.toLowerCase().includes('pm');
-      let [hours, minutes] = timeStr.replace(/(am|pm)/i, '').trim().split(':');
-      let h = parseInt(hours, 10);
-      if (isPM && h < 12) h += 12;
-      if (!isPM && h === 12) h = 0;
-      timeStr = `${String(h).padStart(2, '0')}:${minutes || '00'}`;
+  // Initial check 5 seconds after page load
+  const initialTimer = setTimeout(() => {
+    if (globalSettings?.apiSportsKey?.trim()) {
+      handleSyncScores();
     }
+  }, 5000);
 
-    let kickoffMs = new Date(`${datePart}, ${currentYear} ${timeStr}:00`).getTime();
-    if (isNaN(kickoffMs)) kickoffMs = new Date(`${datePart}T${timeStr}:00`).getTime();
-    if (isNaN(kickoffMs)) return false;
-
-    return now >= (kickoffMs - 60 * 60 * 1000) && now <= (kickoffMs + 5 * 60 * 60 * 1000);
-  });
-
-  if (!shouldPoll) return;
-
-  handleSyncScores();
+  // Poll every 60 seconds (60 requests/hr during live games)
   const interval = setInterval(() => {
-    handleSyncScores();
+    if (globalSettings?.apiSportsKey?.trim()) {
+      handleSyncScores();
+    }
   }, 60000);
 
-  return () => clearInterval(interval);
-}, [globalSettings]);
+  return () => {
+    clearTimeout(initialTimer);
+    clearInterval(interval);
+  };
+}, []); // Empty dependency array prevents re-render loops!
 
   const weeklyTrackerData = useMemo(() => {
     if (!globalSettings || !allUsers.length) return [];
@@ -2783,7 +2713,20 @@ function ensureAutoTiebreaker(gamesList: any[]) {
     }
   };
 
+  // Prevent handleSyncScores from executing more than once every 30 seconds
+  const lastSyncTimeRef = React.useRef<number>(0);
+
   const handleSyncScores = async () => {
+    const now = Date.now();
+    if (now - lastSyncTimeRef.current < 30000) {
+      return; // Skip execution if called within 30 seconds
+    }
+    lastSyncTimeRef.current = now;
+
+    if (!globalSettings?.apiSportsKey?.trim()) return;
+    if (!games || games.length === 0) return;
+
+    setIsSyncing(true);
     if (!globalSettings?.apiSportsKey?.trim()) {
       return alert("Please enter your API-Sports Key in the Admin Settings tab.");
     }
