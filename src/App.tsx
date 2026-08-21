@@ -562,17 +562,24 @@ function LiveScoreTicker({ games }: any) {
 
         return (
           <div key={g.id} className="min-w-[150px] bg-slate-800 rounded-xl p-3 border border-slate-700 flex flex-col justify-between shrink-0 shadow-inner">
-            {/* STATUS / CLOCK BAR */}
-            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 flex justify-between items-center">
-              {g.status === 'final' ? (
-                <span className="text-slate-400">FINAL</span>
-              ) : isLive ? (
-                <span className="text-emerald-400 font-bold flex items-center gap-1 animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  {g.gameQuarter || 'LIVE'} {g.gameClock ? `• ${g.gameClock}` : ''}
-                </span>
+{/* STATUS / CLOCK BAR */}
+<div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 flex justify-between items-center">
+              {String(g?.status).toLowerCase() === 'final' ? (
+                <span className="text-slate-400 font-black bg-slate-700/50 px-2 py-0.5 rounded">FINAL</span>
+              ) : (isLive || g?.gameQuarter || g?.gameClock) ? (
+                <div className="flex items-center gap-1.5 bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded-md font-mono text-[10px] w-full justify-between">
+                  <span className="flex items-center gap-1 font-black animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    {g?.gameQuarter || g?.quarter || 'LIVE'}
+                  </span>
+                  {(g?.gameClock || g?.clock || g?.timer) && (
+                    <span className="font-bold text-emerald-300">
+                      {g?.gameClock || g?.clock || g?.timer}
+                    </span>
+                  )}
+                </div>
               ) : (
-                <span>{g.time}</span>
+                <span className="text-slate-400 font-semibold">{g?.time || 'UPCOMING'}</span>
               )}
             </div>
 
@@ -611,19 +618,14 @@ function LiveScoreTicker({ games }: any) {
 function getProjectedWinner(game: any) {
   if (!game) return null;
   
-  // If the game is final, return official winner
   if (game.status === 'final') return game.winner;
   
-  // ONLY calculate a live winner if the game is actively in progress
-  if (game.status === 'in_progress') {
-    const awayScore = parseInt(game.awayScore || 0, 10);
-    const homeScore = parseInt(game.homeScore || 0, 10);
-    if (awayScore > homeScore) return game.away;
-    if (homeScore > awayScore) return game.home;
-    return null; // Tied in progress
-  }
+  const awayScore = parseInt(String(game.awayScore ?? 0), 10);
+  const homeScore = parseInt(String(game.homeScore ?? 0), 10);
+
+  if (awayScore > homeScore) return game.away;
+  if (homeScore > awayScore) return game.home;
   
-  // Upcoming / Scheduled games have no winner yet
   return null;
 }
 
@@ -660,8 +662,9 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
 
         if (!pick || !rank) return lost;
 
-        const activeWinner = (isProjection && hasActiveLiveGames)
-          ? getProjectedWinner(g) 
+        const projWinner = getProjectedWinner(g);
+        const activeWinner = isProjection 
+          ? (g.status === 'final' ? g.winner : projWinner) 
           : (g.status === 'final' ? g.winner : null);
 
         if (activeWinner && pick !== activeWinner) {
@@ -1250,23 +1253,29 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
                     
                     const displayPick = resolveAbbr(rawAbbr);
 
-                    // Reveal rules
-                    const isPastOrLockedWeek = wk < week || wkState === 'locked' || wkState === 'closed';
-                    const isHidden = !isPastOrLockedWeek && !adminForceReveal && !isMe;
+// Reveal rules: Show picks if week is closed, locked, past week index, or past lockdown time
+const isCurrentWeekLocked = isLocked || isPastOrLockedWeek;
+const isPastOrLockedWeek = wk < week || wkState === 'locked' || wkState === 'closed' || (wk === week && isCurrentWeekLocked);
+const isHidden = !isPastOrLockedWeek && !adminForceReveal && !isMe;
 
-                    // Cell Background Styling
-                    let cellBg = 'bg-white text-slate-800';
+// Cell Background Styling (Strict Hierarchy)
+let cellBg = 'bg-white text-slate-800';
 
-                    if (wasOutBefore) {
-                      cellBg = 'bg-slate-100/60 text-slate-300';
-                    } else if (wasEliminatedThisWeek || ['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) {
-                      cellBg = 'bg-rose-600 text-white font-black';
-                    } else if (rawPick && (wkStatus === 'Winner' || isPastOrLockedWeek)) {
-                      // Highlight surviving picks green for past/closed weeks
-                      cellBg = 'bg-emerald-600 text-white font-black shadow-sm';
-                    } else if (isCurrentWeek && rawPick) {
-                      cellBg = 'bg-amber-500/10 text-slate-900 border-amber-300 font-black';
-                    }
+const isWeekClosed = wkState === 'closed' || wk < week;
+
+if (wasOutBefore) {
+  // Eliminated in a prior week
+  cellBg = 'bg-slate-100/60 text-slate-300';
+} else if (wasEliminatedThisWeek || ['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) {
+  // Officially lost / eliminated this week (Red)
+  cellBg = 'bg-rose-600 text-white font-black';
+} else if (rawPick && (wkStatus === 'Winner' || isWeekClosed)) {
+  // Completed / Closed week survivor (Green)
+  cellBg = 'bg-emerald-600 text-white font-black shadow-sm';
+} else if (rawPick && isCurrentWeekLocked) {
+  // Active locked / in-progress pick for current week (Amber)
+  cellBg = 'bg-amber-500/20 text-slate-900 border-2 border-amber-400 font-black';
+}
 
                     return (
                       <td 
@@ -2118,11 +2127,10 @@ function MainApp() {
   const currentUserPicks = currentUser?.picks?.[selectedWeek] || {};
   const currentUserRanks = currentUser?.ranks?.[selectedWeek] || {};
 
-// 📍 AUTOMATIC BACKGROUND SCORE POLLING (ACTIVE KICKOFF WINDOW) 📍
+// 📍 AUTOMATIC BACKGROUND SCORE POLLING (EXTENDED LIVE WINDOW) 📍
 useEffect(() => {
   if (!globalSettings) return;
 
-  // Flatten games across ALL schedule slots so slot indexing doesn't matter
   const allGames = Object.values(globalSettings?.games || {}).flat() as any[];
   if (allGames.length === 0) return;
 
@@ -2133,15 +2141,13 @@ useEffect(() => {
     if (!g) return false;
     const status = String(g?.status || '').toLowerCase();
 
-    // 1. Poll immediately if any game in the system is marked as live
-    const isLive = ['in_progress', 'ht', 'q1', 'q2', 'q3', 'q4', 'ot', 'live', 'halftime'].includes(status);
-    if (isLive) return true;
+    // 1. Keep polling as long as any game in Firestore is marked in_progress or has live quarters
+    const isLive = ['in_progress', 'ht', 'q1', 'q2', 'q3', 'q4', 'ot', 'live', 'halftime', '1q', '2q', '3q', '4q'].includes(status) || g?.gameQuarter;
+    if (isLive && status !== 'final') return true;
 
-    // 2. Parse Date & Time safely with current year (2026)
+    // 2. Window: 60 mins before kickoff to 5 hours after kickoff
     let datePart = g?.apiDate || g?.date || '';
-    if (datePart.includes(',')) {
-      datePart = datePart.split(', ')[1]; // Extract "Aug 20" from "Thu, Aug 20"
-    }
+    if (datePart.includes(',')) datePart = datePart.split(', ')[1];
 
     let timeStr = (g?.time || '20:00').trim();
     if (timeStr.toLowerCase().includes('pm') || timeStr.toLowerCase().includes('am')) {
@@ -2153,21 +2159,15 @@ useEffect(() => {
       timeStr = `${String(h).padStart(2, '0')}:${minutes || '00'}`;
     }
 
-    // Explicit date string: "Aug 20, 2026 20:00:00"
     let kickoffMs = new Date(`${datePart}, ${currentYear} ${timeStr}:00`).getTime();
-    if (isNaN(kickoffMs)) {
-      kickoffMs = new Date(`${datePart}T${timeStr}:00`).getTime();
-    }
-
+    if (isNaN(kickoffMs)) kickoffMs = new Date(`${datePart}T${timeStr}:00`).getTime();
     if (isNaN(kickoffMs)) return false;
 
-    // Poll if current time is between 1 hour before kickoff and 5 hours after
     return now >= (kickoffMs - 60 * 60 * 1000) && now <= (kickoffMs + 5 * 60 * 60 * 1000);
   });
 
   if (!shouldPoll) return;
 
-  // Run IMMEDIATELY on load, then repeat every 60 seconds
   handleSyncScores();
   const interval = setInterval(() => {
     handleSyncScores();
@@ -2785,9 +2785,6 @@ function ensureAutoTiebreaker(gamesList: any[]) {
     if (!globalSettings?.apiSportsKey?.trim()) {
       return alert("Please enter your API-Sports Key in the Admin Settings tab.");
     }
-    if (globalSettings?.blockLiveSync) {
-      return alert("Sync is locked by Admin Site Settings.");
-    }
 
     setIsSyncing(true);
     try {
@@ -2795,117 +2792,104 @@ function ensureAutoTiebreaker(gamesList: any[]) {
       const headers = { 'x-apisports-key': apiKey };
 
       if (!games || games.length === 0) {
-        alert("No games loaded for this week to sync.");
         setIsSyncing(false);
         return;
       }
 
-      // Collect valid API dates (YYYY-MM-DD)
+      // 1. Collect valid dates or fallback to current season
       let datesToFetch = [...new Set(games.map((g: any) => g.apiDate).filter(Boolean))];
-
       let apiGames: any[] = [];
 
       if (datesToFetch.length > 0) {
         for (const date of datesToFetch) {
           const season = String(date).split('-')[0] || "2026";
           const res = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=${season}&date=${date}`, { headers });
-          
-          if (!res.ok) {
-            throw new Error(`API returned HTTP ${res.status}: ${res.statusText}`);
-          }
-
-          const json = await res.json();
-          if (json.errors && Object.keys(json.errors).length > 0) {
-            throw new Error(`API-Sports Error: ${JSON.stringify(json.errors)}`);
-          }
-
-          if (json.response && Array.isArray(json.response)) {
-            apiGames = [...apiGames, ...json.response];
+          if (res.ok) {
+            const json = await res.json();
+            if (json.response && Array.isArray(json.response)) {
+              apiGames = [...apiGames, ...json.response];
+            }
           }
         }
       } else {
         const res = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=2026`, { headers });
-        if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
-        const json = await res.json();
-        if (json.errors && Object.keys(json.errors).length > 0) {
-          throw new Error(`API-Sports Error: ${JSON.stringify(json.errors)}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.response) apiGames = json.response;
         }
-        if (json.response) apiGames = json.response;
       }
 
-      if (apiGames.length === 0) {
-        alert("API-Sports returned 0 game records for the requested dates.");
-        setIsSyncing(false);
-        return;
-      }
+      // 2. Flexible Team & Status Matcher
+      let liveCount = 0;
+      const updatedGames = games.map((g: any) => {
+        const gAwayCanonical = getCanonicalTeamCode(g.away || g.awayAbbr || g.awayName);
+        const gHomeCanonical = getCanonicalTeamCode(g.home || g.homeAbbr || g.homeName);
 
-// 📍 ENHANCED GAME MATCHING WITH CLOCK & POSSESSION 📍
-let updatedCount = 0;
-const updatedGames = games.map((g: any) => {
-  const match = apiGames.find((ag: any) => 
-    String(ag.game?.id) === String(g.id) || 
-    (ag.teams?.away?.code === g.away && ag.teams?.home?.code === g.home) ||
-    (ag.teams?.away?.name?.toLowerCase().includes(String(g.awayName || '').toLowerCase()) && 
-     ag.teams?.home?.name?.toLowerCase().includes(String(g.homeName || '').toLowerCase()))
-  );
+        const match = apiGames.find((ag: any) => {
+          const agAwayCanonical = getCanonicalTeamCode(ag.teams?.away?.code || ag.teams?.away?.name);
+          const agHomeCanonical = getCanonicalTeamCode(ag.teams?.home?.code || ag.teams?.home?.name);
 
-  if (match) {
-    updatedCount++;
-    const shortStatus = match.game?.status?.short || '';
-    const isFinal = ['FT', 'AOT'].includes(shortStatus);
-    const isLive = ['Q1', 'Q2', 'Q3', 'Q4', 'OT', 'HT', 'LIVE'].includes(shortStatus);
+          return (
+            String(ag.game?.id) === String(g.id) ||
+            (agAwayCanonical === gAwayCanonical && agHomeCanonical === gHomeCanonical)
+          );
+        });
 
-    const homeTotal = match.scores?.home?.total ?? null;
-    const awayTotal = match.scores?.away?.total ?? null;
+        if (match) {
+          const shortStatus = match.game?.status?.short || '';
+          const isFinal = ['FT', 'AOT'].includes(shortStatus);
+          const isLive = ['Q1', 'Q2', 'Q3', 'Q4', 'OT', 'HT', 'LIVE', 'HALFTIME', '1Q', '2Q', '3Q', '4Q'].includes(shortStatus);
 
-    let winner = g.winner || null;
-    if (isFinal && homeTotal !== null && awayTotal !== null) {
-      if (homeTotal > awayTotal) winner = g.home;
-      else if (awayTotal > homeTotal) winner = g.away;
-      else winner = 'TIE';
-    }
+          if (isLive) liveCount++;
 
-    let statusText = g.status || 'upcoming';
-    if (isFinal) {
-      statusText = 'final';
-    } else if (isLive) {
-      statusText = shortStatus === 'HT' ? 'HALFTIME' : (match.game?.status?.long || shortStatus);
-    }
+          const homeTotal = match.scores?.home?.total ?? null;
+          const awayTotal = match.scores?.away?.total ?? null;
 
-    // Extract game clock/timer and possession
-    const gameClock = match.game?.status?.timer || match.game?.clock || null;
-    const possession = match.game?.possession || match.possession || null;
+          let winner = g.winner || null;
+          if (isFinal && homeTotal !== null && awayTotal !== null) {
+            if (homeTotal > awayTotal) winner = g.home;
+            else if (awayTotal > homeTotal) winner = g.away;
+            else winner = 'TIE';
+          }
 
-    return {
-      ...g,
-      status: statusText,
-      gameQuarter: isLive ? shortStatus : (isFinal ? 'FINAL' : null),
-      gameClock: isLive ? gameClock : null,
-      possession: isLive ? possession : null,
-      homeScore: homeTotal !== null ? homeTotal : (g.homeScore ?? null),
-      awayScore: awayTotal !== null ? awayTotal : (g.awayScore ?? null),
-      winner: winner ?? null,
-      isTiebreaker: !!g.isTiebreaker
-    };
-  }
-  
-  return {
-    ...g,
-    homeScore: g.homeScore ?? null,
-    awayScore: g.awayScore ?? null,
-    winner: g.winner ?? null,
-    isTiebreaker: !!g.isTiebreaker
-  };
-});
+          let statusText = g.status || 'upcoming';
+          if (isFinal) {
+            statusText = 'final';
+          } else if (isLive) {
+            statusText = 'in_progress';
+          }
 
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-        [`games.${selectedWeek}`]: updatedGames
+          const gameClock = match.game?.status?.timer || match.game?.clock || null;
+          const possession = match.game?.possession || match.possession || null;
+
+          return {
+            ...g,
+            status: statusText,
+            gameQuarter: isLive ? shortStatus : (isFinal ? 'FINAL' : null),
+            gameClock: isLive ? gameClock : null,
+            possession: isLive ? possession : null,
+            homeScore: homeTotal !== null ? homeTotal : (g.homeScore ?? null),
+            awayScore: awayTotal !== null ? awayTotal : (g.awayScore ?? null),
+            winner: winner ?? null,
+            isTiebreaker: !!g.isTiebreaker
+          };
+        }
+
+        return g;
       });
 
-      alert(`Scores synced successfully! Updated ${updatedCount} of ${games.length} games.`);
+      // 3. Write updated scores & syncStatus to Firestore
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+        [`games.${selectedWeek}`]: updatedGames,
+        syncStatus: {
+          isActivePolling: true,
+          activeGameCount: liveCount,
+          lastCheckedAt: new Date().toISOString()
+        }
+      });
+
     } catch (e: any) {
       console.error("Score Sync Error:", e);
-      alert(`Sync Failed: ${e?.message || 'Check console logs.'}`);
     } finally {
       setIsSyncing(false);
     }
