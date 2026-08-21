@@ -579,7 +579,9 @@ function LiveScoreTicker({ games }: any) {
                   )}
                 </div>
               ) : (
-                <span className="text-slate-400 font-semibold">{g?.time || 'UPCOMING'}</span>
+                <span className="text-slate-300 font-bold tracking-tight">
+                  {g?.date ? `${g.date} • ${g?.time}` : g?.time || 'UPCOMING'}
+                </span>
               )}
             </div>
 
