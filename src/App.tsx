@@ -526,8 +526,8 @@ function LiveTrackerCell({ game, pick, rank, isProjection }: any) {
       : 'bg-emerald-600 text-white font-black shadow-sm border-emerald-500';
   } else if (isLoser) {
     bg = inProgress && isProjection
-      ? 'bg-rose-100 text-rose-800 border-rose-300 font-bold'
-      : 'bg-rose-50 text-rose-700 border-rose-200 line-through opacity-60';
+      ? 'bg-rose-600 text-white font-black shadow-md border-rose-500 animate-pulse'
+      : 'bg-rose-600 text-white font-black shadow-sm border-rose-500';
   }
 
   const displayPick = pick === game?.away ? (game?.awayAbbr || pick) : (pick === game?.home ? (game?.homeAbbr || pick) : pick);
@@ -2086,27 +2086,6 @@ function MainApp() {
   const currentUserPicks = currentUser?.picks?.[selectedWeek] || {};
   const currentUserRanks = currentUser?.ranks?.[selectedWeek] || {};
 
-// 📍 SAFE 60-SECOND BACKGROUND POLLER (UNREGISTERED FROM STATE RE-RENDERS) 📍
-useEffect(() => {
-  // Initial check 5 seconds after page load
-  const initialTimer = setTimeout(() => {
-    if (globalSettings?.apiSportsKey?.trim()) {
-      handleSyncScores();
-    }
-  }, 5000);
-
-  // Poll every 60 seconds (60 requests/hr during live games)
-  const interval = setInterval(() => {
-    if (globalSettings?.apiSportsKey?.trim()) {
-      handleSyncScores();
-    }
-  }, 60000);
-
-  return () => {
-    clearTimeout(initialTimer);
-    clearInterval(interval);
-  };
-}, []); // Empty dependency array prevents re-render loops!
 
   const weeklyTrackerData = useMemo(() => {
     if (!globalSettings || !allUsers.length) return [];
@@ -2767,6 +2746,9 @@ function ensureAutoTiebreaker(gamesList: any[]) {
       // 2. Flexible Team & Status Matcher
       let liveCount = 0;
       const updatedGames = games.map((g: any) => {
+        // Shield finalized games from client overwrites
+        if (String(g.status).toLowerCase() === 'final') return g;
+
         const gAwayCanonical = getCanonicalTeamCode(g.away || g.awayAbbr || g.awayName);
         const gHomeCanonical = getCanonicalTeamCode(g.home || g.homeAbbr || g.homeName);
 

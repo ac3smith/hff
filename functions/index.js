@@ -53,17 +53,36 @@ exports.autoSyncScores = onSchedule("every 1 minutes", async (event) => {
         if (datesToFetch.length === 0) return;
 
         // 3. Fetch data from API-Sports for those dates
-        let apiGames = [];
-        for (const date of datesToFetch) {
-            const season = String(date).split('-')[0];
-            const response = await fetch(`https://v1.baseball.api-sports.io/games?date=${date}&league=1&season=${season}`, {
-                headers: { 'x-apisports-key': apiKey }
-            });
-            const json = await response.json();
-            if (json.response) {
-                apiGames = [...apiGames, ...json.response];
-            }
+        // 4. Fetch live games directly, or fallback to date range (+/- 1 day for UTC offset)
+    let apiGames = [];
+    
+    // First, try fetching all currently live/in-progress NFL games
+    const liveResponse = await fetch(`https://v1.american-football.api-sports.io/games?league=1&live=all`, {
+      headers: { 'x-apisports-key': apiKey }
+    });
+    const liveJson = await liveResponse.json();
+    if (liveJson.response && Array.isArray(liveJson.response) && liveJson.response.length > 0) {
+      apiGames = liveJson.response;
+    } else {
+      // Fallback: Fetch dates with a +1 day window to cover UTC timezone shifts
+      for (const dateStr of datesToFetch) {
+        const season = String(dateStr).split('-')[0] || "2026";
+        
+        // Calculate date + 1 day to catch evening kickoff UTC shifts
+        const baseDate = new Date(dateStr + 'T12:00:00Z');
+        const nextDate = new Date(baseDate.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+        for (const queryDate of [dateStr, nextDate]) {
+          const response = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=${season}&date=${queryDate}`, {
+            headers: { 'x-apisports-key': apiKey }
+          });
+          const json = await response.json();
+          if (json.response && Array.isArray(json.response)) {
+            apiGames = [...apiGames, ...json.response];
+          }
         }
+      }
+    }
 
         // 4. Match the backend scores to our database matches
         const updatedGames = games.map(g => {
