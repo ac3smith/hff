@@ -1,139 +1,158 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
-
-const {setGlobalOptions} = require("firebase-functions");
-const {onRequest} = require("firebase-functions/https");
-const logger = require("firebase-functions/logger");
+const { setGlobalOptions } = require("firebase-functions");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 
-// Initialize Firebase Admin to bypass security rules locally on the server
-admin.initializeApp();
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 const db = admin.firestore();
 
-// This must match the appId used in your frontend App.tsx
-const appId = 'hanover-test-season-11'; 
+const appId = 'hanover-test-season-11';
 
-exports.autoSyncScores = onSchedule("every 1 minutes", async (event) => {
-    try {
-        const settingsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('pool_settings').doc('global');
-        const settingsSnap = await settingsRef.get();
-        
-        if (!settingsSnap.exists) {
-            console.log("Database not found.");
-            return;
-        }
+// Central Canonical NFL Team Code Mapper
+function getCanonicalTeamCode(rawInput) {
+  if (!rawInput) return '';
+  const clean = String(rawInput).trim().toUpperCase();
 
-        const settings = settingsSnap.data();
-        const apiKey = settings.apiSportsKey;
-        
-        if (!apiKey) {
-            console.log("No API-Sports key found in the database. Aborting sync.");
-            return;
-        }
+  const ALIASES = {
+    GB: ['GB', 'GRE', 'GNB', 'GREEN BAY', 'PACKERS'],
+    NYG: ['NYG', 'NY', 'NEW', 'GIANTS'],
+    NYJ: ['NYJ', 'JETS'],
+    LAR: ['LAR', 'LOS', 'LA', 'RAMS'],
+    LAC: ['LAC', 'CHARGERS'],
+    SF: ['SF', 'SFO', 'SAN FRANCISCO', '49ERS', 'NINERS'],
+    KC: ['KC', 'KAN', 'KANSAS CITY', 'CHIEFS'],
+    LV: ['LV', 'LVR', 'OAK', 'LAS VEGAS', 'RAIDERS'],
+    NE: ['NE', 'NWE', 'NEW ENGLAND', 'PATRIOTS'],
+    NO: ['NO', 'NOR', 'NEW ORLEANS', 'SAINTS'],
+    TB: ['TB', 'TAM', 'TAMPA BAY', 'BUCS', 'BUCCANEERS'],
+    JAX: ['JAX', 'JAC', 'JACKSONVILLE', 'JAGS'],
+    WAS: ['WAS', 'WSH', 'WASHINGTON', 'COMMANDERS'],
+    PHI: ['PHI', 'PHILADELPHIA', 'EAGLES'],
+    BAL: ['BAL', 'BALTIMORE', 'RAVENS'],
+    BUF: ['BUF', 'BUFFALO', 'BILLS'],
+    MIA: ['MIA', 'MIAMI', 'DOLPHINS'],
+    DAL: ['DAL', 'DALLAS', 'COWBOYS'],
+    PIT: ['PIT', 'PITTSBURGH', 'STEELERS'],
+    CLE: ['CLE', 'CLEVELAND', 'BROWNS'],
+    CIN: ['CIN', 'CINCINNATI', 'BENGALS'],
+    HOU: ['HOU', 'HOUSTON', 'TEXANS'],
+    IND: ['IND', 'INDIANAPOLIS', 'COLTS'],
+    TEN: ['TEN', 'TENNESSEE', 'TITANS'],
+    DEN: ['DEN', 'DENVER', 'BRONCOS'],
+    ARI: ['ARI', 'ARIZONA', 'CARDINALS'],
+    ATL: ['ATL', 'ATLANTA', 'FALCONS'],
+    CAR: ['CAR', 'CAROLINA', 'PANTHERS'],
+    CHI: ['CHI', 'CHICAGO', 'BEARS'],
+    DET: ['DET', 'DETROIT', 'LIONS'],
+    MIN: ['MIN', 'MINNESOTA', 'VIKINGS'],
+    SEA: ['SEA', 'SEATTLE', 'SEAHAWKS']
+  };
 
-        // 1. Automatically find the active week (whichever week is open or locked)
-        const weeks = [1, 2, 3, 4, 5, 6, 7];
-        const activeWeek = weeks.find(w => ['open', 'locked'].includes(settings.weekStates?.[w])) || 1;
-        
-        const games = settings.games?.[activeWeek] || [];
-        if (games.length === 0) {
-            console.log(`No games populated for Week ${activeWeek}. Aborting sync.`);
-            return;
-        }
+  for (const [code, aliasList] of Object.entries(ALIASES)) {
+    if (code === clean || aliasList.some(a => a === clean || clean.includes(a))) {
+      return code;
+    }
+  }
+  return clean;
+}
 
-        // 2. Extract unique API dates from those games
-        const datesToFetch = [...new Set(games.map(g => g.apiDate).filter(Boolean))];
-        if (datesToFetch.length === 0) return;
+exports.autoSyncNFLScores = onSchedule("every 2 minutes", async (event) => {
+  try {
+    const settingsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('pool_settings').doc('global');
+    const settingsSnap = await settingsRef.get();
 
-        // 3. Fetch data from API-Sports for those dates
-        // 4. Fetch live games directly, or fallback to date range (+/- 1 day for UTC offset)
-    let apiGames = [];
-    
-    // First, try fetching all currently live/in-progress NFL games
-    const liveResponse = await fetch(`https://v1.american-football.api-sports.io/games?league=1&live=all`, {
+    if (!settingsSnap.exists) return;
+
+    const settings = settingsSnap.data() || {};
+    const apiKey = settings.apiSportsKey;
+    if (!apiKey) return;
+
+    const maxWeeks = settings.maxActiveWeeks || 21;
+    const weeks = Array.from({ length: maxWeeks }, (_, i) => i + 1);
+    const activeWeek = weeks.find(w => ['open', 'locked'].includes(settings.weekStates?.[w])) || 1;
+    const games = settings.games?.[activeWeek] || [];
+
+    if (games.length === 0) return;
+
+    console.log(`[POLLING SEASON 2026] Polling API-Sports...`);
+
+    const response = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=2026`, {
       headers: { 'x-apisports-key': apiKey }
     });
-    const liveJson = await liveResponse.json();
-    if (liveJson.response && Array.isArray(liveJson.response) && liveJson.response.length > 0) {
-      apiGames = liveJson.response;
-    } else {
-      // Fallback: Fetch dates with a +1 day window to cover UTC timezone shifts
-      for (const dateStr of datesToFetch) {
-        const season = String(dateStr).split('-')[0] || "2026";
-        
-        // Calculate date + 1 day to catch evening kickoff UTC shifts
-        const baseDate = new Date(dateStr + 'T12:00:00Z');
-        const nextDate = new Date(baseDate.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const json = await response.json();
+    const apiGames = json.response || [];
 
-        for (const queryDate of [dateStr, nextDate]) {
-          const response = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=${season}&date=${queryDate}`, {
-            headers: { 'x-apisports-key': apiKey }
-          });
-          const json = await response.json();
-          if (json.response && Array.isArray(json.response)) {
-            apiGames = [...apiGames, ...json.response];
-          }
+    if (apiGames.length === 0) {
+      console.log(`0 games returned from API-Sports for Season 2026.`);
+      return;
+    }
+
+    let updatedCount = 0;
+    let liveCount = 0;
+
+    const updatedGames = games.map((g) => {
+      if (String(g.status).toLowerCase() === 'final') return g;
+
+      const gAwayCanonical = getCanonicalTeamCode(g.away || g.awayAbbr || g.awayName);
+      const gHomeCanonical = getCanonicalTeamCode(g.home || g.homeAbbr || g.homeName);
+
+      const match = apiGames.find((ag) => {
+        const agAwayCanonical = getCanonicalTeamCode(ag.teams?.away?.code || ag.teams?.away?.name);
+        const agHomeCanonical = getCanonicalTeamCode(ag.teams?.home?.code || ag.teams?.home?.name);
+
+        return (
+          String(ag.game?.id) === String(g.id) ||
+          (agAwayCanonical === gAwayCanonical && agHomeCanonical === gHomeCanonical)
+        );
+      });
+
+      if (match) {
+        updatedCount++;
+        const shortStatus = String(match.game?.status?.short || '').toUpperCase();
+        const isFinal = ['FT', 'AOT', 'POST', 'CANC', 'ABD', 'FINAL', 'FINISHED'].includes(shortStatus);
+        const isLive = ['Q1', 'Q2', 'Q3', 'Q4', 'OT', 'HT', 'LIVE', 'HALFTIME', '1Q', '2Q', '3Q', '4Q', 'IN_PROGRESS'].includes(shortStatus);
+
+        if (isLive) liveCount++;
+
+        const homeTotal = match.scores?.home?.total ?? null;
+        const awayTotal = match.scores?.away?.total ?? null;
+
+        let winner = g.winner || null;
+        if (isFinal && homeTotal !== null && awayTotal !== null) {
+          if (homeTotal > awayTotal) winner = g.home;
+          else if (awayTotal > homeTotal) winner = g.away;
+          else winner = 'TIE';
         }
+
+        return {
+          ...g,
+          status: isFinal ? 'final' : (isLive ? 'in_progress' : g.status || 'upcoming'),
+          gameQuarter: isFinal ? 'FINAL' : (isLive ? shortStatus : null),
+          gameClock: isFinal ? null : (match.game?.status?.timer || match.game?.clock || null),
+          possession: isLive ? (match.game?.possession || null) : null,
+          homeScore: homeTotal !== null ? homeTotal : (g.homeScore ?? null),
+          awayScore: awayTotal !== null ? awayTotal : (g.awayScore ?? null),
+          winner: winner
+        };
       }
-    }
+      return g;
+    });
 
-        // 4. Match the backend scores to our database matches
-        const updatedGames = games.map(g => {
-            const match = apiGames.find(ag => ag.teams.away.name.includes(g.awayName) && ag.teams.home.name.includes(g.homeName));
-            if (match) {
-                const isFinal = ['FT', 'AOT'].includes(match.status.short);
-                let winner = g.winner;
-                
-                if (isFinal) {
-                    winner = match.scores.home.total > match.scores.away.total ? g.home : g.away;
-                }
-                
-                return { 
-                    ...g, 
-                    status: isFinal ? 'final' : 'upcoming', 
-                    homeScore: match.scores.home.total, 
-                    awayScore: match.scores.away.total,
-                    winner: winner
-                };
-            }
-            return g; // If no update, return as-is
-        });
+    await settingsRef.update({
+      [`games.${activeWeek}`]: updatedGames,
+      syncStatus: {
+        isActivePolling: true,
+        activeGameCount: liveCount,
+        lastCheckedAt: new Date().toISOString()
+      }
+    });
 
-        // 5. Save the newly scored games back to Firestore
-        await settingsRef.update({
-            [`games.${activeWeek}`]: updatedGames
-        });
+    console.log(`Updated ${updatedCount} games (${liveCount} active) for Week ${activeWeek}.`);
 
-        console.log(`Successfully auto-synced live scores for Week ${activeWeek}!`);
-
-    } catch (error) {
-        console.error("Fatal error during automated score sync:", error);
-    }
+  } catch (error) {
+    console.error("Fatal error during Cloud Function score sync:", error);
+  }
 });
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
 setGlobalOptions({ maxInstances: 10 });
-
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
-
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });

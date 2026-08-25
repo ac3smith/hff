@@ -194,10 +194,15 @@ function calculatePoints(picks: any, ranks: any, games: any) {
 
 function wasAlreadyOut(user: any, currentWeek: number, weekStates: any) {
   if (!user || user.paymentStatus === 'disqualified') return true;
-  for (let wk = 1; wk < currentWeek; wk++) if (weekStates?.[wk] === 'closed' && ['Loser', 'Loser (No Pick)', 'No Pick', undefined].includes(user.knockoutStatuses?.[wk])) return true;
+  for (let wk = 1; wk < currentWeek; wk++) {
+    const wkState = weekStates?.[wk];
+    const wkStatus = user?.knockoutStatuses?.[wk];
+    if (wkState === 'closed' && (wkStatus === 'Loser' || wkStatus === 'Loser (No Pick)' || wkStatus === 'Knocked Out')) {
+      return true;
+    }
+  }
   return false;
 }
-
 function getLockdownTime(gamesList: any[]) {
   if (!gamesList || gamesList.length === 0) return null;
   
@@ -2393,21 +2398,37 @@ function MainApp() {
       }
 
       const dateStr = rawDate.toLocaleDateString('en-US', { 
+        timeZone: 'America/New_York',
         weekday: 'short', 
         month: 'short', 
         day: 'numeric' 
       });
 
       const timeStr = rawDate.toLocaleTimeString('en-US', { 
+        timeZone: 'America/New_York',
         hour: 'numeric', 
         minute: '2-digit', 
         hour12: true 
       });
 
-      return { dateStr, timeStr, isoDate: rawDate.toISOString() };
+      // Force YYYY-MM-DD to lock to US Eastern Time instead of UTC ISO string
+      const easternApiDate = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(rawDate);
+
+      return { dateStr, timeStr, isoDate: easternApiDate };
     } catch (err) {
       console.error("Date Parsing Error:", err);
-      return { dateStr: 'TBD', timeStr: 'TBD', isoDate: new Date().toISOString() };
+      const fallbackEastern = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date());
+      return { dateStr: 'TBD', timeStr: 'TBD', isoDate: fallbackEastern };
     }
   };
 
@@ -2702,51 +2723,35 @@ function ensureAutoTiebreaker(gamesList: any[]) {
     }
     lastSyncTimeRef.current = now;
 
-    if (!globalSettings?.apiSportsKey?.trim()) return;
-    if (!games || games.length === 0) return;
-
-    setIsSyncing(true);
     if (!globalSettings?.apiSportsKey?.trim()) {
       return alert("Please enter your API-Sports Key in the Admin Settings tab.");
     }
+    if (!games || games.length === 0) return;
 
     setIsSyncing(true);
     try {
       const apiKey = globalSettings.apiSportsKey.trim();
       const headers = { 'x-apisports-key': apiKey };
 
-      if (!games || games.length === 0) {
+      // Query Season 2026 directly (bypasses UTC date boundary issues completely)
+      const res = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=2026`, { headers });
+      if (!res.ok) {
         setIsSyncing(false);
         return;
       }
 
-      // 1. Collect valid dates or fallback to current season
-      let datesToFetch = [...new Set(games.map((g: any) => g.apiDate).filter(Boolean))];
-      let apiGames: any[] = [];
+      const json = await res.json();
+      const apiGames = json.response || [];
 
-      if (datesToFetch.length > 0) {
-        for (const date of datesToFetch) {
-          const season = String(date).split('-')[0] || "2026";
-          const res = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=${season}&date=${date}`, { headers });
-          if (res.ok) {
-            const json = await res.json();
-            if (json.response && Array.isArray(json.response)) {
-              apiGames = [...apiGames, ...json.response];
-            }
-          }
-        }
-      } else {
-        const res = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=2026`, { headers });
-        if (res.ok) {
-          const json = await res.json();
-          if (json.response) apiGames = json.response;
-        }
+      if (apiGames.length === 0) {
+        setIsSyncing(false);
+        return;
       }
 
-      // 2. Flexible Team & Status Matcher
+      // Flexible Team & Status Matcher
       let liveCount = 0;
       const updatedGames = games.map((g: any) => {
-        // Shield finalized games from client overwrites
+        // Shield finalized games from overwrites
         if (String(g.status).toLowerCase() === 'final') return g;
 
         const gAwayCanonical = getCanonicalTeamCode(g.away || g.awayAbbr || g.awayName);
@@ -2763,9 +2768,9 @@ function ensureAutoTiebreaker(gamesList: any[]) {
         });
 
         if (match) {
-          const shortStatus = match.game?.status?.short || '';
-          const isFinal = ['FT', 'AOT'].includes(shortStatus);
-          const isLive = ['Q1', 'Q2', 'Q3', 'Q4', 'OT', 'HT', 'LIVE', 'HALFTIME', '1Q', '2Q', '3Q', '4Q'].includes(shortStatus);
+          const shortStatus = String(match.game?.status?.short || '').toUpperCase();
+          const isFinal = ['FT', 'AOT', 'POST', 'CANC', 'ABD', 'FINAL', 'FINISHED'].includes(shortStatus);
+          const isLive = ['Q1', 'Q2', 'Q3', 'Q4', 'OT', 'HT', 'LIVE', 'HALFTIME', '1Q', '2Q', '3Q', '4Q', 'IN_PROGRESS'].includes(shortStatus);
 
           if (isLive) liveCount++;
 
@@ -2805,7 +2810,7 @@ function ensureAutoTiebreaker(gamesList: any[]) {
         return g;
       });
 
-      // 3. Write updated scores & syncStatus to Firestore
+      // Write updated scores & syncStatus directly to Firestore
       await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
         [`games.${selectedWeek}`]: updatedGames,
         syncStatus: {
@@ -2980,15 +2985,43 @@ function ensureAutoTiebreaker(gamesList: any[]) {
   const handleDeleteUser = async (id: string) => { setIsSaving(true); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', id)); setConfirmDeleteId(null); setIsSaving(false); setHasSaved(true); setTimeout(() => setHasSaved(false), 2000); };
   
   const handleResetKnockout = async () => { 
-    const batch = writeBatch(db); 
-    allUsers.forEach(u => batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), { knockoutPicks: {}, knockoutStatuses: {} })); 
-    batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { knockoutSession: (globalSettings.knockoutSession || 1) + 1 }); 
-    setIsSaving(true); 
-    await batch.commit(); 
-    setIsSaving(false); 
-    setHasSaved(true); 
-    setTimeout(() => setHasSaved(false), 2000); 
-    setShowResetConfirm(false); 
+    setIsSaving(true);
+    try {
+      const batch = writeBatch(db); 
+  
+      // 1. Wipe Knockout Picks and Statuses from every user
+      allUsers.forEach(u => {
+        batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), { 
+          knockoutPicks: {}, 
+          knockoutStatuses: {},
+          paymentStatus: u.paymentStatus === 'disqualified' ? 'unpaid' : (u.paymentStatus || 'unpaid')
+        });
+      }); 
+  
+      // 2. Re-open week states so past weeks don't evaluate missing picks as 'No Pick'
+      const resetWeekStates: Record<string, string> = {};
+      const maxWeeks = globalSettings?.maxActiveWeeks || 18;
+      for (let w = 1; w <= maxWeeks; w++) {
+        resetWeekStates[`weekStates.${w}`] = 'open';
+      }
+  
+      batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { 
+        ...resetWeekStates,
+        knockoutSession: (globalSettings?.knockoutSession || 1) + 1 
+      }); 
+  
+      await batch.commit(); 
+      setSelectedWeek(1);
+      alert("Knockout pool completely reset for the season!");
+    } catch (e) {
+      console.error("Error resetting Knockout pool:", e);
+      alert("Failed to reset Knockout pool.");
+    } finally {
+      setIsSaving(false); 
+      setHasSaved(true); 
+      setTimeout(() => setHasSaved(false), 2000); 
+      setShowResetConfirm(false); 
+    }
   };
 
   const handleResetFanatics = async () => { setIsSaving(true); try { const batch = writeBatch(db); allUsers.forEach(u => { batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), { picks: {1:{},2:{},3:{},4:{}}, ranks: {1:{},2:{},3:{},4:{}}, tiebreakers: {1:'',2:'',3:'',4:''}, weeklyFantasyHistory: {}, weeklyConfidenceHistory: {} }); }); batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { weekStates: { 1: 'open', 2: 'open', 3: 'open', 4: 'open' }, actualTiebreakers: { 1: 0, 2: 0, 3: 0, 4: 0 }}); await batch.commit(); window.location.reload(); } catch (e) { console.error(e); setIsSaving(false); } };
