@@ -192,12 +192,16 @@ function calculatePoints(picks: any, ranks: any, games: any) {
   return maxPossible - lostPoints;
 }
 
-function wasAlreadyOut(user: any, currentWeek: number, weekStates: any) {
+function wasAlreadyOut(user: any, currentWeek: number, globalSettings: any) {
   if (!user || user.paymentStatus === 'disqualified') return true;
+  
+  // Use Knockout-specific week states if available, fallback to global weekStates
+  const koStates = globalSettings?.koWeekStates || globalSettings?.weekStates || {};
+
   for (let wk = 1; wk < currentWeek; wk++) {
-    const wkState = weekStates?.[wk];
+    const wkState = koStates[wk];
     const wkStatus = user?.knockoutStatuses?.[wk];
-    if (wkState === 'closed' && (wkStatus === 'Loser' || wkStatus === 'Loser (No Pick)' || wkStatus === 'Knocked Out')) {
+    if (wkState === 'closed' && ['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) {
       return true;
     }
   }
@@ -1663,6 +1667,28 @@ function LockBanner({ week }: any) {
   return <div className="bg-red-50 border-l-8 border-red-500 p-5 rounded-2xl flex gap-4 shadow-xl mb-6"><Lock className="w-8 h-8 text-red-500 flex-shrink-0" /><div><p className="text-lg font-black italic uppercase text-red-800">{label} is Locked</p></div></div>; 
 }
 
+// RESTRICTED WEEK SELECTOR FOR ADVANCE PICK TABS (Hides past closed weeks)
+function PickWeekSelector({ week, setWeek, currentActiveWeek, maxActiveWeeks = 18 }: any) { 
+  return (
+    <div className="w-full md:w-auto">
+      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Select Week for Picks</label>
+      <select 
+        value={week} 
+        onChange={(e) => setWeek(Number(e.target.value))} 
+        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-black italic uppercase text-xl tracking-tighter outline-none focus:ring-4 focus:ring-[#FFB81C]/20 transition-all cursor-pointer"
+      >
+        {Array.from({ length: maxActiveWeeks }, (_, i) => i + 1)
+          .filter(w => w >= currentActiveWeek)
+          .map(w => (
+            <option key={w} value={w}>
+              {w <= 3 ? `Preseason W${w}` : `Week ${w - 3}`} {w === currentActiveWeek ? '(Current)' : '(Advance Pick)'}
+            </option>
+          ))}
+      </select>
+    </div>
+  ); 
+}
+
 function WeekSelector({ week, setWeek, maxActiveWeeks = 18 }: any) { 
   return (
     <div className="w-full md:w-auto">
@@ -1840,7 +1866,12 @@ function ensureAutoTiebreaker(gamesList: any[]) {
 // --- MAIN APP COMPONENT ---
 function MainApp() {
   const [user, setUser] = useState<any>(null), [dbReady, setDbReady] = useState(false), [authLoaded, setAuthLoaded] = useState(false), [sessionLoaded, setSessionLoaded] = useState(false), [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [activeTab, setActiveTab] = useState('dashboard'), [selectedWeek, setSelectedWeek] = useState(1), [currentUserId, setCurrentUserId] = useState('');
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [currentActiveWeek, setCurrentActiveWeek] = useState(1); // Anchors Dashboard, Results, & Standings
+  const [picksSelectedWeek, setPicksSelectedWeek] = useState(1);   // Allows advance picking on Fanatics & Knockout tabs ONLY
+  const selectedWeek = currentActiveWeek;
+  const setSelectedWeek = setCurrentActiveWeek;
+  const [currentUserId, setCurrentUserId] = useState('');
   const [allUsers, setAllUsers] = useState<any[]>([]), [globalSettings, setGlobalSettings] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false), [hasSaved, setHasSaved] = useState(false), [showPrintModal, setShowPrintModal] = useState(false), [showChangePassword, setShowChangePassword] = useState(false), [adminTab, setAdminTab] = useState('status'); 
   const [isSyncing, setIsSyncing] = useState(false), [showFanaticsResetConfirm, setShowFanaticsResetConfirm] = useState(false);
@@ -2044,7 +2075,9 @@ function MainApp() {
   useEffect(() => { 
     if (globalSettings && allUsers.length > 0 && !dbReady) { 
         const availableWeeks = Array.from({ length: maxActiveWeeks }, (_, i) => i + 1);
-        setSelectedWeek(availableWeeks.find(w => globalSettings.weekStates?.[w] !== 'closed') || 1); 
+        const active = availableWeeks.find(w => globalSettings.weekStates?.[w] !== 'closed') || 1;
+        setCurrentActiveWeek(active);
+        setPicksSelectedWeek(active);
         setDbReady(true); 
     } 
   }, [globalSettings, allUsers, dbReady, maxActiveWeeks]);
@@ -2054,23 +2087,35 @@ function MainApp() {
   const sessionUser = allUsers.find(u => u.id === currentUserId);
   const currentUser = overrideUserId ? (allUsers.find(u => u.id === overrideUserId) || sessionUser) : sessionUser;
   const isAdmin = sessionUser?.role === 'admin';
-  const games = useMemo(() => {
-    const rawGames = globalSettings?.games?.[selectedWeek] || [];
-    if (rawGames.length === 0) return [];
-  
-    const sorted = [...rawGames].sort((a: any, b: any) => {
-      const timeA = new Date(`${a.apiDate || a.date} ${a.time}`).getTime() || 0;
-      const timeB = new Date(`${b.apiDate || b.date} ${b.time}`).getTime() || 0;
-      return timeA - timeB;
-    });
-  
-    const lastGameId = sorted[sorted.length - 1]?.id;
-  
-    return sorted.map((g: any) => ({
-      ...g,
-      isTiebreaker: g.id === lastGameId
-    }));
-  }, [globalSettings?.games, selectedWeek]);
+// Games for Dashboard, Results, & Standings (Locked to current active week)
+const games = useMemo(() => {
+  const rawGames = globalSettings?.games?.[currentActiveWeek] || [];
+  if (rawGames.length === 0) return [];
+  const sorted = [...rawGames].sort((a: any, b: any) => {
+    const timeA = new Date(`${a.apiDate || a.date} ${a.time}`).getTime() || 0;
+    const timeB = new Date(`${b.apiDate || b.date} ${b.time}`).getTime() || 0;
+    return timeA - timeB;
+  });
+  const lastGameId = sorted[sorted.length - 1]?.id;
+  return sorted.map((g: any) => ({ ...g, isTiebreaker: g.id === lastGameId }));
+}, [globalSettings?.games, currentActiveWeek]);
+
+// Games for Fanatics & KnockOut Pick Screens (Allows viewing/picking future weeks)
+const pickGames = useMemo(() => {
+  const rawGames = globalSettings?.games?.[picksSelectedWeek] || [];
+  if (rawGames.length === 0) return [];
+  const sorted = [...rawGames].sort((a: any, b: any) => {
+    const timeA = new Date(`${a.apiDate || a.date} ${a.time}`).getTime() || 0;
+    const timeB = new Date(`${b.apiDate || b.date} ${b.time}`).getTime() || 0;
+    return timeA - timeB;
+  });
+  const lastGameId = sorted[sorted.length - 1]?.id;
+  return sorted.map((g: any) => ({ ...g, isTiebreaker: g.id === lastGameId }));
+}, [globalSettings?.games, picksSelectedWeek]);
+
+const pickWeekState = globalSettings?.weekStates?.[picksSelectedWeek] || 'open';
+const pickLockdownTime = getLockdownTime(pickGames);
+const isPickWeekLocked = pickWeekState === 'locked' || pickWeekState === 'closed' || (pickWeekState === 'open' && pickLockdownTime && Date.now() >= pickLockdownTime);
   
   const currentWeekState = globalSettings?.weekStates?.[selectedWeek] || 'open';
   const lockdownTime = getLockdownTime(games);
@@ -2855,13 +2900,13 @@ function ensureAutoTiebreaker(gamesList: any[]) {
       })
     );
   };
-  const updateUserPicks = (userId: string, gameId: number, team: string) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), { [`picks.${selectedWeek}`]: { ...(allUsers.find(u => u.id === userId)?.picks?.[selectedWeek] || {}), [gameId]: team } }));
-  const updateUserRank = (userId: string, gameId: number, rankValue: string) => {
-    const currentWeekRanks = { ...(allUsers.find(u => u.id === userId)?.ranks?.[selectedWeek] || {}) };
-    if (!rankValue || rankValue === "") delete currentWeekRanks[gameId];
-    else { const newRank = parseInt(rankValue, 10); const existingGameId = Object.keys(currentWeekRanks).find(id => currentWeekRanks[id] === newRank); if (existingGameId) delete currentWeekRanks[existingGameId]; currentWeekRanks[gameId] = newRank; }
-    trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), { [`ranks.${selectedWeek}`]: currentWeekRanks }));
-  };
+  const updateUserPicks = (userId: string, gameId: number, team: string) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), { [`picks.${picksSelectedWeek}`]: { ...(allUsers.find(u => u.id === userId)?.picks?.[picksSelectedWeek] || {}), [gameId]: team } }));
+const updateUserRank = (userId: string, gameId: number, rankValue: string) => {
+  const currentWeekRanks = { ...(allUsers.find(u => u.id === userId)?.ranks?.[picksSelectedWeek] || {}) };
+  if (!rankValue || rankValue === "") delete currentWeekRanks[gameId];
+  else { const newRank = parseInt(rankValue, 10); const existingGameId = Object.keys(currentWeekRanks).find(id => currentWeekRanks[id] === newRank); if (existingGameId) delete currentWeekRanks[existingGameId]; currentWeekRanks[gameId] = newRank; }
+  trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), { [`ranks.${picksSelectedWeek}`]: currentWeekRanks }));
+};
   const handleEditUser = (userId: string, field: string, val: any) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), { [field]: val }));
   
   const saveInlineUserEdit = async (userId: string) => { 
@@ -2984,45 +3029,61 @@ function ensureAutoTiebreaker(gamesList: any[]) {
 
   const handleDeleteUser = async (id: string) => { setIsSaving(true); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', id)); setConfirmDeleteId(null); setIsSaving(false); setHasSaved(true); setTimeout(() => setHasSaved(false), 2000); };
   
-  const handleResetKnockout = async () => { 
-    setIsSaving(true);
-    try {
-      const batch = writeBatch(db); 
-  
-      // 1. Wipe Knockout Picks and Statuses from every user
-      allUsers.forEach(u => {
-        batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), { 
-          knockoutPicks: {}, 
-          knockoutStatuses: {},
-          paymentStatus: u.paymentStatus === 'disqualified' ? 'unpaid' : (u.paymentStatus || 'unpaid')
-        });
-      }); 
-  
-      // 2. Re-open week states so past weeks don't evaluate missing picks as 'No Pick'
-      const resetWeekStates: Record<string, string> = {};
-      const maxWeeks = globalSettings?.maxActiveWeeks || 18;
-      for (let w = 1; w <= maxWeeks; w++) {
-        resetWeekStates[`weekStates.${w}`] = 'open';
-      }
-  
-      batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { 
-        ...resetWeekStates,
-        knockoutSession: (globalSettings?.knockoutSession || 1) + 1 
-      }); 
-  
-      await batch.commit(); 
-      setSelectedWeek(1);
-      alert("Knockout pool completely reset for the season!");
-    } catch (e) {
-      console.error("Error resetting Knockout pool:", e);
-      alert("Failed to reset Knockout pool.");
-    } finally {
-      setIsSaving(false); 
-      setHasSaved(true); 
-      setTimeout(() => setHasSaved(false), 2000); 
-      setShowResetConfirm(false); 
+// Lock, Open, or Close Knockout weeks independently
+const handleSetKnockoutWeekState = async (weekNum: number, state: 'open' | 'locked' | 'closed') => {
+  setIsSaving(true);
+  try {
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+      [`koWeekStates.${weekNum}`]: state
+    });
+    setHasSaved(true);
+    setTimeout(() => setHasSaved(false), 2000);
+  } catch (e) {
+    console.error("Error updating Knockout week state:", e);
+  } finally {
+    setIsSaving(false);
+  }
+};
+
+const handleResetKnockout = async () => { 
+  setIsSaving(true);
+  try {
+    const batch = writeBatch(db); 
+
+    // 1. Wipe Knockout Picks and Knockout Statuses ONLY for every user
+    allUsers.forEach(u => {
+      batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), { 
+        knockoutPicks: {}, 
+        knockoutStatuses: {},
+        paymentStatus: u.paymentStatus === 'disqualified' ? 'unpaid' : (u.paymentStatus || 'unpaid')
+      });
+    }); 
+
+    // 2. Clear ONLY Knockout-specific week states so past closed Fanatics weeks don't eliminate players
+    const resetKoWeekStates: Record<string, string> = {};
+    const maxWeeks = globalSettings?.maxActiveWeeks || 18;
+    for (let w = 1; w <= maxWeeks; w++) {
+      resetKoWeekStates[`koWeekStates.${w}`] = 'open';
     }
-  };
+
+    // 3. Increment Knockout session counter WITHOUT touching Fanatics weekStates or active week selection
+    batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { 
+      ...resetKoWeekStates,
+      knockoutSession: (globalSettings?.knockoutSession || 1) + 1 
+    }); 
+
+    await batch.commit(); 
+    alert("Knockout pool reset! Everyone is back to Alive, and Fanatics remains on the exact week you had selected.");
+  } catch (e) {
+    console.error("Error resetting Knockout pool:", e);
+    alert("Failed to reset Knockout pool.");
+  } finally {
+    setIsSaving(false); 
+    setHasSaved(true); 
+    setTimeout(() => setHasSaved(false), 2000); 
+    setShowResetConfirm(false); 
+  }
+};
 
   const handleResetFanatics = async () => { setIsSaving(true); try { const batch = writeBatch(db); allUsers.forEach(u => { batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), { picks: {1:{},2:{},3:{},4:{}}, ranks: {1:{},2:{},3:{},4:{}}, tiebreakers: {1:'',2:'',3:'',4:''}, weeklyFantasyHistory: {}, weeklyConfidenceHistory: {} }); }); batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { weekStates: { 1: 'open', 2: 'open', 3: 'open', 4: 'open' }, actualTiebreakers: { 1: 0, 2: 0, 3: 0, 4: 0 }}); await batch.commit(); window.location.reload(); } catch (e) { console.error(e); setIsSaving(false); } };
   const updateGameResult = (gameId: number, resultType: string, teamId: string) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { [`games.${selectedWeek}`]: games.map((g: any) => g.id !== gameId ? g : (resultType === 'upcoming' ? { ...g, status: 'upcoming', winner: null } : { ...g, status: 'final', winner: resultType === 'TIE' ? 'TIE' : teamId })) }));
@@ -3347,109 +3408,106 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             </div>
         )}
 
-        {activeTab === 'confidence' && (
-          <div className="space-y-6 max-w-[1200px] mx-auto">
-            {!currentUser.playsConfidence && <ParticipationAlert game="Fanatics" />}
-            {isWeekLocked && <LockBanner week={selectedWeek} />}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <WeekSelector week={selectedWeek} setWeek={setSelectedWeek} maxActiveWeeks={maxActiveWeeks} />
-              <div className="flex flex-col sm:flex-row items-center gap-6 flex-1 w-full md:w-auto">
-                <ProgressBar current={totalItemsCompleted} total={totalItemsRequired} percentage={progressPercentage} />
-                {!isWeekLocked && currentUser.playsConfidence && (
-                  <div className="flex gap-2">
-                    <button onClick={() => handleConfidenceQuickPicks(false)} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2 whitespace-nowrap">
-                      <Zap className="w-3.5 h-3.5" /> Pick (Me)
-                    </button>
-                    {isAdmin && (
-                      <button onClick={() => handleConfidenceQuickPicks(true)} className="px-4 py-2 bg-purple-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-purple-700 transition-all flex items-center gap-2 whitespace-nowrap">
-                        <Users className="w-3.5 h-3.5" /> Pick All
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-              <AutoSaveIndicator isSaving={isSaving} hasSaved={hasSaved} count={totalItemsCompleted} />
-            </div>
-            <div className={`flex flex-col gap-3 ${!currentUser.playsConfidence ? 'opacity-25 grayscale pointer-events-none' : ''}`}>
-              {games.map((game: any) => (<GameCard key={game.id} game={game} selectedPick={currentUserPicks[game.id]} selectedRank={currentUserRanks[game.id]} totalGames={totalGames} usedRanks={Object.values(currentUserRanks)} isLocked={isWeekLocked} onPick={(team: string) => updateUserPicks(currentUser.id, game.id, team)} onRankChange={(rank: string) => updateUserRank(currentUser.id, game.id, rank)} />))}
-              <TiebreakerCard val={currentUser.tiebreakers?.[selectedWeek] || ''} game={games[games.length - 1]} isLocked={isWeekLocked} onSave={(val: any) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.id), { [`tiebreakers.${selectedWeek}`]: val }))} />
-            </div>
-          </div>
-        )}
+{activeTab === 'confidence' && (
+  <div className="space-y-6 max-w-[1200px] mx-auto">
+    {!currentUser.playsConfidence && <ParticipationAlert game="Fanatics" />}
+    {isPickWeekLocked && <LockBanner week={picksSelectedWeek} />}
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <PickWeekSelector 
+        week={picksSelectedWeek} 
+        setWeek={setPicksSelectedWeek} 
+        currentActiveWeek={currentActiveWeek} 
+        maxActiveWeeks={maxActiveWeeks} 
+      />
+      <div className="flex flex-col sm:flex-row items-center gap-6 flex-1 w-full md:w-auto">
+        <ProgressBar current={totalItemsCompleted} total={totalItemsRequired} percentage={progressPercentage} />
+      </div>
+      <AutoSaveIndicator isSaving={isSaving} hasSaved={hasSaved} count={totalItemsCompleted} />
+    </div>
+    <div className={`flex flex-col gap-3 ${!currentUser.playsConfidence ? 'opacity-25 grayscale pointer-events-none' : ''}`}>
+      {pickGames.map((game: any) => (
+        <GameCard 
+          key={game.id} 
+          game={game} 
+          selectedPick={currentUser?.picks?.[picksSelectedWeek]?.[game.id]} 
+          selectedRank={currentUser?.ranks?.[picksSelectedWeek]?.[game.id]} 
+          totalGames={pickGames.length} 
+          usedRanks={Object.values(currentUser?.ranks?.[picksSelectedWeek] || {})} 
+          isLocked={isPickWeekLocked} 
+          onPick={(team: string) => updateUserPicks(currentUser.id, game.id, team)} 
+          onRankChange={(rank: string) => updateUserRank(currentUser.id, game.id, rank)} 
+        />
+      ))}
+      <TiebreakerCard 
+        val={currentUser?.tiebreakers?.[picksSelectedWeek] || ''} 
+        game={pickGames[pickGames.length - 1]} 
+        isLocked={isPickWeekLocked} 
+        onSave={(val: any) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.id), { [`tiebreakers.${picksSelectedWeek}`]: val }))} 
+      />
+    </div>
+  </div>
+)}
 
 {activeTab === 'knockout' && (
-          <div className="space-y-6 max-w-[1200px] mx-auto">
-            {!currentUser?.playsKnockout && <ParticipationAlert game="KnockOut" />}
-            
-            {/* Header Banner */}
-            <div className="bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden border-b-8 border-[#FFB81C] shadow-2xl">
-              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div>
-                  <div className="flex items-center gap-3 mb-4">
-                    <Skull className="w-10 h-10 text-[#FFB81C]" />
-                    <h2 className="text-4xl font-black italic uppercase tracking-tighter">
-                      KnockOut <span className="text-[#FFB81C]">S{globalSettings?.knockoutSession || 1} &bull; {selectedWeek <= 3 ? `PRE W${selectedWeek}` : `WK ${selectedWeek - 3}`}</span>
-                    </h2>
-                  </div>
-                  <p className="text-slate-400 font-bold max-w-lg">One winner per week. Stay alive. No team reused.</p>
-                </div>
-                <div className="flex flex-col sm:flex-row items-center gap-3">
-                  {!isWeekLocked && currentUser?.playsKnockout && !wasAlreadyOut(currentUser, selectedWeek, globalSettings?.weekStates) && (
-                    <div className="flex gap-2 w-full sm:w-auto">
-                      <button onClick={() => handleKnockoutQuickPick(false)} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black italic uppercase shadow-xl flex items-center gap-2 hover:bg-indigo-500 transition-all text-sm w-full sm:w-auto">
-                        <Zap className="w-5 h-5" /> Pick (Me)
-                      </button>
-                      {isAdmin && (
-                        <button onClick={() => handleKnockoutQuickPick(true)} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black italic uppercase shadow-xl flex items-center gap-2 hover:bg-purple-500 transition-all text-sm w-full sm:w-auto">
-                          <Users className="w-5 h-5" /> Pick All
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {currentUser?.playsKnockout && userPaymentStatus === 'paid' && (
-                    <div className="bg-[#FFB81C] text-slate-900 px-6 py-3 rounded-2xl font-black italic uppercase shadow-xl flex items-center justify-center gap-2 w-full sm:w-auto">
-                      <DollarSign className="w-6 h-6" /> Eligible
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {wasAlreadyOut(currentUser, selectedWeek, globalSettings?.weekStates) ? (
-              <div className={`border-4 rounded-3xl p-12 text-center ${userPaymentStatus === 'disqualified' ? 'bg-red-600 border-red-800' : 'bg-red-50 border-red-500'}`}>
-                <Skull className={`w-20 h-24 mx-auto mb-4 ${userPaymentStatus === 'disqualified' ? 'text-red-900' : 'text-red-500'}`} />
-                <h3 className={`text-4xl font-black italic uppercase tracking-tighter ${userPaymentStatus === 'disqualified' ? 'text-white' : 'text-red-900'}`}>
-                  {userPaymentStatus === 'disqualified' ? 'DISQUALIFIED (UNPAID)' : 'Knocked Out'}
-                </h3>
-              </div>
-            ) : (
-              <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 ${!currentUser?.playsKnockout ? 'opacity-25 grayscale pointer-events-none' : ''}`}>
-                {(games || []).map((game: any) => {
-                  if (!game) return null;
-
-                  // Safely extract teams picked ONLY in prior weeks
-                  const picksMap = currentUser?.knockoutPicks || {};
-                  const priorTeamsUsed = Object.keys(picksMap)
-                    .filter((wkKey) => parseInt(String(wkKey || 0), 10) < Number(selectedWeek))
-                    .map((wkKey) => picksMap[wkKey])
-                    .filter(Boolean);
-
-                  return (
-                    <KnockoutGameCard 
-                      key={game.id} 
-                      game={game} 
-                      selectedTeam={picksMap[selectedWeek] || ''} 
-                      usedTeams={priorTeamsUsed} 
-                      onPick={(team: string) => updateKnockoutPick(currentUser?.id, selectedWeek, team)} 
-                      isLocked={isWeekLocked} 
-                    />
-                  );
-                })}
-              </div>
-            )}
+  <div className="space-y-6 max-w-[1200px] mx-auto">
+    {!currentUser?.playsKnockout && <ParticipationAlert game="KnockOut" />}
+    
+    <div className="bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden border-b-8 border-[#FFB81C] shadow-2xl">
+      <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <div className="flex items-center gap-3 mb-4">
+            <Skull className="w-10 h-10 text-[#FFB81C]" />
+            <h2 className="text-4xl font-black italic uppercase tracking-tighter">
+              KnockOut <span className="text-[#FFB81C]">S{globalSettings?.knockoutSession || 1} &bull; {picksSelectedWeek <= 3 ? `PRE W${picksSelectedWeek}` : `WK ${picksSelectedWeek - 3}`}</span>
+            </h2>
           </div>
-        )}
+          <p className="text-slate-400 font-bold max-w-lg">One winner per week. Stay alive. No team reused.</p>
+        </div>
 
+        <div className="bg-slate-800 p-3 rounded-2xl border border-slate-700">
+          <PickWeekSelector 
+            week={picksSelectedWeek} 
+            setWeek={setPicksSelectedWeek} 
+            currentActiveWeek={currentActiveWeek} 
+            maxActiveWeeks={maxActiveWeeks} 
+          />
+        </div>
+      </div>
+    </div>
+
+    {wasAlreadyOut(currentUser, picksSelectedWeek, globalSettings) ? (
+      <div className={`border-4 rounded-3xl p-12 text-center ${userPaymentStatus === 'disqualified' ? 'bg-red-600 border-red-800' : 'bg-red-50 border-red-500'}`}>
+        <Skull className={`w-20 h-24 mx-auto mb-4 ${userPaymentStatus === 'disqualified' ? 'text-red-900' : 'text-red-500'}`} />
+        <h3 className={`text-4xl font-black italic uppercase tracking-tighter ${userPaymentStatus === 'disqualified' ? 'text-white' : 'text-red-900'}`}>
+          {userPaymentStatus === 'disqualified' ? 'DISQUALIFIED (UNPAID)' : 'Knocked Out'}
+        </h3>
+      </div>
+    ) : (
+      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 ${!currentUser?.playsKnockout ? 'opacity-25 grayscale pointer-events-none' : ''}`}>
+        {(pickGames || []).map((game: any) => {
+          if (!game) return null;
+
+          const picksMap = currentUser?.knockoutPicks || {};
+          const priorTeamsUsed = Object.keys(picksMap)
+            .filter((wkKey) => parseInt(String(wkKey || 0), 10) < Number(picksSelectedWeek))
+            .map((wkKey) => picksMap[wkKey])
+            .filter(Boolean);
+
+          return (
+            <KnockoutGameCard 
+              key={game.id} 
+              game={game} 
+              selectedTeam={picksMap[picksSelectedWeek] || ''} 
+              usedTeams={priorTeamsUsed} 
+              onPick={(team: string) => updateKnockoutPick(currentUser?.id, picksSelectedWeek, team)} 
+              isLocked={isPickWeekLocked} 
+            />
+          );
+        })}
+      </div>
+    )}
+  </div>
+)}
         {activeTab === 'c-tracker' && (
           <div className="space-y-6 max-w-[1400px] mx-auto">
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex items-center justify-between">
