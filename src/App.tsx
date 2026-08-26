@@ -51,8 +51,8 @@ const NFL_TEAMS: Record<string, { abbr: string; name: string; city: string; colo
   MIN: { abbr: 'MIN', name: 'Vikings', city: 'Minnesota', color: '#4F2683', aliases: ['MIN', 'MINNESOTA'] },
   NE:  { abbr: 'NE',  name: 'Patriots', city: 'New England', color: '#002244', aliases: ['NE', 'NWE', 'NEW ENGLAND', 'PATRIOTS'] },
   NO:  { abbr: 'NO',  name: 'Saints', city: 'New Orleans', color: '#D3BC8D', aliases: ['NO', 'NOR', 'NEW ORLEANS', 'SAINTS'] },
-  NYG: { abbr: 'NYG', name: 'Giants', city: 'NY Giants', color: '#0B2265', aliases: ['NYG', 'NY', 'NEW', 'GIANTS'] },
-  NYJ: { abbr: 'NYJ', name: 'Jets', city: 'NY Jets', color: '#125740', aliases: ['NYJ', 'JETS'] },
+  NYG: { abbr: 'NYG', name: 'Giants', city: 'NY Giants', color: '#0B2265', aliases: ['NYG', 'GIANTS', 'NEW YORK GIANTS'] },
+  NYJ: { abbr: 'NYJ', name: 'Jets', city: 'NY Jets', color: '#125740', aliases: ['NYJ', 'JETS', 'NEW YORK JETS'] },
   PHI: { abbr: 'PHI', name: 'Eagles', city: 'Philadelphia', color: '#004C54', aliases: ['PHI', 'PHILADELPHIA', 'EAGLES'] },
   PIT: { abbr: 'PIT', name: 'Steelers', city: 'Pittsburgh', color: '#FFB81C', aliases: ['PIT', 'PITTSBURGH', 'STEELERS'] },
   SF:  { abbr: 'SF',  name: '49ers', city: 'San Francisco', color: '#AA0000', aliases: ['SF', 'SFO', 'SAN FRANCISCO', '49ERS', 'NINERS'] },
@@ -68,7 +68,7 @@ export function getCanonicalTeamCode(rawInput: string): string {
   const clean = String(rawInput).trim().toUpperCase();
 
   for (const [code, team] of Object.entries(NFL_TEAMS)) {
-    if (code === clean || team.aliases.some(a => a === clean || clean.includes(a))) {
+    if (code === clean || team.aliases.some(a => a === clean)) {
       return code;
     }
   }
@@ -156,9 +156,9 @@ function getCleanTeamAbbr(rawCode: string, teamName: string): string {
   }
 
   // Raw code fallbacks
-  if (rawCode === 'GRE' || rawCode === 'GNB') return 'GB';
-  if (rawCode === 'NEW' || rawCode === 'NY') return 'NYG';
-  if (rawCode === 'LOS' || rawCode === 'LA') return 'LAR';
+// Raw code fallbacks
+if (rawCode === 'GRE' || rawCode === 'GNB') return 'GB';
+if (rawCode === 'LOS' || rawCode === 'LA') return 'LAR';
 
   return rawCode || 'TBD';
 }
@@ -1867,10 +1867,15 @@ function ensureAutoTiebreaker(gamesList: any[]) {
 function MainApp() {
   const [user, setUser] = useState<any>(null), [dbReady, setDbReady] = useState(false), [authLoaded, setAuthLoaded] = useState(false), [sessionLoaded, setSessionLoaded] = useState(false), [isLoggedIn, setIsLoggedIn] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [currentActiveWeek, setCurrentActiveWeek] = useState(1); // Anchors Dashboard, Results, & Standings
-  const [picksSelectedWeek, setPicksSelectedWeek] = useState(1);   // Allows advance picking on Fanatics & Knockout tabs ONLY
-  const selectedWeek = currentActiveWeek;
-  const setSelectedWeek = setCurrentActiveWeek;
+  const [liveSeasonWeek, setLiveSeasonWeek] = useState(1);        // Fixed anchor for Dashboard & Standings
+  const [picksSelectedWeek, setPicksSelectedWeek] = useState(1);   // Advance picks selector
+  const [resultsSelectedWeek, setResultsSelectedWeek] = useState(1); // Historical results selector
+  
+  // Safety aliases for legacy handlers
+  const currentActiveWeek = liveSeasonWeek;
+  const setCurrentActiveWeek = setLiveSeasonWeek;
+  const selectedWeek = resultsSelectedWeek;
+  const setSelectedWeek = setResultsSelectedWeek;
   const [currentUserId, setCurrentUserId] = useState('');
   const [allUsers, setAllUsers] = useState<any[]>([]), [globalSettings, setGlobalSettings] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false), [hasSaved, setHasSaved] = useState(false), [showPrintModal, setShowPrintModal] = useState(false), [showChangePassword, setShowChangePassword] = useState(false), [adminTab, setAdminTab] = useState('status'); 
@@ -2076,8 +2081,9 @@ function MainApp() {
     if (globalSettings && allUsers.length > 0 && !dbReady) { 
         const availableWeeks = Array.from({ length: maxActiveWeeks }, (_, i) => i + 1);
         const active = availableWeeks.find(w => globalSettings.weekStates?.[w] !== 'closed') || 1;
-        setCurrentActiveWeek(active);
+        setLiveSeasonWeek(active);
         setPicksSelectedWeek(active);
+        setResultsSelectedWeek(active);
         setDbReady(true); 
     } 
   }, [globalSettings, allUsers, dbReady, maxActiveWeeks]);
@@ -3393,8 +3399,14 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center"><CalendarDays className="w-10 h-10 text-indigo-500 mb-3" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Current Active Week</div><div className="text-4xl font-black italic text-slate-900">{selectedWeek <= 3 ? `Preseason W${selectedWeek}` : `Week ${selectedWeek - 3}`}</div></div>
-                    {currentUser.playsConfidence ? <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center cursor-pointer hover:border-[#FFB81C] transition-all" onClick={() => setActiveTab('standings')}><Trophy className="w-10 h-10 text-[#FFB81C]" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Rank</div><div className="text-4xl font-black italic text-slate-900 mb-1">#{String(myRank)}</div>{pointsBehind > 0 && <div className="text-xs font-bold text-slate-500">{String(pointsBehind)} pts behind 1st</div>}{pointsBehind === 0 && myPoints > 0 && <div className="text-xs font-bold text-green-600">You are in 1st!</div>}{rankChange > 0 && <div className="text-xs font-bold text-green-500 mt-1 flex items-center justify-center gap-1"><TrendingUp className="w-3 h-3"/> Up {String(rankChange)} spots</div>}{rankChange < 0 && <div className="text-xs font-bold text-red-500 mt-1 flex items-center justify-center gap-1"><TrendingDown className="w-3 h-3"/> Down {String(Math.abs(rankChange))} spots</div>}</div> : <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center opacity-50"><Trophy className="w-10 h-10 text-slate-400 mb-3" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Pool</div><div className="text-sm font-bold text-slate-500 uppercase">Not Registered</div></div>}
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
+  <CalendarDays className="w-10 h-10 text-indigo-500 mb-3" />
+  <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Current Active Week</div>
+  <div className="text-4xl font-black italic text-slate-900">
+    {liveSeasonWeek <= 3 ? `Preseason W${liveSeasonWeek}` : `Week ${liveSeasonWeek - 3}`}
+  </div>
+</div>
+ {currentUser.playsConfidence ? <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center cursor-pointer hover:border-[#FFB81C] transition-all" onClick={() => setActiveTab('standings')}><Trophy className="w-10 h-10 text-[#FFB81C]" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Rank</div><div className="text-4xl font-black italic text-slate-900 mb-1">#{String(myRank)}</div>{pointsBehind > 0 && <div className="text-xs font-bold text-slate-500">{String(pointsBehind)} pts behind 1st</div>}{pointsBehind === 0 && myPoints > 0 && <div className="text-xs font-bold text-green-600">You are in 1st!</div>}{rankChange > 0 && <div className="text-xs font-bold text-green-500 mt-1 flex items-center justify-center gap-1"><TrendingUp className="w-3 h-3"/> Up {String(rankChange)} spots</div>}{rankChange < 0 && <div className="text-xs font-bold text-red-500 mt-1 flex items-center justify-center gap-1"><TrendingDown className="w-3 h-3"/> Down {String(Math.abs(rankChange))} spots</div>}</div> : <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center opacity-50"><Trophy className="w-10 h-10 text-slate-400 mb-3" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Pool</div><div className="text-sm font-bold text-slate-500 uppercase">Not Registered</div></div>}
                     {currentUser.playsKnockout ? <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center cursor-pointer hover:border-[#FFB81C] transition-all" onClick={() => setActiveTab('k-tracker')}><HeartPulse className={`w-10 h-10 mb-3 ${isKnockedOut ? 'text-red-500' : 'text-green-500'}`} /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">KnockOut Status</div><div className="text-2xl font-black italic text-slate-900 uppercase">{String(displayKnockoutStatus)}</div></div> : <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center opacity-50"><Skull className="w-10 h-10 text-slate-400 mb-3" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">KnockOut Pool</div><div className="text-sm font-bold text-slate-500 uppercase">Not Registered</div></div>}
                 </div>
                 <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
@@ -3509,9 +3521,9 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
   </div>
 )}
         {activeTab === 'c-tracker' && (
-          <div className="space-y-6 max-w-[1400px] mx-auto">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex items-center justify-between">
-              <WeekSelector week={selectedWeek} setWeek={setSelectedWeek} maxActiveWeeks={maxActiveWeeks} />
+  <div className="space-y-6 max-w-[1400px] mx-auto">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex items-center justify-between">
+      <WeekSelector week={resultsSelectedWeek} setWeek={setResultsSelectedWeek} maxActiveWeeks={maxActiveWeeks} />
               {!isWeekLocked && isAdmin && !adminForceReveal && <button onClick={() => setAdminForceReveal(true)} className="px-6 py-2 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase tracking-widest shadow-xl hover:scale-105 transition-all text-[10px]">Admin Peek</button>}
             </div>
             <LiveScoreTicker games={games} />
@@ -3527,9 +3539,11 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
           </div>
         )}
 
-        {activeTab === 'k-tracker' && (
-          <div className="space-y-6 max-w-[1200px] mx-auto">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex items-center justify-between"><WeekSelector week={selectedWeek} setWeek={setSelectedWeek} maxActiveWeeks={maxActiveWeeks} />{!isWeekLocked && isAdmin && !adminForceReveal && <button onClick={() => setAdminForceReveal(true)} className="px-6 py-2 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase tracking-widest shadow-xl hover:scale-105 transition-all text-[10px]">Admin Peek</button>}</div>
+{activeTab === 'k-tracker' && (
+  <div className="space-y-6 max-w-[1200px] mx-auto">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex items-center justify-between">
+      <WeekSelector week={resultsSelectedWeek} setWeek={setResultsSelectedWeek} maxActiveWeeks={maxActiveWeeks} />
+      {!isWeekLocked && isAdmin && !adminForceReveal && <button onClick={() => setAdminForceReveal(true)} className="px-6 py-2 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase tracking-widest shadow-xl hover:scale-105 transition-all text-[10px]">Admin Peek</button>}</div>
             <LiveScoreTicker games={games} />
             <KnockoutTrackerBoard data={knockoutTrackerData} week={selectedWeek} allGames={globalSettings?.games} isLocked={isWeekLocked} adminForceReveal={adminForceReveal} currentUser={currentUser} />
           </div>
