@@ -2455,8 +2455,8 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
       const earnedPoints = userMaxPossible - pointsLost;
       const grossPrize = payoutMap[u.id] || 0;
       
-      // 🔒 NET CALCULATION: Gross Award minus $12 weekly dues (Ranks 9+ get -$12)
-      const netFantasyEarnings = grossPrize > 0 ? grossPrize - 12 : -12;
+// 🔒 Net = Gross Prize minus flat $12 entry fee (Ranks 9+ get -$12)
+const netFantasyEarnings = grossPrize > 0 ? (grossPrize - 12) : -12;
 
       const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id);
       batch.update(userRef, {
@@ -2758,19 +2758,20 @@ const isLiveSeasonWeekLocked = isWeekLocked;
     const payouts = globalSettings?.fpPayouts || [77, 67, 56, 46, 31, 28, 25, 20];
     calculateTiedPayouts(processed, payouts);
 
-    // 4. Return finalized user rows
-    return processed.map((u) => {
-      const grossVal = u.grossPayout || 0;
-      const calculatedNet = grossVal > 0 ? grossVal - 12 : -12;
-      const netVal = u.savedNet !== undefined ? u.savedNet : calculatedNet;
+// 4. Return finalized user rows
+return processed.map((u) => {
+  const grossVal = u.grossPayout || 0;
+  const calculatedNet = grossVal > 0 ? grossVal - 12 : -12;
+  const netVal = u.savedNet !== undefined ? u.savedNet : calculatedNet;
 
-      return {
-        ...u,
-        weeklyFP: grossVal,
-        netEarnings: netVal,
-        weeklyPicks: u.picks?.[resultsSelectedWeek] || {}
-      };
-    });
+  return {
+    ...u,
+    weeklyFP: netVal, // Displays net earnings (-$12 for non-winners, Gross - $12 for winners)
+    grossPayout: grossVal,
+    netEarnings: netVal,
+    weeklyPicks: u.picks?.[resultsSelectedWeek] || {}
+  };
+});
   }, [allUsers, globalSettings, resultsSelectedWeek, resultsGames, games]);
 
   const knockoutTrackerData = useMemo(() => {
@@ -2834,7 +2835,13 @@ const isLiveSeasonWeekLocked = isWeekLocked;
       for (let wk = 1; wk <= maxWeeks; wk++) {
         if (globalSettings.weekStates?.[wk] === 'closed') {
           const cp = parseFloat(user.weeklyConfidenceHistory?.[wk]) || 0;
-          const fp = parseFloat(user.weeklyFantasyHistory?.[wk]) || -12;
+          const rawFp = user.weeklyFantasyHistory?.[wk];
+          
+          const val = parseFloat(rawFp);
+          // If rawFp is missing, unparsed, or explicitly saved as $0 for a non-payout rank, charge the -$12 fee
+          const fp = (rawFp !== undefined && rawFp !== null && !isNaN(val) && val !== 0) 
+            ? val 
+            : -12;
 
           if (wk <= midPoint) {
             cp1 += cp;
@@ -3803,115 +3810,120 @@ const handleResetKnockout = async () => {
   };
 
   // 📍 2. DIRECT CLOSE WEEK (ADMIN ACTION) 📍
-  const handleCloseWeek = async () => {
-    setIsSaving(true);
-    try {
-      const batch = writeBatch(db);
-      const actualTB = globalSettings?.actualTiebreakers?.[selectedWeek] ?? 0;
-      const standardMaxPossible = (games || []).reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
+// 📍 DIRECT CLOSE WEEK (ADMIN ACTION) 📍
+const handleCloseWeek = async () => {
+  setIsSaving(true);
+  try {
+    const batch = writeBatch(db);
+    const actualTB = globalSettings?.actualTiebreakers?.[selectedWeek] ?? 0;
+    const standardMaxPossible = (games || []).reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
 
-      // A. Process and sort scores
-      const sortedTrackerData = [...weeklyTrackerData].map((u) => {
-        const userPicks = u.picks?.[selectedWeek] || {};
-        const userRanks = u.ranks?.[selectedWeek] || {};
-        const userTB = parseInt(u.tiebreakers?.[selectedWeek] || '0', 10);
+    // A. Process and sort scores
+    const sortedTrackerData = [...weeklyTrackerData].map((u: any) => {
+      const userPicks = u.picks?.[selectedWeek] || {};
+      const userRanks = u.ranks?.[selectedWeek] || {};
+      const userTB = parseInt(u.tiebreakers?.[selectedWeek] || '0', 10);
 
-        const isDeadbeat =
-          u.tiebreakers?.[selectedWeek] === '0' ||
-          ((games || []).length > 0 && (games || []).every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
+      const isDeadbeat =
+        u.tiebreakers?.[selectedWeek] === '0' ||
+        ((games || []).length > 0 && (games || []).every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
 
-        const userMaxPossible = isDeadbeat ? (games || []).length * 5 : standardMaxPossible;
+      const userMaxPossible = isDeadbeat ? (games || []).length * 5 : standardMaxPossible;
 
-        const pointsLost = (games || []).reduce((lost: number, g: any) => {
-          const pick = userPicks[g.id];
-          const rank = parseInt(userRanks[g.id] || 0, 10);
-          if (!pick || !rank) return lost;
+      const pointsLost = (games || []).reduce((lost: number, g: any) => {
+        const pick = userPicks[g.id];
+        const rank = parseInt(userRanks[g.id] || 0, 10);
+        if (!pick || !rank) return lost;
 
-          if (g.status === 'final' && g.winner && pick !== g.winner) {
-            return lost + rank;
-          }
-          return lost;
-        }, 0);
+        if (g.status === 'final' && g.winner && pick !== g.winner) {
+          return lost + rank;
+        }
+        return lost;
+      }, 0);
 
-        const calculatedScore = userMaxPossible - pointsLost;
-        const tbDiff = Math.abs(userTB - actualTB);
+      const calculatedScore = userMaxPossible - pointsLost;
+      const tbDiff = Math.abs(userTB - actualTB);
 
-        return {
-          ...u,
-          score: calculatedScore,
-          tbDiff
-        };
+      return {
+        ...u,
+        score: calculatedScore,
+        tbDiff
+      };
+    });
+
+    // Sort: Points First (descending), Tiebreaker Difference Second (ascending)
+    sortedTrackerData.sort((a: any, b: any) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.tbDiff !== b.tbDiff) return a.tbDiff - b.tbDiff;
+      return String(a.lastName || '').localeCompare(String(b.lastName || ''));
+    });
+
+    // Assign Rankings
+    let currentRank = 1;
+    sortedTrackerData.forEach((player: any, idx: number) => {
+      if (idx > 0) {
+        const prev = sortedTrackerData[idx - 1];
+        if (player.score < prev.score || (player.score === prev.score && player.tbDiff > prev.tbDiff)) {
+          currentRank = idx + 1;
+        }
+      }
+      player.calculatedRank = currentRank;
+    });
+
+    // B. Fetch Gross Payout Matrix & build lookup
+    const activeCount = allUsers.filter((u: any) => u.playsConfidence).length;
+    const matrix = calculateFanaticsPayouts(activeCount);
+    const grossPayouts = globalSettings?.fpPayouts || matrix.weeklyGross;
+
+    const payoutsByRank: { [key: number]: number } = {};
+    grossPayouts.forEach((amount: number, idx: number) => {
+      payoutsByRank[idx + 1] = amount;
+    });
+
+    // C. Record Net Earnings to Firestore (-$12 for rank 9+, Gross - $12 for top 8)
+    sortedTrackerData.forEach((u: any) => {
+      const grossPrize = payoutsByRank[u.calculatedRank] || 0;
+      const netPrize = grossPrize > 0 ? (grossPrize - 12) : -12;
+
+      batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), {
+        [`weeklyFantasyHistory.${selectedWeek}`]: netPrize,
+        [`weeklyConfidenceHistory.${selectedWeek}`]: u.score
       });
+    });
 
-      // Sort: Points First (descending), Tiebreaker Difference Second (ascending)
-      sortedTrackerData.sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        if (a.tbDiff !== b.tbDiff) return a.tbDiff - b.tbDiff;
-        return String(a.lastName || '').localeCompare(String(b.lastName || ''));
-      });
-
-      // Assign Rankings
-      let currentRank = 1;
-      sortedTrackerData.forEach((player, idx) => {
-        if (idx > 0) {
-          const prev = sortedTrackerData[idx - 1];
-          if (player.score < prev.score || (player.score === prev.score && player.tbDiff > prev.tbDiff)) {
-            currentRank = idx + 1;
+    // D. Process Knockout Pool Statuses
+    allUsers.forEach((u: any) => {
+      if (u.playsKnockout) {
+        const pick = u.knockoutPicks?.[selectedWeek];
+        let status = 'No Pick';
+        if (pick) {
+          const game = games.find((g: any) => g.away === pick || g.home === pick);
+          if (game && game.status === 'final') {
+            status = game.winner === 'TIE' ? 'Loser' : (game.winner === pick ? 'Winner' : 'Loser');
+          } else {
+            status = 'Undecided';
           }
         }
-        player.calculatedRank = currentRank;
-      });
-
-      // B. Fetch Gross Payout Matrix
-      const activeCount = allUsers.filter((u) => u.playsConfidence).length;
-      const matrix = calculateFanaticsPayouts(activeCount);
-      const grossPayouts = globalSettings?.fpPayouts || matrix.weeklyGross;
-
-      // C. Record Net Earnings to Firestore (-$12 for rank 9+, Gross - $12 for top 8)
-      sortedTrackerData.forEach((u) => {
-        const playerRank = u.calculatedRank || 99;
-        const grossAward = playerRank <= 8 ? (grossPayouts[playerRank - 1] || 0) : 0;
-        const netEarnings = grossAward > 0 ? grossAward - 12 : -12;
-
         batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), {
-          [`weeklyFantasyHistory.${selectedWeek}`]: netEarnings,
-          [`weeklyConfidenceHistory.${selectedWeek}`]: u.score
+          [`knockoutStatuses.${selectedWeek}`]: status
         });
-      });
+      }
+    });
 
-      // D. Process Knockout Pool Statuses
-      allUsers.forEach((u) => {
-        if (u.playsKnockout) {
-          const pick = u.knockoutPicks?.[selectedWeek];
-          let status = 'No Pick';
-          if (pick) {
-            const game = games.find((g: any) => g.away === pick || g.home === pick);
-            if (game && game.status === 'final') {
-              status = game.winner === 'TIE' ? 'Loser' : (game.winner === pick ? 'Winner' : 'Loser');
-            } else {
-              status = 'Undecided';
-            }
-          }
-          batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), {
-            [`knockoutStatuses.${selectedWeek}`]: status
-          });
-        }
-      });
+    // E. Lock/Close the week state
+    batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+      [`weekStates.${selectedWeek}`]: 'closed'
+    });
 
-      // E. Lock/Close the week state
-      batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-        [`weekStates.${selectedWeek}`]: 'closed'
-      });
-
-      await batch.commit();
-      setHasSaved(true);
-      setTimeout(() => setHasSaved(false), 2000);
-    } catch (e) {
-      console.error("Error closing week:", e);
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    await batch.commit();
+    setHasSaved(true);
+    setTimeout(() => setHasSaved(false), 2000);
+  } catch (e) {
+    console.error("Error closing week:", e);
+  } finally {
+    setIsSaving(false);
+  }
+};
   const handleOpenWeek = () => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { [`weekStates.${selectedWeek}`]: 'open' }));
   const updateFpPayouts = (index: number, val: number) => { const newPayouts = [...globalSettings.fpPayouts]; newPayouts[index] = val; trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { fpPayouts: newPayouts })); };
   const updateSeasonBonuses = (key: string, index: number, val: number) => { const newBonuses = { ...globalSettings.seasonBonuses }; newBonuses[key] = [...newBonuses[key]]; newBonuses[key][index] = val; trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { seasonBonuses: newBonuses })); };
@@ -4212,11 +4224,11 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
               The Great 8 Payout Zone ({winners.length} Winners)
             </h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-4">
-              {winners.map((u: any) => {
-                const grossVal = u.grossPayout || u.weeklyFP || 0;
-                const netVal = u.netEarnings !== undefined ? u.netEarnings : (grossVal - 12);
+            {winners.map((u: any) => {
+const grossVal = u.grossPayout || u.weeklyFP || 0;
+const netVal = grossVal > 0 ? (grossVal - 12) : -12;
 
-                return (
+  return (
                   <div key={u.id} className="bg-slate-800 rounded-2xl p-4 border border-slate-700 text-center flex flex-col justify-between shadow-md">
                     <div>
                       <div className="flex items-center justify-center gap-1 mb-1">
