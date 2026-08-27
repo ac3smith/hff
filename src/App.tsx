@@ -195,18 +195,20 @@ function calculatePoints(picks: any, ranks: any, games: any) {
 function wasAlreadyOut(user: any, currentWeek: number, globalSettings: any) {
   if (!user || user.paymentStatus === 'disqualified') return true;
   
-  // Use Knockout-specific week states if available, fallback to global weekStates
   const koStates = globalSettings?.koWeekStates || globalSettings?.weekStates || {};
+  const startWeek = globalSettings?.knockoutStartWeek || 1;
 
-  for (let wk = 1; wk < currentWeek; wk++) {
+  // Only evaluate weeks starting from when the Knockout session was reset
+  for (let wk = startWeek; wk < currentWeek; wk++) {
     const wkState = koStates[wk];
     const wkStatus = user?.knockoutStatuses?.[wk];
-    if (wkState === 'closed' && ['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) {
+    if (wkState === 'closed' && ['Loser', 'Loser (No Pick)', 'Knocked Out', 'No Pick'].includes(wkStatus)) {
       return true;
     }
   }
   return false;
 }
+
 function getLockdownTime(gamesList: any[]) {
   if (!gamesList || gamesList.length === 0) return null;
   
@@ -1079,32 +1081,40 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
 // --- UPDATED KNOCKOUT BOARD: SHOWS RED DOLLAR SIGN IF UNPAID/DISQUALIFIED ---
 function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal, currentUser, globalSettings }: any) {
   const maxWeeks = globalSettings?.maxActiveWeeks || 18;
-  const activeWeeks = Array.from({ length: maxWeeks }, (_, i) => i + 1);
+  const startWeek = globalSettings?.knockoutStartWeek || 1;
+
+  // Only render week columns starting from when the session was reset
+  const activeWeeks = Array.from({ length: Math.max(1, maxWeeks - startWeek + 1) }, (_, i) => startWeek + i);
 
   // Process rows safely with central canonical resolver
-  const sortedGridData = useMemo(() => {
-    if (!data || !Array.isArray(data)) return [];
+// Process rows safely with central canonical resolver
+const sortedGridData = useMemo(() => {
+  if (!data || !Array.isArray(data)) return [];
 
-    return [...data].map((user: any) => {
-      if (!user) return null;
+  const startWeek = globalSettings?.knockoutStartWeek || 1;
 
-      let eliminatedWeek: number | null = null;
-      const statuses = user.knockoutStatuses || {};
+  return [...data].map((user: any) => {
+    if (!user) return null;
 
-      for (let wk = 1; wk <= maxWeeks; wk++) {
-        const wkStatus = statuses[wk];
-        const wkState = globalSettings?.weekStates?.[wk];
+    let eliminatedWeek: number | null = null;
+    const statuses = user.knockoutStatuses || {};
 
-        if (['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) {
-          eliminatedWeek = wk;
-          break;
-        }
+    // Start loop from startWeek instead of 1 so pre-reset weeks are completely ignored
+    for (let wk = startWeek; wk <= maxWeeks; wk++) {
+      const wkStatus = statuses[wk];
+      const wkState = globalSettings?.koWeekStates?.[wk] || globalSettings?.weekStates?.[wk];
 
-        if ((wkState === 'locked' || wkState === 'closed') && (wkStatus === 'No Pick' || !user.knockoutPicks?.[wk])) {
-          eliminatedWeek = wk;
-          break;
-        }
+      if (['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) {
+        eliminatedWeek = wk;
+        break;
       }
+
+      // Only eliminate for "No Pick" if the week is closed AND it occurred on or after startWeek
+      if ((wkState === 'locked' || wkState === 'closed') && wk < week && (wkStatus === 'No Pick' || !user.knockoutPicks?.[wk])) {
+        eliminatedWeek = wk;
+        break;
+      }
+    }
 
       if (user.paymentStatus === 'disqualified') {
         eliminatedWeek = eliminatedWeek || 1;
@@ -1399,13 +1409,19 @@ function StatsView({ allUsers, globalSettings }: any) {
       let uPtsScored = 0;
       let uPtsPossible = 0;
 
-      Object.keys(u.picks || {}).forEach((wkStr) => {
-        const wk = Number(wkStr);
-        const games = globalSettings?.games?.[wk] || [];
-        const userPicks = u.picks?.[wk] || {};
-        const userRanks = u.ranks?.[wk] || {};
+      // REPLACE WITH THIS FILTERED LOOP:
+Object.keys(u.picks || {}).forEach((wkStr) => {
+  const wk = Number(wkStr);
+  const wkState = globalSettings?.weekStates?.[wk];
 
-        games.forEach((g: any) => {
+  // 🔒 ONLY count picks from closed (or locked) weeks
+  if (wkState !== 'closed' && wkState !== 'locked') return;
+
+  const games = globalSettings?.games?.[wk] || [];
+  const userPicks = u.picks?.[wk] || {};
+  const userRanks = u.ranks?.[wk] || {};
+
+  games.forEach((g: any) => {
           const pick = userPicks[g.id];
           const rank = parseInt(userRanks[g.id], 10);
 
@@ -1863,6 +1879,45 @@ function ensureAutoTiebreaker(gamesList: any[]) {
   }));
 }
 
+function AvailableRanksBar({ totalGames, usedRanks }: { totalGames: number; usedRanks: number[] }) {
+  const allRanks = Array.from({ length: totalGames }, (_, i) => i + 1);
+  const remainingRanks = allRanks.filter((rank) => !(usedRanks || []).includes(rank));
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+          Available Rank Points
+        </div>
+        <div className="text-xs font-bold text-slate-500">
+          <span className={remainingRanks.length === 0 ? 'text-emerald-600 font-black' : 'text-slate-900 font-black'}>
+            {remainingRanks.length}
+          </span> / {totalGames} Remaining
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 sm:gap-2">
+        {allRanks.map((rank) => {
+          const isUsed = (usedRanks || []).includes(rank);
+
+          return (
+            <div
+              key={rank}
+              className={`w-7 h-7 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-xs sm:text-sm font-black italic transition-all duration-300 ${
+                isUsed
+                  ? 'bg-slate-100 text-slate-300 border border-slate-200 line-through scale-90 opacity-40'
+                  : 'bg-slate-900 text-[#FFB81C] border border-slate-800 shadow-sm scale-100 hover:scale-105'
+              }`}
+            >
+              {rank}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // --- MAIN APP COMPONENT ---
 function MainApp() {
   const [user, setUser] = useState<any>(null), [dbReady, setDbReady] = useState(false), [authLoaded, setAuthLoaded] = useState(false), [sessionLoaded, setSessionLoaded] = useState(false), [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -2119,14 +2174,29 @@ const pickGames = useMemo(() => {
   return sorted.map((g: any) => ({ ...g, isTiebreaker: g.id === lastGameId }));
 }, [globalSettings?.games, picksSelectedWeek]);
 
+// Games for F-Results & KO-Results Tabs (Pulls schedule for resultsSelectedWeek)
+const resultsGames = useMemo(() => {
+  const rawGames = globalSettings?.games?.[resultsSelectedWeek] || [];
+  if (rawGames.length === 0) return [];
+  const sorted = [...rawGames].sort((a: any, b: any) => {
+    const timeA = new Date(`${a.apiDate || a.date} ${a.time}`).getTime() || 0;
+    const timeB = new Date(`${b.apiDate || b.date} ${b.time}`).getTime() || 0;
+    return timeA - timeB;
+  });
+  const lastGameId = sorted[sorted.length - 1]?.id;
+  return sorted.map((g: any) => ({ ...g, isTiebreaker: g.id === lastGameId }));
+}, [globalSettings?.games, resultsSelectedWeek]);
+
 const pickWeekState = globalSettings?.weekStates?.[picksSelectedWeek] || 'open';
 const pickLockdownTime = getLockdownTime(pickGames);
 const isPickWeekLocked = pickWeekState === 'locked' || pickWeekState === 'closed' || (pickWeekState === 'open' && pickLockdownTime && Date.now() >= pickLockdownTime);
   
-  const currentWeekState = globalSettings?.weekStates?.[selectedWeek] || 'open';
-  const lockdownTime = getLockdownTime(games);
-  const isPastLockdown = lockdownTime && Date.now() >= lockdownTime;
-  const isWeekLocked = currentWeekState === 'locked' || currentWeekState === 'closed' || (currentWeekState === 'open' && isPastLockdown);
+const liveWeekState = globalSettings?.weekStates?.[liveSeasonWeek] || 'open';
+const currentWeekState = liveWeekState; // 👈 PASTE THIS SAFETY ALIAS LINE
+const lockdownTime = getLockdownTime(games);
+const isPastLockdown = lockdownTime && Date.now() >= lockdownTime;
+const isWeekLocked = liveWeekState === 'locked' || liveWeekState === 'closed' || (liveWeekState === 'open' && isPastLockdown);
+const isLiveSeasonWeekLocked = isWeekLocked;
   const isWeekClosed = currentWeekState === 'closed';
 
   useEffect(() => {
@@ -2145,13 +2215,13 @@ const isPickWeekLocked = pickWeekState === 'locked' || pickWeekState === 'closed
 
   const weeklyTrackerData = useMemo(() => {
     if (!globalSettings || !allUsers.length) return [];
-    const actualTotal = globalSettings?.actualTiebreakers?.[selectedWeek] || 0;
+    const actualTotal = globalSettings?.actualTiebreakers?.[resultsSelectedWeek] || 0;
     
     const usersWithScores = allUsers.filter(u => u.playsConfidence).map(user => { 
       return { 
         ...user, 
-        confidenceScore: calculatePoints(user.picks?.[selectedWeek] || {}, user.ranks?.[selectedWeek] || {}, games), 
-        tbDiff: Math.abs(parseInt(user.tiebreakers?.[selectedWeek] || 0) - actualTotal) 
+        confidenceScore: calculatePoints(user.picks?.[resultsSelectedWeek] || {}, user.ranks?.[resultsSelectedWeek] || {}, resultsGames), 
+        tbDiff: Math.abs(parseInt(user.tiebreakers?.[resultsSelectedWeek] || 0) - actualTotal) 
       }; 
     });
 
@@ -2221,24 +2291,51 @@ const isPickWeekLocked = pickWeekState === 'locked' || pickWeekState === 'closed
     });
 
     return finalData;
-  }, [allUsers, globalSettings, selectedWeek, games, isWeekClosed]);
+  }, [allUsers, globalSettings, resultsSelectedWeek, resultsGames, isWeekClosed]);
 
   const knockoutTrackerData = useMemo(() => {
     if (!globalSettings || !allUsers.length) return [];
+    
+    const startWeek = globalSettings?.knockoutStartWeek || 1;
+
     return allUsers.filter(u => u.playsKnockout).map(u => {
         let status = 'Alive', eliminatedWeek = null;
-        for (let wk = 1; wk < selectedWeek; wk++) if (globalSettings.weekStates?.[wk] === 'closed' && ['Loser', 'Loser (No Pick)', 'No Pick', undefined].includes(u.knockoutStatuses?.[wk])) { eliminatedWeek = wk; break; }
-        if (u.paymentStatus === 'disqualified') status = 'Knocked Out';
-        else if (eliminatedWeek !== null) status = 'Knocked Out';
-        else if (!u.knockoutPicks?.[selectedWeek]) status = currentWeekState === 'closed' ? 'Knocked Out' : 'Alive';
-        else { const game = games.find((g: any) => g.away === u.knockoutPicks[selectedWeek] || g.home === u.knockoutPicks[selectedWeek]); if (currentWeekState === 'closed') status = u.knockoutStatuses?.[selectedWeek] === 'Winner' ? 'Alive' : 'Knocked Out'; else if (game?.status === 'final') status = (game.winner === 'TIE' || game.winner !== u.knockoutPicks[selectedWeek]) ? 'Knocked Out' : 'Alive'; else status = 'Alive'; }
-        return { ...u, currentStatus: status, pick: u.knockoutPicks?.[selectedWeek], eliminatedWeek };
+        
+        // Start loop strictly from startWeek (pre-reset weeks are ignored)
+        for (let wk = startWeek; wk < liveSeasonWeek; wk++) {
+          const wkState = globalSettings?.koWeekStates?.[wk] || globalSettings?.weekStates?.[wk];
+          const wkStatus = u.knockoutStatuses?.[wk];
+
+          if (wkState === 'closed' && ['Loser', 'Loser (No Pick)', 'Knocked Out', 'No Pick', undefined].includes(wkStatus)) { 
+            eliminatedWeek = wk; 
+            break; 
+          }
+        }
+
+        if (u.paymentStatus === 'disqualified') {
+          status = 'Knocked Out';
+        } else if (eliminatedWeek !== null) {
+          status = 'Knocked Out';
+        } else if (!u.knockoutPicks?.[liveSeasonWeek]) {
+          status = globalSettings?.weekStates?.[liveSeasonWeek] === 'closed' ? 'Knocked Out' : 'Alive';
+        } else { 
+          const game = games.find((g: any) => g.away === u.knockoutPicks[liveSeasonWeek] || g.home === u.knockoutPicks[liveSeasonWeek]); 
+          if (globalSettings?.weekStates?.[liveSeasonWeek] === 'closed') {
+            status = u.knockoutStatuses?.[liveSeasonWeek] === 'Winner' ? 'Alive' : 'Knocked Out'; 
+          } else if (game?.status === 'final') {
+            status = (game.winner === 'TIE' || game.winner !== u.knockoutPicks[liveSeasonWeek]) ? 'Knocked Out' : 'Alive'; 
+          } else {
+            status = 'Alive'; 
+          }
+        }
+
+        return { ...u, currentStatus: status, pick: u.knockoutPicks?.[liveSeasonWeek], eliminatedWeek };
       }).sort((a, b) => {
         const order: any = { 'Alive': 1, 'Knocked Out': 2 };
         if ((order[a.currentStatus] || 99) !== (order[b.currentStatus] || 99)) return (order[a.currentStatus] || 99) - (order[b.currentStatus] || 99);
         return String(a.firstName || '').localeCompare(String(b.firstName || ''));
       });
-  }, [allUsers, globalSettings, selectedWeek, currentWeekState, games]);
+  }, [allUsers, globalSettings, liveSeasonWeek, games]);
 
   const seasonStats = useMemo(() => {
     if (!globalSettings || !allUsers.length) return [];
@@ -3065,21 +3162,22 @@ const handleResetKnockout = async () => {
       });
     }); 
 
-    // 2. Clear ONLY Knockout-specific week states so past closed Fanatics weeks don't eliminate players
+    // 2. Clear ONLY Knockout-specific week states
     const resetKoWeekStates: Record<string, string> = {};
     const maxWeeks = globalSettings?.maxActiveWeeks || 18;
     for (let w = 1; w <= maxWeeks; w++) {
       resetKoWeekStates[`koWeekStates.${w}`] = 'open';
     }
 
-    // 3. Increment Knockout session counter WITHOUT touching Fanatics weekStates or active week selection
+    // 3. Increment session counter AND set start week to the current active week
     batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { 
       ...resetKoWeekStates,
-      knockoutSession: (globalSettings?.knockoutSession || 1) + 1 
+      knockoutSession: (globalSettings?.knockoutSession || 1) + 1,
+      knockoutStartWeek: liveSeasonWeek // <--- Anchors reset session to current week!
     }); 
 
     await batch.commit(); 
-    alert("Knockout pool reset! Everyone is back to Alive, and Fanatics remains on the exact week you had selected.");
+    alert(`Knockout pool reset! Session ${ (globalSettings?.knockoutSession || 1) + 1 } starts clean on Week ${liveSeasonWeek}.`);
   } catch (e) {
     console.error("Error resetting Knockout pool:", e);
     alert("Failed to reset Knockout pool.");
@@ -3294,7 +3392,7 @@ const handleResetKnockout = async () => {
   rankChange = (myStat?.previousRank && myStat?.previousCpOverall > 0) ? (myStat.previousRank - myStat.displayRank) : 0;
 
 // Remove 'const' here:
-isKnockedOut = liveKoStatus === 'Knocked Out' || wasAlreadyOut(currentUser, selectedWeek, globalSettings?.weekStates);
+isKnockedOut = wasAlreadyOut(currentUser, liveSeasonWeek, globalSettings);
 let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 
   return (
@@ -3424,6 +3522,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
   <div className="space-y-6 max-w-[1200px] mx-auto">
     {!currentUser.playsConfidence && <ParticipationAlert game="Fanatics" />}
     {isPickWeekLocked && <LockBanner week={picksSelectedWeek} />}
+    
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
       <PickWeekSelector 
         week={picksSelectedWeek} 
@@ -3436,6 +3535,12 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
       </div>
       <AutoSaveIndicator isSaving={isSaving} hasSaved={hasSaved} count={totalItemsCompleted} />
     </div>
+
+    {/* AVAILABLE RANK POINTS TRACKER BAR */}
+    <AvailableRanksBar 
+      totalGames={pickGames.length} 
+      usedRanks={Object.values(currentUser?.ranks?.[picksSelectedWeek] || {}).map(v => parseInt(String(v), 10))} 
+    />
     <div className={`flex flex-col gap-3 ${!currentUser.playsConfidence ? 'opacity-25 grayscale pointer-events-none' : ''}`}>
       {pickGames.map((game: any) => (
         <GameCard 
@@ -3464,30 +3569,23 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
   <div className="space-y-6 max-w-[1200px] mx-auto">
     {!currentUser?.playsKnockout && <ParticipationAlert game="KnockOut" />}
     
+    {/* HEADER BANNER */}
     <div className="bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden border-b-8 border-[#FFB81C] shadow-2xl">
       <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-3 mb-4">
             <Skull className="w-10 h-10 text-[#FFB81C]" />
             <h2 className="text-4xl font-black italic uppercase tracking-tighter">
-              KnockOut <span className="text-[#FFB81C]">S{globalSettings?.knockoutSession || 1} &bull; {picksSelectedWeek <= 3 ? `PRE W${picksSelectedWeek}` : `WK ${picksSelectedWeek - 3}`}</span>
+              KnockOut <span className="text-[#FFB81C]">S{globalSettings?.knockoutSession || 1} &bull; {liveSeasonWeek <= 3 ? `PRE W${liveSeasonWeek}` : `WK ${liveSeasonWeek - 3}`}</span>
             </h2>
           </div>
           <p className="text-slate-400 font-bold max-w-lg">One winner per week. Stay alive. No team reused.</p>
         </div>
-
-        <div className="bg-slate-800 p-3 rounded-2xl border border-slate-700">
-          <PickWeekSelector 
-            week={picksSelectedWeek} 
-            setWeek={setPicksSelectedWeek} 
-            currentActiveWeek={currentActiveWeek} 
-            maxActiveWeeks={maxActiveWeeks} 
-          />
-        </div>
       </div>
     </div>
 
-    {wasAlreadyOut(currentUser, picksSelectedWeek, globalSettings) ? (
+    {/* GAME CARDS LOOP */}
+    {wasAlreadyOut(currentUser, liveSeasonWeek, globalSettings) ? (
       <div className={`border-4 rounded-3xl p-12 text-center ${userPaymentStatus === 'disqualified' ? 'bg-red-600 border-red-800' : 'bg-red-50 border-red-500'}`}>
         <Skull className={`w-20 h-24 mx-auto mb-4 ${userPaymentStatus === 'disqualified' ? 'text-red-900' : 'text-red-500'}`} />
         <h3 className={`text-4xl font-black italic uppercase tracking-tighter ${userPaymentStatus === 'disqualified' ? 'text-white' : 'text-red-900'}`}>
@@ -3496,12 +3594,12 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
       </div>
     ) : (
       <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 ${!currentUser?.playsKnockout ? 'opacity-25 grayscale pointer-events-none' : ''}`}>
-        {(pickGames || []).map((game: any) => {
+        {(games || []).map((game: any) => {
           if (!game) return null;
 
           const picksMap = currentUser?.knockoutPicks || {};
           const priorTeamsUsed = Object.keys(picksMap)
-            .filter((wkKey) => parseInt(String(wkKey || 0), 10) < Number(picksSelectedWeek))
+            .filter((wkKey) => parseInt(String(wkKey || 0), 10) < Number(liveSeasonWeek))
             .map((wkKey) => picksMap[wkKey])
             .filter(Boolean);
 
@@ -3509,10 +3607,10 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             <KnockoutGameCard 
               key={game.id} 
               game={game} 
-              selectedTeam={picksMap[picksSelectedWeek] || ''} 
+              selectedTeam={picksMap[liveSeasonWeek] || ''} 
               usedTeams={priorTeamsUsed} 
-              onPick={(team: string) => updateKnockoutPick(currentUser?.id, picksSelectedWeek, team)} 
-              isLocked={isPickWeekLocked} 
+              onPick={(team: string) => updateKnockoutPick(currentUser?.id, liveSeasonWeek, team)} 
+              isLocked={isWeekLocked} 
             />
           );
         })}
@@ -3520,34 +3618,45 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
     )}
   </div>
 )}
-        {activeTab === 'c-tracker' && (
+
+{activeTab === 'c-tracker' && (
   <div className="space-y-6 max-w-[1400px] mx-auto">
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex items-center justify-between">
       <WeekSelector week={resultsSelectedWeek} setWeek={setResultsSelectedWeek} maxActiveWeeks={maxActiveWeeks} />
-              {!isWeekLocked && isAdmin && !adminForceReveal && <button onClick={() => setAdminForceReveal(true)} className="px-6 py-2 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase tracking-widest shadow-xl hover:scale-105 transition-all text-[10px]">Admin Peek</button>}
-            </div>
-            <LiveScoreTicker games={games} />
-            <ConfidenceTrackerBoard 
-                data={weeklyTrackerData} 
-                games={games} 
-                week={selectedWeek} 
-                isWeekComplete={isWeekClosed} 
-                currentUser={currentUser} 
-                isWeekLocked={isWeekLocked} 
-                adminForceReveal={adminForceReveal} 
-            />
-          </div>
-        )}
+      {!isWeekLocked && isAdmin && !adminForceReveal && <button onClick={() => setAdminForceReveal(true)} className="px-6 py-2 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase tracking-widest shadow-xl hover:scale-105 transition-all text-[10px]">Admin Peek</button>}
+    </div>
+    <LiveScoreTicker games={resultsGames} />
+    <ConfidenceTrackerBoard 
+        data={weeklyTrackerData} 
+        games={resultsGames} 
+        week={resultsSelectedWeek} 
+        isWeekComplete={globalSettings?.weekStates?.[resultsSelectedWeek] === 'closed'} 
+        currentUser={currentUser} 
+        isWeekLocked={globalSettings?.weekStates?.[resultsSelectedWeek] === 'locked' || globalSettings?.weekStates?.[resultsSelectedWeek] === 'closed'} 
+        adminForceReveal={adminForceReveal} 
+        globalSettings={globalSettings}
+    />
+  </div>
+)}
 
 {activeTab === 'k-tracker' && (
   <div className="space-y-6 max-w-[1200px] mx-auto">
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex items-center justify-between">
       <WeekSelector week={resultsSelectedWeek} setWeek={setResultsSelectedWeek} maxActiveWeeks={maxActiveWeeks} />
-      {!isWeekLocked && isAdmin && !adminForceReveal && <button onClick={() => setAdminForceReveal(true)} className="px-6 py-2 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase tracking-widest shadow-xl hover:scale-105 transition-all text-[10px]">Admin Peek</button>}</div>
-            <LiveScoreTicker games={games} />
-            <KnockoutTrackerBoard data={knockoutTrackerData} week={selectedWeek} allGames={globalSettings?.games} isLocked={isWeekLocked} adminForceReveal={adminForceReveal} currentUser={currentUser} />
-          </div>
-        )}
+      {!isWeekLocked && isAdmin && !adminForceReveal && <button onClick={() => setAdminForceReveal(true)} className="px-6 py-2 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase tracking-widest shadow-xl hover:scale-105 transition-all text-[10px]">Admin Peek</button>}
+    </div>
+    <LiveScoreTicker games={games} />
+    <KnockoutTrackerBoard 
+      data={knockoutTrackerData} 
+      week={liveSeasonWeek} 
+      allGames={globalSettings?.games} 
+      isLocked={isWeekLocked} 
+      adminForceReveal={adminForceReveal} 
+      currentUser={currentUser} 
+      globalSettings={globalSettings} 
+    />
+  </div>
+)}
 
         {activeTab === 'standings' && (
           <div className="space-y-6 max-w-[1200px] mx-auto">

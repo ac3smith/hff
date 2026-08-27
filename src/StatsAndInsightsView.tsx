@@ -38,11 +38,16 @@ export function StatsAndInsightsView({
     return globalSettings?.games?.[selectedWeek] || [];
   }, [globalSettings, selectedWeek]);
 
+  // Lock status check for the selected week
+  const selectedWeekState = globalSettings?.weekStates?.[selectedWeek];
+  const isSelectedWeekLocked = selectedWeekState === 'closed' || selectedWeekState === 'locked';
+
   // ==========================================
   // 1. WEEKLY DEEP DIVE & GAME INSIGHTS
   // ==========================================
   const weeklyInsights = useMemo(() => {
-    if (!currentGames.length || !fanaticsUsers.length) {
+    // 🔒 PRIVACY GUARD: Hide weekly pick statistics until the week is locked or closed
+    if (!isSelectedWeekLocked || !currentGames.length || !fanaticsUsers.length) {
       return {
         completedGames: [],
         totalPointsPossible: 0,
@@ -157,13 +162,16 @@ export function StatsAndInsightsView({
       swingGame,
       upsetGame
     };
-  }, [currentGames, fanaticsUsers, selectedWeek]);
+  }, [currentGames, fanaticsUsers, selectedWeek, isSelectedWeekLocked]);
 
   // ==========================================
   // 2. PATH TO VICTORY CALCULATIONS
   // ==========================================
   const pathData = useMemo(() => {
-    if (!currentGames.length || !fanaticsUsers.length) return { userRoster: [], targetAnalysis: null };
+    // 🔒 PRIVACY GUARD: Hide live ceilings & unplayed picks until the week is locked or closed
+    if (!isSelectedWeekLocked || !currentGames.length || !fanaticsUsers.length) {
+      return { userRoster: [], targetAnalysis: null };
+    }
 
     // Calculate live ceiling / floor for each user
     const userRoster = fanaticsUsers.map((u: any) => {
@@ -259,7 +267,7 @@ export function StatsAndInsightsView({
         keyUnplayedGames
       }
     };
-  }, [currentGames, fanaticsUsers, selectedWeek, activeInspectUser]);
+  }, [currentGames, fanaticsUsers, selectedWeek, activeInspectUser, isSelectedWeekLocked]);
 
   // ==========================================
   // 3. SEASON LEADERBOARD
@@ -280,6 +288,10 @@ export function StatsAndInsightsView({
       let totalPtsPossible = 0;
 
       for (let wk = minWk; wk <= maxWk; wk++) {
+        // 🔒 PRIVACY GUARD: Skip open/unlocked weeks completely!
+        const wkState = globalSettings?.weekStates?.[wk];
+        if (wkState !== 'closed' && wkState !== 'locked') continue;
+
         const wkGames = globalSettings.games?.[wk] || [];
         const uPicks = user.picks?.[wk] || {};
         const uRanks = user.ranks?.[wk] || {};
@@ -393,127 +405,139 @@ export function StatsAndInsightsView({
             </div>
           </div>
 
-          {/* SUMMARY CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm text-center">
-              <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">League Game Accuracy (Finals Only)</div>
-              <div className="text-4xl font-black italic text-slate-900">{weeklyInsights.leagueAccuracy}%</div>
-              <p className="text-xs text-slate-400 font-semibold mt-1">Accuracy on settled outcomes</p>
-            </div>
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm text-center">
-              <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">League Point Capture Efficiency</div>
-              <div className="text-4xl font-black italic text-[#FFB81C]">{weeklyInsights.leagueEfficiency}%</div>
-              <p className="text-xs text-slate-400 font-semibold mt-1">
-                {weeklyInsights.totalPointsScored} / {weeklyInsights.totalPointsPossible} PTS Captured
+          {!isSelectedWeekLocked ? (
+            <div className="bg-slate-900 text-white p-12 rounded-3xl text-center border-b-8 border-[#FFB81C] shadow-xl">
+              <Lock className="w-12 h-12 text-[#FFB81C] mx-auto mb-3 animate-pulse" />
+              <h3 className="text-3xl font-black italic uppercase">Weekly Insights Locked</h3>
+              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">
+                Picks for Week {selectedWeek <= 3 ? `Preseason W${selectedWeek}` : selectedWeek - 3} are hidden until kickoff to ensure fair play.
               </p>
             </div>
-          </div>
-
-          {/* GAME EXPOSURE HIGHLIGHT CARDS */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* POOL SHIFTER */}
-            <div className="bg-slate-900 text-white rounded-3xl p-5 border-t-4 border-[#FFB81C] shadow-lg flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] font-black uppercase text-[#FFB81C] tracking-widest">High Exposure (Pool Shifter)</span>
-                  <Flame className="w-4 h-4 text-[#FFB81C]" />
+          ) : (
+            <>
+              {/* SUMMARY CARDS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm text-center">
+                  <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">League Game Accuracy (Finals Only)</div>
+                  <div className="text-4xl font-black italic text-slate-900">{weeklyInsights.leagueAccuracy}%</div>
+                  <p className="text-xs text-slate-400 font-semibold mt-1">Accuracy on settled outcomes</p>
                 </div>
-                <h4 className="text-lg font-black italic uppercase">
-                  {weeklyInsights.poolShifter ? `${weeklyInsights.poolShifter.game.awayAbbr} @ ${weeklyInsights.poolShifter.game.homeAbbr}` : 'N/A'}
-                </h4>
-                <p className="text-xs text-slate-400 font-bold mt-1">
-                  Most confidence points assigned pool-wide ({weeklyInsights.poolShifter?.totalPts || 0} PTS).
-                </p>
-              </div>
-            </div>
-
-            {/* SWING GAME */}
-            <div className="bg-slate-900 text-white rounded-3xl p-5 border-t-4 border-sky-400 shadow-lg flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] font-black uppercase text-sky-400 tracking-widest">The Swing Game</span>
-                  <Zap className="w-4 h-4 text-sky-400" />
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm text-center">
+                  <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">League Point Capture Efficiency</div>
+                  <div className="text-4xl font-black italic text-[#FFB81C]">{weeklyInsights.leagueEfficiency}%</div>
+                  <p className="text-xs text-slate-400 font-semibold mt-1">
+                    {weeklyInsights.totalPointsScored} / {weeklyInsights.totalPointsPossible} PTS Captured
+                  </p>
                 </div>
-                <h4 className="text-lg font-black italic uppercase">
-                  {weeklyInsights.swingGame ? `${weeklyInsights.swingGame.game.awayAbbr} @ ${weeklyInsights.swingGame.game.homeAbbr}` : 'N/A'}
-                </h4>
-                <p className="text-xs text-slate-400 font-bold mt-1">
-                  Closest point division across the league.
-                </p>
               </div>
-            </div>
 
-            {/* UPSET / CHAOS GAME */}
-            <div className="bg-slate-900 text-white rounded-3xl p-5 border-t-4 border-rose-500 shadow-lg flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] font-black uppercase text-rose-400 tracking-widest">Chaos / Upset Minefield</span>
-                  <ShieldAlert className="w-4 h-4 text-rose-500" />
+              {/* GAME EXPOSURE HIGHLIGHT CARDS */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* POOL SHIFTER */}
+                <div className="bg-slate-900 text-white rounded-3xl p-5 border-t-4 border-[#FFB81C] shadow-lg flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[10px] font-black uppercase text-[#FFB81C] tracking-widest">High Exposure (Pool Shifter)</span>
+                      <Flame className="w-4 h-4 text-[#FFB81C]" />
+                    </div>
+                    <h4 className="text-lg font-black italic uppercase">
+                      {weeklyInsights.poolShifter ? `${weeklyInsights.poolShifter.game.awayAbbr} @ ${weeklyInsights.poolShifter.game.homeAbbr}` : 'N/A'}
+                    </h4>
+                    <p className="text-xs text-slate-400 font-bold mt-1">
+                      Most confidence points assigned pool-wide ({weeklyInsights.poolShifter?.totalPts || 0} PTS).
+                    </p>
+                  </div>
                 </div>
-                <h4 className="text-lg font-black italic uppercase">
-                  {weeklyInsights.upsetGame ? `${weeklyInsights.upsetGame.game.awayAbbr} @ ${weeklyInsights.upsetGame.game.homeAbbr}` : 'N/A'}
-                </h4>
-                <p className="text-xs text-slate-400 font-bold mt-1">
-                  Cost the pool the most points ({weeklyInsights.upsetGame?.ptsLost || 0} PTS lost).
-                </p>
+
+                {/* SWING GAME */}
+                <div className="bg-slate-900 text-white rounded-3xl p-5 border-t-4 border-sky-400 shadow-lg flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[10px] font-black uppercase text-sky-400 tracking-widest">The Swing Game</span>
+                      <Zap className="w-4 h-4 text-sky-400" />
+                    </div>
+                    <h4 className="text-lg font-black italic uppercase">
+                      {weeklyInsights.swingGame ? `${weeklyInsights.swingGame.game.awayAbbr} @ ${weeklyInsights.swingGame.game.homeAbbr}` : 'N/A'}
+                    </h4>
+                    <p className="text-xs text-slate-400 font-bold mt-1">
+                      Closest point division across the league.
+                    </p>
+                  </div>
+                </div>
+
+                {/* UPSET / CHAOS GAME */}
+                <div className="bg-slate-900 text-white rounded-3xl p-5 border-t-4 border-rose-500 shadow-lg flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[10px] font-black uppercase text-rose-400 tracking-widest">Chaos / Upset Minefield</span>
+                      <ShieldAlert className="w-4 h-4 text-rose-500" />
+                    </div>
+                    <h4 className="text-lg font-black italic uppercase">
+                      {weeklyInsights.upsetGame ? `${weeklyInsights.upsetGame.game.awayAbbr} @ ${weeklyInsights.upsetGame.game.homeAbbr}` : 'N/A'}
+                    </h4>
+                    <p className="text-xs text-slate-400 font-bold mt-1">
+                      Cost the pool the most points ({weeklyInsights.upsetGame?.ptsLost || 0} PTS lost).
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* DETAILED GAME BREAKDOWN TABLE */}
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-5 bg-slate-50 border-b border-slate-200">
-              <h3 className="text-lg font-black italic uppercase text-slate-900">Weekly Game Exposure Breakdown</h3>
-              <p className="text-xs text-slate-500 font-bold mt-0.5">Shows how the league split picks and confidence points per game</p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]">
-                    <th className="p-4">Matchup</th>
-                    <th className="p-4 text-center">Status</th>
-                    <th className="p-4 text-center">Away Team Exposure</th>
-                    <th className="p-4 text-center">Home Team Exposure</th>
-                    <th className="p-4 text-right">Total Pool Points</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {weeklyInsights.gameAnalytics.map((item) => {
-                    const g = item.game;
-                    const awayPct = item.totalPicks > 0 ? Math.round((item.awayPicks / item.totalPicks) * 100) : 0;
-                    const homePct = item.totalPicks > 0 ? Math.round((item.homePicks / item.totalPicks) * 100) : 0;
-
-                    return (
-                      <tr key={g.id} className="hover:bg-slate-50 font-bold">
-                        <td className="p-4">
-                          <span className="font-black text-slate-900 uppercase text-base">{g.awayAbbr || g.away} @ {g.homeAbbr || g.home}</span>
-                          <span className="block text-[10px] text-slate-400 font-bold">{g.date} • {g.time}</span>
-                        </td>
-                        <td className="p-4 text-center">
-                          <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${
-                            g.status === 'final' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {g.status === 'final' ? `Final (${g.winner})` : g.status}
-                          </span>
-                        </td>
-                        <td className="p-4 text-center">
-                          <div className="text-xs font-black text-slate-800">{g.awayAbbr}: {awayPct}% ({item.awayPts} PTS)</div>
-                          <div className="text-[10px] text-slate-400">{item.awayPicks} picks</div>
-                        </td>
-                        <td className="p-4 text-center">
-                          <div className="text-xs font-black text-slate-800">{g.homeAbbr}: {homePct}% ({item.homePts} PTS)</div>
-                          <div className="text-[10px] text-slate-400">{item.homePicks} picks</div>
-                        </td>
-                        <td className="p-4 text-right font-black italic text-base text-[#FFB81C]">
-                          {item.totalPts} PTS
-                        </td>
+              {/* DETAILED GAME BREAKDOWN TABLE */}
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-5 bg-slate-50 border-b border-slate-200">
+                  <h3 className="text-lg font-black italic uppercase text-slate-900">Weekly Game Exposure Breakdown</h3>
+                  <p className="text-xs text-slate-500 font-bold mt-0.5">Shows how the league split picks and confidence points per game</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]">
+                        <th className="p-4">Matchup</th>
+                        <th className="p-4 text-center">Status</th>
+                        <th className="p-4 text-center">Away Team Exposure</th>
+                        <th className="p-4 text-center">Home Team Exposure</th>
+                        <th className="p-4 text-right">Total Pool Points</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-sm">
+                      {weeklyInsights.gameAnalytics.map((item) => {
+                        const g = item.game;
+                        const awayPct = item.totalPicks > 0 ? Math.round((item.awayPicks / item.totalPicks) * 100) : 0;
+                        const homePct = item.totalPicks > 0 ? Math.round((item.homePicks / item.totalPicks) * 100) : 0;
+
+                        return (
+                          <tr key={g.id} className="hover:bg-slate-50 font-bold">
+                            <td className="p-4">
+                              <span className="font-black text-slate-900 uppercase text-base">{g.awayAbbr || g.away} @ {g.homeAbbr || g.home}</span>
+                              <span className="block text-[10px] text-slate-400 font-bold">{g.date} • {g.time}</span>
+                            </td>
+                            <td className="p-4 text-center">
+                              <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${
+                                g.status === 'final' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {g.status === 'final' ? `Final (${g.winner})` : g.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="text-xs font-black text-slate-800">{g.awayAbbr}: {awayPct}% ({item.awayPts} PTS)</div>
+                              <div className="text-[10px] text-slate-400">{item.awayPicks} picks</div>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="text-xs font-black text-slate-800">{g.homeAbbr}: {homePct}% ({item.homePts} PTS)</div>
+                              <div className="text-[10px] text-slate-400">{item.homePicks} picks</div>
+                            </td>
+                            <td className="p-4 text-right font-black italic text-base text-[#FFB81C]">
+                              {item.totalPts} PTS
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -522,126 +546,138 @@ export function StatsAndInsightsView({
       {/* ========================================== */}
       {subTab === 'path' && (
         <div className="space-y-6">
-          {/* INSPECTION TARGET SELECTOR */}
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-black uppercase text-slate-400 tracking-widest">Inspect Player's Path:</span>
-              <select
-                value={activeInspectUser?.id || ''}
-                onChange={(e) => setTargetUserId(e.target.value)}
-                className="bg-slate-100 border-2 border-slate-200 rounded-xl px-4 py-2 font-black italic text-base uppercase outline-none focus:border-[#FFB81C] cursor-pointer"
-              >
-                {pathData.userRoster.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.firstName} {u.lastName} ({u.currentPts} PTS)
-                  </option>
-                ))}
-              </select>
+          {!isSelectedWeekLocked ? (
+            <div className="bg-slate-900 text-white p-12 rounded-3xl text-center border-b-8 border-[#FFB81C] shadow-xl">
+              <Lock className="w-12 h-12 text-[#FFB81C] mx-auto mb-3 animate-pulse" />
+              <h3 className="text-3xl font-black italic uppercase">Path To Victory Locked</h3>
+              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">
+                Live mathematical standing matrices and ceilings unlock once Week {selectedWeek <= 3 ? `Preseason W${selectedWeek}` : selectedWeek - 3} kicks off.
+              </p>
             </div>
-            <span className="text-xs font-bold text-slate-400">
-              Top 8 Threshold Floor: <span className="font-black text-slate-900">{pathData.eighthPlaceFloor} PTS</span>
-            </span>
-          </div>
-
-          {/* PERSONALIZED PATH STATUS CARD */}
-          {pathData.targetAnalysis && (
-            <div className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border-t-8 border-[#FFB81C]">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                <div>
-                  <h3 className="text-2xl font-black italic uppercase text-white flex items-center gap-2">
-                    <Target className="w-6 h-6 text-[#FFB81C]" />
-                    Path Analysis for {pathData.targetAnalysis.target.firstName} {pathData.targetAnalysis.target.lastName}
-                  </h3>
-                  <p className="text-xs text-slate-400 font-bold mt-0.5">
-                    Evaluates mathematical ceilings against payout thresholds
-                  </p>
+          ) : (
+            <>
+              {/* INSPECTION TARGET SELECTOR */}
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-black uppercase text-slate-400 tracking-widest">Inspect Player's Path:</span>
+                  <select
+                    value={activeInspectUser?.id || ''}
+                    onChange={(e) => setTargetUserId(e.target.value)}
+                    className="bg-slate-100 border-2 border-slate-200 rounded-xl px-4 py-2 font-black italic text-base uppercase outline-none focus:border-[#FFB81C] cursor-pointer"
+                  >
+                    {pathData.userRoster.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.firstName} {u.lastName} ({u.currentPts} PTS)
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <span className={`px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-wider border ${pathData.targetAnalysis.statusColor}`}>
-                  {pathData.targetAnalysis.statusLabel}
+                <span className="text-xs font-bold text-slate-400">
+                  Top 8 Threshold Floor: <span className="font-black text-slate-900">{pathData.eighthPlaceFloor} PTS</span>
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 text-center">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Current Points (Floor)</span>
-                  <span className="text-3xl font-black italic text-white">{pathData.targetAnalysis.target.floor} PTS</span>
-                </div>
-                <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 text-center">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Unplayed Points Remaining</span>
-                  <span className="text-3xl font-black italic text-sky-400">+{pathData.targetAnalysis.target.remainingUnplayedPts} PTS</span>
-                </div>
-                <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 text-center">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Max Mathematical Ceiling</span>
-                  <span className="text-3xl font-black italic text-[#FFB81C]">{pathData.targetAnalysis.target.ceiling} PTS</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* KEY UNPLAYED GAMES FOR TARGET */}
-          {pathData.targetAnalysis?.keyUnplayedGames.length > 0 && (
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-              <h4 className="text-lg font-black italic uppercase text-slate-900 mb-4 flex items-center gap-2">
-                <Zap className="w-5 h-5 text-[#FFB81C]" /> Essential High-Stakes Picks Needed
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {pathData.targetAnalysis.keyUnplayedGames.map(({ game, myPick, myRank }: any) => (
-                  <div key={game.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-between">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-[10px] font-black uppercase text-slate-400">{game.awayAbbr} @ {game.homeAbbr}</span>
-                      <span className="text-xs font-black text-[#FFB81C] bg-slate-900 px-2 py-0.5 rounded border border-slate-700">+{myRank} PTS</span>
+              {/* PERSONALIZED PATH STATUS CARD */}
+              {pathData.targetAnalysis && (
+                <div className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border-t-8 border-[#FFB81C]">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                    <div>
+                      <h3 className="text-2xl font-black italic uppercase text-white flex items-center gap-2">
+                        <Target className="w-6 h-6 text-[#FFB81C]" />
+                        Path Analysis for {pathData.targetAnalysis.target.firstName} {pathData.targetAnalysis.target.lastName}
+                      </h3>
+                      <p className="text-xs text-slate-400 font-bold mt-0.5">
+                        Evaluates mathematical ceilings against payout thresholds
+                      </p>
                     </div>
-                    <div className="text-sm font-black text-slate-900">
-                      Pick: <span className="text-indigo-600">{myPick}</span>
-                    </div>
-                    <div className="text-[10px] font-bold text-slate-400 mt-2">{game.date} • {game.time}</div>
+                    <span className={`px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-wider border ${pathData.targetAnalysis.statusColor}`}>
+                      {pathData.targetAnalysis.statusLabel}
+                    </span>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          {/* LEADERBOARD CEILING VS FLOOR TABLE */}
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-5 bg-slate-50 border-b border-slate-200">
-              <h3 className="text-lg font-black italic uppercase text-slate-900">Live Mathematical Standing Matrix</h3>
-              <p className="text-xs text-slate-500 font-bold mt-0.5">Top 8 players receive payout at week closure</p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]">
-                    <th className="p-4 italic">Rank</th>
-                    <th className="p-4">Player</th>
-                    <th className="p-4 text-center">Current Points (Floor)</th>
-                    <th className="p-4 text-center">Unplayed PTS</th>
-                    <th className="p-4 text-right">Max Ceiling</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {pathData.userRoster.map((u, idx) => {
-                    const isTop8 = idx < 8;
-                    const isTarget = u.id === activeInspectUser?.id;
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 text-center">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Current Points (Floor)</span>
+                      <span className="text-3xl font-black italic text-white">{pathData.targetAnalysis.target.floor} PTS</span>
+                    </div>
+                    <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 text-center">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Unplayed Points Remaining</span>
+                      <span className="text-3xl font-black italic text-sky-400">+{pathData.targetAnalysis.target.remainingUnplayedPts} PTS</span>
+                    </div>
+                    <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 text-center">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Max Mathematical Ceiling</span>
+                      <span className="text-3xl font-black italic text-[#FFB81C]">{pathData.targetAnalysis.target.ceiling} PTS</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-                    return (
-                      <tr key={u.id} className={`font-bold transition-colors ${
-                        isTarget ? 'bg-[#FFB81C]/20 border-l-4 border-[#FFB81C]' : isTop8 ? 'bg-emerald-50/40' : 'hover:bg-slate-50'
-                      }`}>
-                        <td className="p-4 font-black italic text-slate-400">#{idx + 1}</td>
-                        <td className="p-4 font-black text-slate-900">
-                          {u.firstName} {u.lastName}
-                          {isTop8 && <span className="ml-2 text-[9px] font-black uppercase bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Top 8</span>}
-                        </td>
-                        <td className="p-4 text-center font-mono text-slate-900 text-base">{u.currentPts}</td>
-                        <td className="p-4 text-center font-mono text-sky-600">+{u.remainingUnplayedPts}</td>
-                        <td className="p-4 text-right font-black italic text-base text-[#FFB81C]">{u.ceiling} PTS</td>
+              {/* KEY UNPLAYED GAMES FOR TARGET */}
+              {pathData.targetAnalysis?.keyUnplayedGames.length > 0 && (
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                  <h4 className="text-lg font-black italic uppercase text-slate-900 mb-4 flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-[#FFB81C]" /> Essential High-Stakes Picks Needed
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {pathData.targetAnalysis.keyUnplayedGames.map(({ game, myPick, myRank }: any) => (
+                      <div key={game.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-[10px] font-black uppercase text-slate-400">{game.awayAbbr} @ {game.homeAbbr}</span>
+                          <span className="text-xs font-black text-[#FFB81C] bg-slate-900 px-2 py-0.5 rounded border border-slate-700">+{myRank} PTS</span>
+                        </div>
+                        <div className="text-sm font-black text-slate-900">
+                          Pick: <span className="text-indigo-600">{myPick}</span>
+                        </div>
+                        <div className="text-[10px] font-bold text-slate-400 mt-2">{game.date} • {game.time}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* LEADERBOARD CEILING VS FLOOR TABLE */}
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-5 bg-slate-50 border-b border-slate-200">
+                  <h3 className="text-lg font-black italic uppercase text-slate-900">Live Mathematical Standing Matrix</h3>
+                  <p className="text-xs text-slate-500 font-bold mt-0.5">Top 8 players receive payout at week closure</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]">
+                        <th className="p-4 italic">Rank</th>
+                        <th className="p-4">Player</th>
+                        <th className="p-4 text-center">Current Points (Floor)</th>
+                        <th className="p-4 text-center">Unplayed PTS</th>
+                        <th className="p-4 text-right">Max Ceiling</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-sm">
+                      {pathData.userRoster.map((u, idx) => {
+                        const isTop8 = idx < 8;
+                        const isTarget = u.id === activeInspectUser?.id;
+
+                        return (
+                          <tr key={u.id} className={`font-bold transition-colors ${
+                            isTarget ? 'bg-[#FFB81C]/20 border-l-4 border-[#FFB81C]' : isTop8 ? 'bg-emerald-50/40' : 'hover:bg-slate-50'
+                          }`}>
+                            <td className="p-4 font-black italic text-slate-400">#{idx + 1}</td>
+                            <td className="p-4 font-black text-slate-900">
+                              {u.firstName} {u.lastName}
+                              {isTop8 && <span className="ml-2 text-[9px] font-black uppercase bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Top 8</span>}
+                            </td>
+                            <td className="p-4 text-center font-mono text-slate-900 text-base">{u.currentPts}</td>
+                            <td className="p-4 text-center font-mono text-sky-600">+{u.remainingUnplayedPts}</td>
+                            <td className="p-4 text-right font-black italic text-base text-[#FFB81C]">{u.ceiling} PTS</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
