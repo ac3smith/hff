@@ -952,7 +952,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                   return (
                     <tr key={user.id} className={`${isMe ? 'bg-[#FFB81C]/20 border-l-4 border-[#FFB81C] font-black' : isProjection ? 'hover:bg-amber-100/40' : 'hover:bg-slate-50'} transition-colors group relative`}>
                       {/* Sticky Name Column */}
-                      <td className={`px-2 py-1 sticky left-0 z-20 ${isMe ? 'bg-[#FFB81C]/30 border-l-4 border-[#FFB81C]' : isProjection ? 'bg-amber-50' : 'bg-white'} border-r-2 border-slate-300 shadow-md`}>
+                      <td className={`px-2 py-1 sticky left-0 z-20 ${isMe ? 'bg-[#FFB81C]/30 group-hover:bg-[#FFB81C]/40 border-l-4 border-[#FFB81C]' : isProjection ? 'bg-amber-50 group-hover:bg-amber-100/60' : 'bg-white group-hover:bg-slate-50'} border-r-2 border-slate-300 shadow-md`}>
   <div className="flex items-center gap-1.5">
     <span className="font-black italic text-xs sm:text-sm text-slate-900 w-5 text-right shrink-0">
       {activeRank}.
@@ -2384,10 +2384,11 @@ function MainApp() {
   const [resultsSelectedWeek, setResultsSelectedWeek] = useState(1); // Historical results selector
   
   // Safety aliases for legacy handlers
+  // 🔒 INDEPENDENT TAB-LEVEL WEEK STATES
   const currentActiveWeek = liveSeasonWeek;
-  const setCurrentActiveWeek = setLiveSeasonWeek;
-  const selectedWeek = resultsSelectedWeek;
-  const setSelectedWeek = setResultsSelectedWeek;
+  const [adminSelectedWeek, setAdminSelectedWeek] = useState(1);
+  const selectedWeek = adminSelectedWeek;
+  const setSelectedWeek = setAdminSelectedWeek;
   const [currentUserId, setCurrentUserId] = useState('');
   const [allUsers, setAllUsers] = useState<any[]>([]), [globalSettings, setGlobalSettings] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false), [hasSaved, setHasSaved] = useState(false), [showPrintModal, setShowPrintModal] = useState(false), [showChangePassword, setShowChangePassword] = useState(false), [adminTab, setAdminTab] = useState('status'); 
@@ -2882,15 +2883,24 @@ const isLiveSeasonWeekLocked = isWeekLocked;
     return sorted;
   }, [allUsers, globalSettings, seasonView, seasonSortBy]);
 
-  const fullyPickedCount = currentUser ? games.filter((g: any) => currentUser?.picks?.[selectedWeek]?.[g.id] && currentUser?.ranks?.[selectedWeek]?.[g.id]).length : 0;
-  const totalItemsRequired = totalGames > 0 ? totalGames + 1 : 0;
-  const hasTiebreaker = (currentUser?.tiebreakers?.[selectedWeek] || '').toString().trim() !== '';
+   currentUser ? games.filter((g: any) => currentUser?.picks?.[selectedWeek]?.[g.id] && currentUser?.ranks?.[selectedWeek]?.[g.id]).length : 0;
+   const userPicks = currentUser?.picks?.[picksSelectedWeek] || {};
+   const userRanks = currentUser?.ranks?.[picksSelectedWeek] || {};
+
+  const fullyPickedCount = pickGames.filter((g: any) => {
+    const p = userPicks[g.id] || userPicks[String(g.id)];
+    const r = userRanks[g.id] || userRanks[String(g.id)];
+    return p && r;
+  }).length;
+
+  const totalItemsRequired = pickGames.length > 0 ? pickGames.length + 1 : 0;
+  const hasTiebreaker = String(currentUser?.tiebreakers?.[picksSelectedWeek] || '').trim() !== '';
   const totalItemsCompleted = fullyPickedCount + (hasTiebreaker ? 1 : 0);
   const progressPercentage = totalItemsRequired > 0 ? (totalItemsCompleted / totalItemsRequired) * 100 : 0;
 
-  const isCompleteFanatics = fullyPickedCount === totalGames && totalGames > 0 && hasTiebreaker;
-  const isCompleteKnockout = !!currentUser?.knockoutPicks?.[selectedWeek];
-  let isKnockedOut = wasAlreadyOut(currentUser, selectedWeek, globalSettings?.weekStates);
+  const isCompleteFanatics = pickGames.length > 0 && fullyPickedCount === pickGames.length && hasTiebreaker;
+  const isCompleteKnockout = !!(currentUser?.knockoutPicks?.[liveSeasonWeek] || currentUser?.knockoutPicks?.[picksSelectedWeek]);
+   let isKnockedOut = wasAlreadyOut(currentUser, selectedWeek, globalSettings?.weekStates);
 
   const statusSummary = useMemo(() => {
     if (!allUsers || !allUsers.length) return { completed: [], inProgress: [], notStarted: [] };
@@ -3482,7 +3492,7 @@ function ensureAutoTiebreaker(gamesList: any[]) {
   const trackSaving = async (savePromise: any) => { setIsSaving(true); try { await savePromise; } catch (e) { console.error(e); } setIsSaving(false); setHasSaved(true); setTimeout(() => setHasSaved(false), 2000); };
   const handleChangePassword = async (userId: string, newPassword: string) => { setIsSaving(true); await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), { password: newPassword, requiresPasswordChange: false, lastPasswordReset: new Date().toISOString() }); setIsSaving(false); };
   const updateKnockoutPick = (userId: string, week: number, team: string) => {
-    const targetUser = allUsers.find(u => u.id === userId);
+    const targetUser = allUsers.find((u) => u.id === userId);
     if (!targetUser) return;
 
     if (wasAlreadyOut(targetUser, week, globalSettings?.weekStates)) {
@@ -3490,58 +3500,59 @@ function ensureAutoTiebreaker(gamesList: any[]) {
     }
 
     const canonicalTarget = getCanonicalTeamCode(team);
+    const allKnockoutPicks = { ...(targetUser.knockoutPicks || {}) };
 
-    // Get all teams used by this player in previous weeks (resolved canonically)
-    const pastPicks = Object.entries(targetUser.knockoutPicks || {})
-      .filter(([wk]) => Number(wk) < week)
+    // Validate no prior duplicate picks
+    const pastPicks = Object.entries(allKnockoutPicks)
+      .filter(([wkKey]) => Number(wkKey) < week)
       .map(([_, teamPicked]) => getCanonicalTeamCode(String(teamPicked)));
 
-    // Prevent duplicate selection
     if (pastPicks.includes(canonicalTarget)) {
       return alert(`You have already picked ${canonicalTarget} in a previous week! Please choose a different team.`);
     }
 
+    allKnockoutPicks[week] = team;
+
     trackSaving(
       updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), {
-        [`knockoutPicks.${week}`]: team
+        knockoutPicks: allKnockoutPicks
       })
     );
   };
   const updateUserPicks = (userId: string, gameId: number | string, team: string) => {
-    const targetUser = allUsers.find((u) => u.id === userId);
-    const existingPicks = targetUser?.picks?.[picksSelectedWeek] || {};
+    const userObj = allUsers.find(u => u.id === userId);
+    const weekPicks = { ...(userObj?.picks?.[picksSelectedWeek] || {}) };
+    weekPicks[gameId] = team;
+    weekPicks[String(gameId)] = team;
 
     trackSaving(
       updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), {
-        [`picks.${picksSelectedWeek}`]: {
-          ...existingPicks,
-          [gameId]: team
-        }
+        [`picks.${picksSelectedWeek}`]: weekPicks
       })
     );
   };
 
   const updateUserRank = (userId: string, gameId: number | string, rankValue: string) => {
-    const targetUser = allUsers.find((u) => u.id === userId);
-    const currentWeekRanks = { ...(targetUser?.ranks?.[picksSelectedWeek] || {}) };
+    const userObj = allUsers.find(u => u.id === userId);
+    const weekRanks = { ...(userObj?.ranks?.[picksSelectedWeek] || {}) };
 
     if (!rankValue || rankValue === '') {
-      delete currentWeekRanks[gameId];
-      delete currentWeekRanks[String(gameId)];
+      delete weekRanks[gameId];
+      delete weekRanks[String(gameId)];
     } else {
       const newRank = parseInt(rankValue, 10);
-      // Remove rank if assigned to another game
-      Object.keys(currentWeekRanks).forEach((id) => {
-        if (parseInt(String(currentWeekRanks[id]), 10) === newRank) {
-          delete currentWeekRanks[id];
+      Object.keys(weekRanks).forEach(id => {
+        if (parseInt(String(weekRanks[id]), 10) === newRank) {
+          delete weekRanks[id];
         }
       });
-      currentWeekRanks[gameId] = newRank;
+      weekRanks[gameId] = newRank;
+      weekRanks[String(gameId)] = newRank;
     }
 
     trackSaving(
       updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), {
-        [`ranks.${picksSelectedWeek}`]: currentWeekRanks
+        [`ranks.${picksSelectedWeek}`]: weekRanks
       })
     );
   };
