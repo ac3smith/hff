@@ -272,17 +272,24 @@ function CountdownClock({ targetTime }: { targetTime: number | null }) {
 function LoginView({ users, onLogin, imgError, handleImgError, onChangePassword }: any) {
   const [username, setUsername] = useState(''), [password, setPassword] = useState(''), [error, setError] = useState(''), [needsPasswordChange, setNeedsPasswordChange] = useState(false), [matchedUser, setMatchedUser] = useState<any>(null), [newPassword, setNewPassword] = useState(''), [confirmPassword, setConfirmPassword] = useState(''), [isUpdating, setIsUpdating] = useState(false);
   const handleLoginSubmit = async (e: any) => {
-      e.preventDefault();
-      if (!username.trim() || !password) return setError("Please enter both your username and password.");
-      const u = users.find((x: any) => x.username.toLowerCase() === username.trim().toLowerCase());
-      if (u && u.password === password) {
-          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), { lastLoginTime: new Date().toISOString(), failedLogins: 0 });
-          if (u.requiresPasswordChange) { setMatchedUser(u); setNeedsPasswordChange(true); setError(''); } else onLogin(u.id);
-      } else if (u) {
-          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), { failedLogins: (u.failedLogins || 0) + 1 });
-          setError("Incorrect username or password.");
-      } else setError("Incorrect username or password.");
-  };
+    e.preventDefault();
+    if (!username.trim() || !password) return setError("Please enter both your username and password.");
+    const u = users.find((x: any) => x.username.toLowerCase() === username.trim().toLowerCase());
+
+    if (u && (u.isLocked || (u.failedLogins >= 5))) {
+      return setError("Account is locked due to too many failed attempts. Contact an admin.");
+    }
+
+    if (u && u.password === password) {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), { lastLoginTime: new Date().toISOString(), failedLogins: 0, isLocked: false });
+        if (u.requiresPasswordChange) { setMatchedUser(u); setNeedsPasswordChange(true); setError(''); } else onLogin(u.id);
+    } else if (u) {
+        const newFailedCount = (u.failedLogins || 0) + 1;
+        const shouldLock = newFailedCount >= 5;
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), { failedLogins: newFailedCount, isLocked: shouldLock });
+        setError(shouldLock ? "Account locked due to 5 failed attempts. Contact an admin." : "Incorrect username or password.");
+    } else setError("Incorrect username or password.");
+};
   const handlePasswordChangeSubmit = async (e: any) => {
       e.preventDefault();
       if (newPassword.length < 8) return setError("Password must be at least 8 characters long.");
@@ -3825,17 +3832,19 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                 </div>
 
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden overflow-x-auto">
-                  <table className="w-full text-left min-w-[1000px]">
+                  <table className="w-full text-left min-w-[1250px]">
                     <thead>
-                      <tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]">
-                        <th className="p-5">Player Identity</th>
-                        <th className="p-5">Email Address</th>
-                        <th className="p-5 text-center">System Role</th>
-                        <th className="p-5 text-center">Payment Status</th>
-                        <th className="p-5 text-center">Fanatics</th>
-                        <th className="p-5 text-center">KnockOut</th>
-                        <th className="p-5 text-right">Actions</th>
-                      </tr>
+                    <tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]">
+  <th className="p-5">Player Identity</th>
+  <th className="p-5">Email Address</th>
+  <th className="p-5 text-center">Last Active</th>
+  <th className="p-5 text-center">Security Status</th>
+  <th className="p-5 text-center">System Role</th>
+  <th className="p-5 text-center">Payment Status</th>
+  <th className="p-5 text-center">Fanatics</th>
+  <th className="p-5 text-center">KnockOut</th>
+  <th className="p-5 text-right">Actions</th>
+</tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {(allUsers || []).map(user => {
@@ -3843,11 +3852,48 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                         if (isEditing) return <EditUserRow key={user.id} user={user} form={editUserForm} setForm={setEditUserForm} onCancel={() => setEditingUserId(null)} onSave={saveInlineUserEdit} />;
                         return (
                           <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-5 font-black text-slate-900 text-base">
-                              {formatFullName(user)}
-                              <span className="block text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">@{String(user.username || '')}</span>
-                            </td>
-                            <td className="p-5 font-medium text-slate-600 text-sm">{String(user.email || 'No Email')}</td>
+  <td className="p-5 font-black text-slate-900 text-base">
+    {formatFullName(user)}
+    <span className="block text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">@{String(user.username || '')}</span>
+  </td>
+  <td className="p-5 font-medium text-slate-600 text-sm">{String(user.email || 'No Email')}</td>
+  
+  {/* Last Login Time */}
+  <td className="p-5 text-center font-mono text-xs text-slate-600">
+    {user.lastLoginTime 
+      ? new Date(user.lastLoginTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      : <span className="text-slate-300 font-bold italic">Never</span>
+    }
+  </td>
+
+ {/* Security / Lock Status */}
+ <td className="p-5 text-center whitespace-nowrap">
+    {(user.isLocked || (user.failedLogins >= 5)) ? (
+      <button
+        onClick={async () => {
+          setIsSaving(true);
+          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', user.id), {
+            isLocked: false,
+            failedLogins: 0
+          });
+          setIsSaving(false);
+          alert(`Unlocked account for ${user.firstName}!`);
+        }}
+        className="bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black uppercase px-2.5 py-1 rounded-full shadow-sm animate-pulse whitespace-nowrap"
+        title="Click to unlock account"
+      >
+        🔒 Locked ({user.failedLogins || 0} failed)
+      </button>
+    ) : user.requiresPasswordChange ? (
+      <span className="bg-amber-100 text-amber-800 border border-amber-300 text-[9px] font-black px-2.5 py-1 rounded-full uppercase whitespace-nowrap">
+        🔑 Reset Req.
+      </span>
+    ) : (
+      <span className="bg-emerald-100 text-emerald-700 border border-emerald-300 text-[9px] font-black px-2.5 py-1 rounded-full uppercase whitespace-nowrap">
+        Active
+      </span>
+    )}
+  </td>
                             <td className="p-5 text-center">
                               <select
                                 value={user.role || 'user'}
