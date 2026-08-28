@@ -3,7 +3,8 @@ import {
   Trophy, CalendarDays, CheckCircle, AlertCircle, TrendingUp, TrendingDown, Clock, Target, 
   Printer, X, XCircle, Users, Lock, Settings, UserCog, Edit, ShieldCheck, ShieldAlert, PieChart, 
   UserMinus, Play, DollarSign, Skull, HeartPulse, RefreshCw, Coins, ListChecks, Zap, 
-  UserPlus, Trash2, Mail, LogOut, KeyRound, User, Home, Megaphone, ArrowRight, FileText, BarChart2
+  UserPlus, Trash2, Mail, LogOut, KeyRound, User, Home, Megaphone, ArrowRight, FileText, BarChart2,
+  Award, Crown
 } from 'lucide-react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -536,26 +537,26 @@ function LiveTrackerCell({ game, pick, rank, isProjection }: any) {
   const isLoser = activeWinner && pick !== activeWinner;
   const inProgress = game?.status === 'in_progress';
 
-  let bg = 'bg-white text-slate-900 border-slate-300 shadow-sm';
+  let bg = 'bg-slate-100 text-slate-900 border-slate-300';
   
   if (isWinner) {
     bg = inProgress && isProjection
-      ? 'bg-emerald-500 text-white font-black shadow-md border-emerald-400 animate-pulse'
-      : 'bg-emerald-600 text-white font-black shadow-sm border-emerald-500';
+      ? 'bg-emerald-600 text-white font-black border-emerald-400 animate-pulse'
+      : 'bg-emerald-600 text-white font-black border-emerald-500';
   } else if (isLoser) {
     bg = inProgress && isProjection
-      ? 'bg-rose-600 text-white font-black shadow-md border-rose-500 animate-pulse'
-      : 'bg-rose-600 text-white font-black shadow-sm border-rose-500';
+      ? 'bg-rose-600 text-white font-black border-rose-500 animate-pulse'
+      : 'bg-rose-600 text-white font-black border-rose-500';
   }
 
   const displayPick = pick === game?.away ? (game?.awayAbbr || pick) : (pick === game?.home ? (game?.homeAbbr || pick) : pick);
 
   return (
-    <div className={`font-black uppercase text-center rounded-md py-0.5 border transition-all duration-200 w-full flex flex-col items-center justify-center leading-tight ${bg}`}>
-      <span className="text-xs font-black tracking-tighter">
+    <div className={`font-black uppercase text-center rounded py-1 px-0.5 border w-full flex flex-col items-center justify-center leading-none ${bg}`}>
+      <span className="text-xs sm:text-sm font-black tracking-tighter">
         {String(displayPick)}
       </span>
-      <span className={`text-[10px] mt-0.5 px-1 py-0.2 rounded font-black italic ${isWinner ? 'bg-black/30 text-white' : inProgress && isLoser ? 'bg-rose-200 text-rose-900' : 'bg-slate-100 text-slate-800'}`}>
+      <span className={`text-[10px] sm:text-xs font-black italic mt-0.5 px-1 rounded ${isWinner ? 'bg-black/30 text-white' : inProgress && isLoser ? 'bg-rose-200 text-rose-900' : 'bg-slate-200 text-slate-900'}`}>
         {String(rank)}
       </span>
     </div>
@@ -951,23 +952,21 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                   return (
                     <tr key={user.id} className={`${isMe ? 'bg-[#FFB81C]/20 border-l-4 border-[#FFB81C] font-black' : isProjection ? 'hover:bg-amber-100/40' : 'hover:bg-slate-50'} transition-colors group relative`}>
                       {/* Sticky Name Column */}
-                      <td className={`p-1.5 sm:p-2 sticky left-0 z-20 ${isMe ? 'bg-[#FFB81C]/30 group-hover:bg-[#FFB81C]/40 border-l-4 border-[#FFB81C]' : isProjection ? 'bg-amber-50 group-hover:bg-amber-100/60' : 'bg-white group-hover:bg-slate-50'} border-r-2 border-slate-200 shadow-[3px_0_10px_rgba(0,0,0,0.05)]`}>
-                        <div className="flex items-center gap-1.5 sm:gap-3">
-                          <div className="flex items-center justify-end w-5 sm:w-7 flex-shrink-0">
-                            <span className={`font-black italic text-[11px] sm:text-sm ${isMe ? 'text-slate-900 scale-105' : 'text-black'}`}>
-                              {activeRank}.
-                            </span>
-                          </div>
-                          <div className="flex flex-col leading-tight truncate">
-                            <span className={`text-[11px] sm:text-sm truncate ${isMe ? 'font-black text-slate-900' : 'font-normal text-black'}`}>
-                              {String(user.firstName)} {user.nickname ? `"${user.nickname}"` : ''}
-                            </span>
-                            <span className={`text-[9px] sm:text-xs truncate ${isMe ? 'font-bold text-slate-800' : 'font-normal text-slate-600'}`}>
-                              {String(user.lastName)}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
+                      <td className={`px-2 py-1 sticky left-0 z-20 ${isMe ? 'bg-[#FFB81C]/30 border-l-4 border-[#FFB81C]' : isProjection ? 'bg-amber-50' : 'bg-white'} border-r-2 border-slate-300 shadow-md`}>
+  <div className="flex items-center gap-1.5">
+    <span className="font-black italic text-xs sm:text-sm text-slate-900 w-5 text-right shrink-0">
+      {activeRank}.
+    </span>
+    <div className="flex flex-col leading-none truncate">
+      <span className="text-xs sm:text-sm font-black text-slate-900 tracking-tight truncate">
+        {String(user.firstName)} {user.nickname ? `"${user.nickname}"` : ''}
+      </span>
+      <span className="text-[10px] sm:text-xs font-bold text-slate-700 tracking-tight truncate mt-0.5">
+        {String(user.lastName)}
+      </span>
+    </div>
+  </div>
+</td>
 
                       {/* Game Cells */}
                       {(games || []).map((g: any) => {
@@ -1591,28 +1590,60 @@ Object.keys(u.picks || {}).forEach((wkStr) => {
   );
 }
 
-function AdminLifecycleCard({ week, status, onLock, onClose, onOpen, onPreviewClose }: any) {
+function AdminLifecycleCard({ week, status, onLock, onClose, onOpen, onPreviewClose, onGenerateRecap }: any) {
   const label = week <= 3 ? `Preseason Week ${week}` : `Week ${week - 3}`;
   return (
-    <div className="bg-white p-8 rounded-2xl border-2 border-slate-100 shadow-sm relative overflow-hidden group h-full">
-      <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2"><Clock className="w-4 h-4" /> {label} Lifecycle</h3>
-      <div className={`p-6 rounded-2xl flex flex-col xl:flex-row items-center justify-between border-2 gap-4 ${status === 'closed' ? 'bg-slate-900 border-slate-700' : status === 'locked' ? 'bg-red-50 border-red-200' : 'bg-[#FFB81C]/5 border-[#FFB81C]/20'}`}>
-        <div className={`text-2xl font-black italic uppercase tracking-tighter ${status === 'closed' ? 'text-white' : status === 'locked' ? 'text-red-700' : 'text-slate-900'}`}>Status: {(status || 'open').toUpperCase()}</div>
-        <div className="flex flex-wrap justify-center gap-2">
-            {status === 'open' && <button onClick={onLock} className="px-6 py-3 bg-red-600 text-white rounded-xl font-black italic uppercase shadow-xl hover:bg-red-700 transition-all text-xs sm:text-sm">Lock Week & Apply Deadbeat</button>}
+    <div className="bg-white p-8 rounded-2xl border-2 border-slate-100 shadow-sm relative overflow-hidden group h-full flex flex-col justify-between">
+      <div>
+        <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2">
+          <Clock className="w-4 h-4" /> {label} Lifecycle
+        </h3>
+        <div className={`p-6 rounded-2xl flex flex-col xl:flex-row items-center justify-between border-2 gap-4 ${
+          status === 'closed' ? 'bg-slate-900 border-slate-700' : status === 'locked' ? 'bg-red-50 border-red-200' : 'bg-[#FFB81C]/5 border-[#FFB81C]/20'
+        }`}>
+          <div className={`text-2xl font-black italic uppercase tracking-tighter ${
+            status === 'closed' ? 'text-white' : status === 'locked' ? 'text-red-700' : 'text-slate-900'
+          }`}>
+            Status: {(status || 'open').toUpperCase()}
+          </div>
+          <div className="flex flex-wrap justify-center gap-2">
+            {status === 'open' && (
+              <button onClick={onLock} className="px-6 py-3 bg-red-600 text-white rounded-xl font-black italic uppercase shadow-xl hover:bg-red-700 transition-all text-xs sm:text-sm">
+                Lock Week & Apply Deadbeat
+              </button>
+            )}
             {status === 'locked' && (
               <>
-                <button onClick={onOpen} className="px-4 py-3 bg-slate-200 text-slate-700 rounded-xl font-black italic uppercase hover:bg-slate-300 transition-all text-xs sm:text-sm">Unlock</button>
-                <button onClick={onPreviewClose} className="px-6 py-3 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase shadow-xl hover:scale-105 transition-all text-xs sm:text-sm">Close Week & Finalize</button>
+                <button onClick={onOpen} className="px-4 py-3 bg-slate-200 text-slate-700 rounded-xl font-black italic uppercase hover:bg-slate-300 transition-all text-xs sm:text-sm">
+                  Unlock
+                </button>
+                <button onClick={onPreviewClose} className="px-6 py-3 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase shadow-xl hover:scale-105 transition-all text-xs sm:text-sm">
+                  Close Week & Finalize
+                </button>
               </>
             )}
-            {status === 'closed' && <button onClick={onOpen} className="px-4 py-3 bg-slate-800 text-slate-300 rounded-xl font-black italic uppercase hover:bg-slate-700 transition-all text-xs sm:text-sm">Re-Open (Edit)</button>}
+            {status === 'closed' && (
+              <button onClick={onOpen} className="px-4 py-3 bg-slate-800 text-slate-300 rounded-xl font-black italic uppercase hover:bg-slate-700 transition-all text-xs sm:text-sm">
+                Re-Open (Edit)
+              </button>
+            )}
+          </div>
         </div>
+      </div>
+
+      {/* 📧 EMAIL RECAP BUTTON (POSITIONED DIRECTLY BELOW LIFECYCLE CONTROLS) */}
+      <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
+        <button
+          onClick={onGenerateRecap}
+          className="w-full sm:w-auto bg-[#FFB81C] text-slate-900 hover:bg-amber-400 px-6 py-3 rounded-xl font-black italic uppercase tracking-wider text-xs shadow-md transition-all flex items-center justify-center gap-2"
+        >
+          <Megaphone className="w-4 h-4 text-slate-900" />
+          Generate Email Recap
+        </button>
       </div>
     </div>
   );
 }
-
 function AdminWeekCard({ week, onChange, maxActiveWeeks = 18 }: any) {
   return (
     <div className="bg-white p-8 rounded-2xl border-2 border-slate-100 shadow-sm h-full">
@@ -1791,38 +1822,89 @@ function ParticipationAlert({ game }: any) {
   );
 }
 
-// --- DYNAMIC WHOLE-DOLLAR FANATICS PAYOUT GENERATOR ---
+// --- DYNAMIC WHOLE-DOLLAR FANATICS PAYOUT ENGINE ---
 function calculateFanaticsPayouts(numPlayers: number, totalWeeks = 18, half1Weeks = 9, half2Weeks = 9) {
   const percentages = [0.22, 0.19, 0.16, 0.13, 0.09, 0.08, 0.07, 0.06];
-  
+
+  // Helper to round whole dollars and balance remainders to match the exact pot sum
   const roundAndBalance = (pot: number) => {
+    if (pot <= 0) return Array(8).fill(0);
     const raw = percentages.map(p => Math.round(pot * p));
     const currentSum = raw.reduce((sum, v) => sum + v, 0);
     const diff = Math.round(pot) - currentSum;
-    if (diff !== 0) raw[0] += diff; // Adjust 1st place by the $1 remainder to balance the pot
+    if (diff !== 0) raw[0] += diff; // Balance $1 rounding variance to 1st place
     return raw;
   };
 
+  // 1. Weekly Split ($12/player = $7 Weekly, $1.75 Half 1/2, $1.25 Season, $2 Expenses)
   const weeklyPot = numPlayers * 7.0;
   const weeklyGross = roundAndBalance(weeklyPot);
-  const weeklyNet = weeklyGross.map(g => g - 12); // Gross minus $12 weekly fee
+  const weeklyNet = weeklyGross.map(g => g - 12); // Gross minus $12 weekly dues
 
-  const half1Pot = half1Weeks * numPlayers * 1.75;
+  // 2. 1st Half Pot ($1.75 * numPlayers * half1Weeks)
+  const half1Pot = numPlayers * 1.75 * half1Weeks;
   const half1Payouts = roundAndBalance(half1Pot);
 
-  const half2Pot = half2Weeks * numPlayers * 1.75;
+  // 3. 2nd Half Pot ($1.75 * numPlayers * half2Weeks)
+  const half2Pot = numPlayers * 1.75 * half2Weeks;
   const half2Payouts = roundAndBalance(half2Pot);
 
-  const seasonPot = totalWeeks * numPlayers * 1.25;
+  // 4. Overall Season Pot ($1.25 * numPlayers * totalWeeks)
+  const seasonPot = numPlayers * 1.25 * totalWeeks;
   const seasonPayouts = roundAndBalance(seasonPot);
 
   return {
+    weeklyPot,
     weeklyGross,
     weeklyNet,
+    half1Pot,
     half1Payouts,
+    half2Pot,
     half2Payouts,
+    seasonPot,
     seasonPayouts
   };
+}
+
+// 🔒 EQUAL TIE-SPLIT PAYOUT CALCULATOR (Option A)
+function calculateTiedPayouts(sortedUsers: any[], grossPayoutMatrix: number[]) {
+  let i = 0;
+  while (i < sortedUsers.length) {
+    let j = i;
+    // Find all users tied on BOTH confidence score AND tiebreaker difference
+    while (
+      j < sortedUsers.length &&
+      sortedUsers[j].score === sortedUsers[i].score &&
+      sortedUsers[j].tbDiff === sortedUsers[i].tbDiff
+    ) {
+      j++;
+    }
+
+    const tiedCount = j - i;
+    const startRank = i + 1; // 1-indexed rank position
+
+    // Sum up the combined payout pool for the tied rank positions
+    let combinedPool = 0;
+    for (let r = startRank; r < startRank + tiedCount; r++) {
+      if (r <= 8) {
+        combinedPool += grossPayoutMatrix[r - 1] || 0;
+      }
+    }
+
+    // Split evenly among tied players (rounded to nearest whole dollar)
+    const splitGross = tiedCount > 0 ? Math.round(combinedPool / tiedCount) : 0;
+
+    for (let k = i; k < j; k++) {
+      sortedUsers[k].rank = startRank;
+      sortedUsers[k].grossPayout = splitGross;
+      sortedUsers[k].netEarnings = splitGross > 0 ? splitGross - 12 : -12;
+      sortedUsers[k].isTied = tiedCount > 1;
+    }
+
+    i = j; // Advance past the tied group
+  }
+
+  return sortedUsers;
 }
 
 function AutoSyncStatusBadge({ globalSettings }: { globalSettings: any }) {
@@ -1925,6 +2007,374 @@ function AvailableRanksBar({ totalGames, usedRanks }: { totalGames: number; used
   );
 }
 
+function WeeklyRecapModal({ isOpen, onClose, week = 1, games, allUsers, globalSettings }: any) {
+  const [includeGreat8, setIncludeGreat8] = useState(true);
+  const [includeBasement, setIncludeBasement] = useState(true);
+  const [includeMovers, setIncludeMovers] = useState(true);
+  const [includeKnockout, setIncludeKnockout] = useState(true);
+  const [adminNotes, setAdminNotes] = useState('[INSERT COMMISH UPDATE HERE]');
+  const [copied, setCopied] = useState(false);
+
+  // 🔒 Calculate the last closed week safely without hardcoding
+  const effectiveWeek = useMemo(() => {
+    const weekStates = globalSettings?.weekStates || {};
+    const targetWk = Number(week || 1);
+    if (weekStates[targetWk] === 'closed') return targetWk;
+    
+    const closedWeeks = Object.keys(weekStates)
+      .map(Number)
+      .filter(w => weekStates[w] === 'closed')
+      .sort((a, b) => b - a);
+
+    return closedWeeks[0] || Math.max(1, targetWk - 1);
+  }, [week, globalSettings?.weekStates]);
+
+  const recapData = useMemo(() => {
+    if (!allUsers || !effectiveWeek) return null;
+
+    const evalGames = globalSettings?.games?.[effectiveWeek] || games || [];
+    const actualTB = globalSettings?.actualTiebreakers?.[effectiveWeek] ?? 0;
+    const lastGame = evalGames.find((g: any) => g.isTiebreaker) || evalGames[evalGames.length - 1];
+    const standardMaxPossible = evalGames.reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
+
+    const processedUsers = allUsers.filter((u: any) => u.playsConfidence).map((u: any) => {
+      const userPicks = u.picks?.[effectiveWeek] || {};
+      const userRanks = u.ranks?.[effectiveWeek] || {};
+      const userTB = parseInt(u.tiebreakers?.[effectiveWeek] || '0', 10);
+      const isDeadbeat = u.tiebreakers?.[effectiveWeek] === '0' || (evalGames.length > 0 && evalGames.every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
+
+      const userMaxPossible = isDeadbeat ? evalGames.length * 5 : standardMaxPossible;
+      const pointsLost = evalGames.reduce((lost: number, g: any) => {
+        const pick = userPicks[g.id];
+        const rank = parseInt(userRanks[g.id] || 0, 10);
+        if (!pick || !rank) return lost;
+        if (g.status === 'final' && g.winner && pick !== g.winner) return lost + rank;
+        return lost;
+      }, 0);
+
+      const score = userMaxPossible - pointsLost;
+      const tbDiff = Math.abs(userTB - actualTB);
+      const lastPick = lastGame ? userPicks[lastGame.id] : null;
+      const lastRank = lastGame ? parseInt(userRanks[lastGame.id] || 0, 10) : 0;
+
+      return {
+        ...u,
+        name: formatFullName(u),
+        score,
+        tbDiff,
+        userTB,
+        lastPick,
+        lastRank,
+        isDeadbeat
+      };
+    });
+
+    // 1. Sort by Points descending, then TB Diff ascending
+    processedUsers.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.tbDiff !== b.tbDiff) return a.tbDiff - b.tbDiff;
+      return a.name.localeCompare(b.name);
+    });
+
+    const leaderScore = processedUsers[0]?.score || 0;
+    const payouts = globalSettings?.fpPayouts || [77, 67, 56, 46, 31, 28, 25, 20];
+
+    // 2. Apply dynamic equal tie-split payout calculation
+    calculateTiedPayouts(processedUsers, payouts);
+
+    processedUsers.forEach((u) => {
+      u.moneyWon = u.grossPayout || 0;
+      u.behind = leaderScore - u.score;
+    });
+
+    // 3. Define Great 8 (all players earning cash) and Basement
+    const great8 = processedUsers.filter(u => u.grossPayout > 0);
+    const basement = processedUsers.slice(-8).reverse();
+
+    // 4. Movers & Shakers
+    let biggestClimber: any = null;
+    let biggestDrop: any = null;
+
+    if (effectiveWeek > 1) {
+      const prevWeek = effectiveWeek - 1;
+      const currentStandings = [...allUsers].filter((u: any) => u.playsConfidence).map((u: any) => ({
+        id: u.id,
+        name: formatFullName(u),
+        pts: parseFloat(u.weeklyConfidenceHistory?.[effectiveWeek] || 0)
+      })).sort((a, b) => b.pts - a.pts);
+
+      const prevStandings = [...allUsers].filter((u: any) => u.playsConfidence).map((u: any) => ({
+        id: u.id,
+        name: formatFullName(u),
+        pts: parseFloat(u.weeklyConfidenceHistory?.[prevWeek] || 0)
+      })).sort((a, b) => b.pts - a.pts);
+
+      let maxClimb = -Infinity;
+      let maxDrop = -Infinity;
+
+      currentStandings.forEach((u, currIdx) => {
+        const prevIdx = prevStandings.findIndex(p => p.id === u.id);
+        if (prevIdx !== -1) {
+          const shift = prevIdx - currIdx;
+          if (shift > maxClimb && shift > 0) {
+            maxClimb = shift;
+            biggestClimber = { name: u.name, shift, newRank: currIdx + 1 };
+          }
+          if (-shift > maxDrop && shift < 0) {
+            maxDrop = -shift;
+            biggestDrop = { name: u.name, shift: -shift, newRank: currIdx + 1 };
+          }
+        }
+      });
+    }
+
+    // 5. Knockout Pool Casualties
+    const koCasualties = allUsers.filter((u: any) => u.playsKnockout && (u.knockoutStatuses?.[effectiveWeek] === 'Loser' || u.knockoutStatuses?.[effectiveWeek] === 'Loser (No Pick)')).map((u: any) => ({
+      name: formatFullName(u),
+      pick: u.knockoutPicks?.[effectiveWeek] || 'No Pick'
+    }));
+
+    return {
+      great8,
+      basement,
+      actualTB,
+      lastGame,
+      biggestClimber,
+      biggestDrop,
+      koCasualties
+    };
+  }, [games, allUsers, effectiveWeek, globalSettings]);
+
+  if (!isOpen || !recapData) return null;
+
+  const handleCopyRichHtml = () => {
+    const recapElement = document.getElementById('rich-email-recap-content');
+    if (!recapElement) return;
+
+    const range = document.createRange();
+    range.selectNode(recapElement);
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand('copy');
+      selection.removeAllRanges();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white max-w-4xl w-full rounded-3xl shadow-2xl overflow-hidden border-t-8 border-[#FFB81C] flex flex-col max-h-[90vh]">
+        {/* MODAL HEADER */}
+        <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
+          <div>
+            <h2 className="text-2xl font-black italic uppercase text-[#FFB81C] flex items-center gap-2">
+              <Megaphone className="w-6 h-6 text-[#FFB81C]" />
+              {getDisplayWeekLabel(effectiveWeek)} Recap Generator
+            </h2>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+              Copy pre-formatted rich tables directly into your email client
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+            <X className="w-6 h-6 text-slate-400" />
+          </button>
+        </div>
+
+        {/* WRITEUP COMMENTARY BOX */}
+        <div className="p-4 bg-slate-900 border-t border-slate-800 shrink-0">
+          <label className="block text-[10px] font-black uppercase text-[#FFB81C] tracking-widest mb-1">
+            ✍️ Admin Weekly Writeup & Commentary
+          </label>
+          <textarea
+            value={adminNotes}
+            onChange={(e) => setAdminNotes(e.target.value)}
+            placeholder="Type your funny commentary, recap story, or league callouts here..."
+            className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-xs text-white outline-none focus:border-[#FFB81C] min-h-[60px]"
+          />
+        </div>
+
+        {/* SECTION TOGGLE BAR */}
+        <div className="p-4 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 text-xs font-bold shrink-0">
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={includeGreat8} onChange={e => setIncludeGreat8(e.target.checked)} className="rounded text-[#FFB81C]" />
+              <span>The Great 8 ({recapData.great8.length})</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={includeBasement} onChange={e => setIncludeBasement(e.target.checked)} className="rounded text-[#FFB81C]" />
+              <span>The Basement</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={includeMovers} onChange={e => setIncludeMovers(e.target.checked)} className="rounded text-[#FFB81C]" />
+              <span>Movers & Shakers</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={includeKnockout} onChange={e => setIncludeKnockout(e.target.checked)} className="rounded text-[#FFB81C]" />
+              <span>Knockout Casualties</span>
+            </label>
+          </div>
+
+          <button
+            onClick={handleCopyRichHtml}
+            className="bg-slate-900 text-[#FFB81C] hover:bg-slate-800 px-6 py-2.5 rounded-xl font-black uppercase tracking-wider text-xs shadow-md transition-all flex items-center gap-2"
+          >
+            {copied ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <Printer className="w-4 h-4" />}
+            {copied ? 'Copied to Clipboard!' : 'Copy Rich Email HTML'}
+          </button>
+        </div>
+
+        {/* RECAP PREVIEW CANVAS */}
+        <div className="p-8 overflow-y-auto flex-1 bg-white text-slate-900 font-sans" id="rich-email-recap-content">
+          <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', maxWidth: '650px', margin: '0 auto', color: '#1e293b' }}>
+            
+            {/* HEADER BANNER */}
+            <div style={{ backgroundColor: '#0f172a', padding: '24px', borderRadius: '12px', textAlign: 'center', marginBottom: '20px', borderBottom: '6px solid #FFB81C' }}>
+              <h1 style={{ color: '#ffffff', margin: 0, fontSize: '24px', fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase' }}>
+                Hanover Football Fanatics
+              </h1>
+              <p style={{ color: '#FFB81C', margin: '6px 0 0 0', fontSize: '14px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                {getDisplayWeekLabel(effectiveWeek)} Official Recap
+              </p>
+            </div>
+
+{/* ADMIN WRITEUP BOX IN EMAIL */}
+{adminNotes.trim() && (
+  <div style={{ backgroundColor: '#f8fafc', padding: '18px 20px', borderRadius: '10px', borderLeft: '6px solid #FFB81C', border: '1px solid #e2e8f0', borderLeftWidth: '6px', marginBottom: '24px' }}>
+    <p style={{ margin: 0, fontSize: '16px', lineHeight: '1.6', color: '#0f172a', fontWeight: 'bold' }}>
+      {adminNotes.trim()}
+    </p>
+  </div>
+)}
+            {/* THE GREAT 8 SECTION */}
+            {includeGreat8 && (
+              <div style={{ marginBottom: '28px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase', color: '#0f172a', borderBottom: '2px solid #FFB81C', paddingBottom: '6px', marginBottom: '12px' }}>
+                  🏆 The Great 8 (Payout Zone)
+                </h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#0f172a', color: '#ffffff', textTransform: 'uppercase', fontSize: '10px' }}>
+                      <th style={{ padding: '8px' }}>Rank</th>
+                      <th style={{ padding: '8px' }}>Player</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>PTS</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>Behind</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>Final Pick</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>TB</th>
+                      <th style={{ padding: '8px', textAlign: 'right' }}>Payout</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recapData.great8.map((u: any) => (
+                      <tr key={u.id} style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: u.rank % 2 === 0 ? '#f8fafc' : '#ffffff' }}>
+                        <td style={{ padding: '10px 8px', fontWeight: '900', fontStyle: 'italic', color: '#0f172a' }}>#{u.rank}</td>
+                        <td style={{ padding: '10px 8px', fontWeight: 'bold', color: '#0f172a' }}>{u.name}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: '900' }}>{u.score}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center', color: '#64748b' }}>{u.behind === 0 ? '-' : `-${u.behind}`}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '11px', color: '#475569' }}>
+                          {u.lastPick ? `${u.lastPick} (${u.lastRank} PTS)` : '-'}
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '11px' }}>
+                          {u.userTB} <span style={{ color: '#94a3b8' }}>({u.tbDiff > 0 ? `-${u.tbDiff}` : 'Exact!'})</span>
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '900', fontStyle: 'italic', color: '#16a34a' }}>
+                          +${u.moneyWon}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* THE BASEMENT SECTION */}
+            {includeBasement && (
+              <div style={{ marginBottom: '28px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase', color: '#dc2626', borderBottom: '2px solid #dc2626', paddingBottom: '6px', marginBottom: '12px' }}>
+                  📉 The Basement (Bottom 8 Finishers)
+                </h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#475569', color: '#ffffff', textTransform: 'uppercase', fontSize: '10px' }}>
+                      <th style={{ padding: '8px' }}>Rank</th>
+                      <th style={{ padding: '8px' }}>Player</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>PTS</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>Behind</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>Final Pick</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>TB</th>
+                      <th style={{ padding: '8px', textAlign: 'right' }}>Payout</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recapData.basement.map((u: any) => (
+                      <tr key={u.id} style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: u.rank % 2 === 0 ? '#f8fafc' : '#ffffff' }}>
+                        <td style={{ padding: '10px 8px', fontWeight: '900', fontStyle: 'italic', color: '#64748b' }}>#{u.rank}</td>
+                        <td style={{ padding: '10px 8px', fontWeight: 'bold', color: '#0f172a' }}>
+                          {u.name} {u.isDeadbeat && <span style={{ color: '#dc2626', fontSize: '10px' }}>(Deadbeat)</span>}
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold' }}>{u.score}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center', color: '#dc2626', fontWeight: 'bold' }}>-{u.behind}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '11px', color: '#475569' }}>
+                          {u.lastPick ? `${u.lastPick} (${u.lastRank} PTS)` : '-'}
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '11px', color: '#64748b' }}>
+                          {u.userTB}
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'right', color: '#94a3b8' }}>$0</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* MOVERS & SHAKERS */}
+            {includeMovers && (recapData.biggestClimber || recapData.biggestDrop) && (
+              <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '28px' }}>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: '900', textTransform: 'uppercase', color: '#0f172a' }}>
+                  🚀 Movers & Shakers (Season Standings Shift)
+                </h3>
+                {recapData.biggestClimber && (
+                  <p style={{ margin: '4px 0', fontSize: '13px', color: '#16a34a', fontWeight: 'bold' }}>
+                    ▲ Biggest Climber: {recapData.biggestClimber.name} (+{recapData.biggestClimber.shift} spots to #{recapData.biggestClimber.newRank} overall)
+                  </p>
+                )}
+                {recapData.biggestDrop && (
+                  <p style={{ margin: '4px 0', fontSize: '13px', color: '#dc2626', fontWeight: 'bold' }}>
+                    ▼ Biggest Drop: {recapData.biggestDrop.name} (-{recapData.biggestDrop.shift} spots to #{recapData.biggestDrop.newRank} overall)
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* KNOCKOUT CASUALTIES */}
+            {includeKnockout && recapData.koCasualties.length > 0 && (
+              <div style={{ backgroundColor: '#fef2f2', padding: '16px', borderRadius: '8px', border: '1px solid #fecaca', marginBottom: '28px' }}>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: '900', textTransform: 'uppercase', color: '#991b1b' }}>
+                  ☠️ Knockout Pool Eliminations
+                </h3>
+                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#7f1d1d' }}>
+                  {recapData.koCasualties.map((k: any, idx: number) => (
+                    <li key={idx} style={{ marginBottom: '4px', fontWeight: 'bold' }}>
+                      {k.name} — <span style={{ fontStyle: 'italic' }}>Picked {k.pick} ❌</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <p style={{ textAlign: 'center', fontSize: '11px', color: '#94a3b8', marginTop: '24px' }}>
+              Official Hanover Football Fanatics Weekly Update
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- MAIN APP COMPONENT ---
 function MainApp() {
   const [user, setUser] = useState<any>(null), [dbReady, setDbReady] = useState(false), [authLoaded, setAuthLoaded] = useState(false), [sessionLoaded, setSessionLoaded] = useState(false), [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -1952,96 +2402,110 @@ function MainApp() {
 
   // 📍 PREVIEW CLOSE WEEK MODAL STATE & HANDLER 📍
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [showWeeklyRecapModal, setShowWeeklyRecapModal] = useState(false);
 
-  const handleFinalizeCloseWeek = async (finalData: any) => {
-    setIsSaving(true);
-    try {
-      const { week, finalTiebreakerScore, winners } = finalData;
-      const batch = writeBatch(db);
+// 📍 1. FINALIZE CLOSE WEEK (FROM PREVIEW MODAL) 📍
+const handleFinalizeCloseWeek = async (finalData: any) => {
+  setIsSaving(true);
+  try {
+    const { week, finalTiebreakerScore, winners } = finalData;
+    const batch = writeBatch(db);
 
-      // 1. Lock/Close the week state and save official tiebreaker in global settings
-      batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-        [`weekStates.${week}`]: 'closed',
-        [`actualTiebreakers.${week}`]: finalTiebreakerScore,
-        [`weeklyWinners.${week}`]: winners
-      });
+    // A. Lock/Close week state & save official tiebreaker
+    batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+      [`weekStates.${week}`]: 'closed',
+      [`actualTiebreakers.${week}`]: finalTiebreakerScore,
+      [`weeklyWinners.${week}`]: winners
+    });
 
-      // Map top 8 calculated payouts for quick lookup by user ID
-      const payoutMap: { [userId: string]: number } = {};
-      (winners || []).forEach((w: any) => {
-        payoutMap[w.id] = w.calculatedPayout || 0;
-      });
+    // B. Map top 8 calculated gross payouts for quick lookup by user ID
+    const payoutMap: { [userId: string]: number } = {};
+    (winners || []).forEach((w: any) => {
+      payoutMap[w.id] = w.calculatedPayout || 0;
+    });
 
-      // 2. Compute points and save history for ALL active players (not just top 8)
-      const standardMaxPossible = (games || []).reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
+    // C. Compute points & record exact NET EARNINGS (-$12 for non-winners, Gross - $12 for winners)
+    const standardMaxPossible = (games || []).reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
 
-      allUsers.forEach((u: any) => {
-        if (!u.playsConfidence) return;
+    allUsers.forEach((u: any) => {
+      if (!u.playsConfidence) return;
 
-        const userPicks = u.picks?.[week] || {};
-        const userRanks = u.ranks?.[week] || {};
+      const userPicks = u.picks?.[week] || {};
+      const userRanks = u.ranks?.[week] || {};
 
-        // Deadbeat check
-        const isDeadbeat = u.tiebreakers?.[week] === '0' || 
-          ((games || []).length > 0 && (games || []).every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
+      // Deadbeat check
+      const isDeadbeat = u.tiebreakers?.[week] === '0' || 
+        ((games || []).length > 0 && (games || []).every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
 
-        const userMaxPossible = isDeadbeat ? (games || []).length * 5 : standardMaxPossible;
+      const userMaxPossible = isDeadbeat ? (games || []).length * 5 : standardMaxPossible;
 
-        // Calculate points lost on incorrect picks
-        const pointsLost = (games || []).reduce((lost: number, g: any) => {
-          const pick = userPicks[g.id];
-          const rank = parseInt(userRanks[g.id] || 0, 10);
-          if (!pick || !rank) return lost;
+      // Calculate points lost on incorrect picks
+      const pointsLost = (games || []).reduce((lost: number, g: any) => {
+        const pick = userPicks[g.id];
+        const rank = parseInt(userRanks[g.id] || 0, 10);
+        if (!pick || !rank) return lost;
 
-          if (g.status === 'final' && g.winner && pick !== g.winner) {
-            return lost + rank;
-          }
-          return lost;
-        }, 0);
-
-        const earnedPoints = userMaxPossible - pointsLost;
-        const prizeWon = payoutMap[u.id] || 0; // Payout if in top 8, else 0
-
-        const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id);
-        batch.update(userRef, {
-          [`weeklyConfidenceHistory.${week}`]: earnedPoints,
-          [`weeklyFantasyHistory.${week}`]: prizeWon
-        });
-      });
-
-      // 3. Process Knockout Pool Statuses
-      allUsers.forEach((u: any) => {
-        if (u.playsKnockout) {
-          const pick = u.knockoutPicks?.[week];
-          let status = 'No Pick';
-          if (pick) {
-            const game = games.find((g: any) => g.away === pick || g.home === pick);
-            if (game && game.status === 'final') {
-              status = game.winner === 'TIE' ? 'Loser' : (game.winner === pick ? 'Winner' : 'Loser');
-            } else {
-              status = 'Undecided';
-            }
-          }
-          batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), {
-            [`knockoutStatuses.${week}`]: status
-          });
+        if (g.status === 'final' && g.winner && pick !== g.winner) {
+          return lost + rank;
         }
+        return lost;
+      }, 0);
+
+      const earnedPoints = userMaxPossible - pointsLost;
+      const grossPrize = payoutMap[u.id] || 0;
+      
+      // 🔒 NET CALCULATION: Gross Award minus $12 weekly dues (Ranks 9+ get -$12)
+      const netFantasyEarnings = grossPrize > 0 ? grossPrize - 12 : -12;
+
+      const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id);
+      batch.update(userRef, {
+        [`weeklyConfidenceHistory.${week}`]: earnedPoints,
+        [`weeklyFantasyHistory.${week}`]: netFantasyEarnings
       });
+    });
 
-      await batch.commit();
+    // D. Process Knockout Pool Statuses
+    allUsers.forEach((u: any) => {
+      if (u.playsKnockout) {
+        const pick = u.knockoutPicks?.[week];
+        let status = 'No Pick';
+        if (pick) {
+          const game = games.find((g: any) => g.away === pick || g.home === pick);
+          if (game && game.status === 'final') {
+            status = game.winner === 'TIE' ? 'Loser' : (game.winner === pick ? 'Winner' : 'Loser');
+          } else {
+            status = 'Undecided';
+          }
+        }
+        batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), {
+          [`knockoutStatuses.${week}`]: status
+        });
+      }
+    });
 
-      // Automatically advance to the next week
-      const nextWeek = Math.min(week + 1, maxActiveWeeks);
-      setSelectedWeek(nextWeek);
+    await batch.commit();
 
-      alert(`Week ${week} finalized! All player point totals saved. Automatically advanced to Week ${nextWeek}.`);
-    } catch (e) {
-      console.error("Error finalizing week:", e);
-      alert("Failed to finalize week. Check console logs.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    // Automatically advance to the next week
+    // 🔒 SAFE WEEK ADVANCE: Only advance if the next week actually has games populated
+const nextWeek = Math.min(week + 1, maxActiveWeeks);
+const nextWeekGames = globalSettings?.games?.[nextWeek] || [];
+
+if (nextWeekGames && nextWeekGames.length > 0) {
+  setSelectedWeek(nextWeek);
+  setLiveSeasonWeek(nextWeek);
+} else {
+  // Stay on current week so the app never jumps into an empty week
+  setSelectedWeek(week);
+}
+
+    alert(`Week ${week} finalized! All player scores and net balances (-$12 for non-payouts) saved.`);
+  } catch (e) {
+    console.error("Error finalizing week:", e);
+    alert("Failed to finalize week. Check console logs.");
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   const maxActiveWeeks = globalSettings?.maxActiveWeeks || 18;
   const [settlementPreview, setSettlementPreview] = useState<{
@@ -2143,9 +2607,19 @@ function MainApp() {
     if (globalSettings && allUsers.length > 0 && !dbReady) { 
         const availableWeeks = Array.from({ length: maxActiveWeeks }, (_, i) => i + 1);
         const active = availableWeeks.find(w => globalSettings.weekStates?.[w] !== 'closed') || 1;
+        
         setLiveSeasonWeek(active);
         setPicksSelectedWeek(active);
-        setResultsSelectedWeek(active);
+        
+        // 🔒 DEFAULT RESULTS TO PREVIOUS WEEK IF ACTIVE WEEK IS STILL OPEN
+        const activeState = globalSettings.weekStates?.[active];
+        const isActiveLocked = activeState === 'locked' || activeState === 'closed';
+        if (!isActiveLocked && active > 1) {
+          setResultsSelectedWeek(active - 1);
+        } else {
+          setResultsSelectedWeek(active);
+        }
+
         setDbReady(true); 
     } 
   }, [globalSettings, allUsers, dbReady, maxActiveWeeks]);
@@ -2221,84 +2695,91 @@ const isLiveSeasonWeekLocked = isWeekLocked;
 
 
   const weeklyTrackerData = useMemo(() => {
-    if (!globalSettings || !allUsers.length) return [];
-    const actualTotal = globalSettings?.actualTiebreakers?.[resultsSelectedWeek] || 0;
-    
-    const usersWithScores = allUsers.filter(u => u.playsConfidence).map(user => { 
-      return { 
-        ...user, 
-        confidenceScore: calculatePoints(user.picks?.[resultsSelectedWeek] || {}, user.ranks?.[resultsSelectedWeek] || {}, resultsGames), 
-        tbDiff: Math.abs(parseInt(user.tiebreakers?.[resultsSelectedWeek] || 0) - actualTotal) 
-      }; 
-    });
+    if (!allUsers || !allUsers.length) return [];
 
-    usersWithScores.forEach(user => { 
-      const tiedUsers = usersWithScores.filter(u => u.confidenceScore === user.confidenceScore); 
-      if (tiedUsers.length > 1) { 
-        const minTbDiff = Math.min(...tiedUsers.map(u => u.tbDiff)); 
-        if (minTbDiff !== Math.max(...tiedUsers.map(u => u.tbDiff)) && user.tbDiff === minTbDiff) {
-          user.wonTiebreaker = true; 
-        }
-      } 
-    });
+    // Pull schedule explicitly for resultsSelectedWeek
+    const targetGames = globalSettings?.games?.[resultsSelectedWeek] || resultsGames || [];
+    const actualTB = globalSettings?.actualTiebreakers?.[resultsSelectedWeek] ?? 0;
+    const standardMaxPossible = targetGames.reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
 
-    usersWithScores.sort((a, b) => { 
-      if (b.confidenceScore !== a.confidenceScore) return b.confidenceScore - a.confidenceScore; 
-      if (a.tbDiff !== b.tbDiff) return a.tbDiff - b.tbDiff; 
-      return String(a.lastName || '').localeCompare(String(b.lastName || '')); 
-    });
+    // 1. Process picks using flexible string/number ID key matching
+    const processed = allUsers
+      .filter((u: any) => u.playsConfidence)
+      .map((u: any) => {
+        const userPicks = u.picks?.[resultsSelectedWeek] || {};
+        const userRanks = u.ranks?.[resultsSelectedWeek] || {};
+        const userTBStr = String(u.tiebreakers?.[resultsSelectedWeek] || '').trim();
+        const userTB = parseInt(userTBStr || '0', 10);
 
-    const finalData = usersWithScores.map(u => ({ ...u, weeklyRank: 0, weeklyFP: -12 }));
-    const grouped: any[] = [];
+        // Count valid picks made for this week
+        const validPickCount = targetGames.filter((g: any) => {
+          const p = userPicks[g.id] || userPicks[String(g.id)];
+          const r = userRanks[g.id] || userRanks[String(g.id)];
+          return p && r;
+        }).length;
 
-    usersWithScores.forEach(u => { 
-      const key = `${u.confidenceScore}-${u.tbDiff}`; 
-      const group = grouped.find(g => g.key === key); 
-      if (group) group.members.push(u.id); 
-      else grouped.push({ key, members: [u.id] }); 
-    });
+        const isDeadbeat =
+          userTBStr === '0' ||
+          (targetGames.length > 0 &&
+            targetGames.every((g: any) => {
+              const r = parseInt(String(userRanks[g.id] || userRanks[String(g.id)] || 0), 10);
+              return r === 5;
+            }));
 
-    let processedCount = 0;
-    let totalRoundingDollarsLost = 0;
+        const userMaxPossible = isDeadbeat ? targetGames.length * 5 : standardMaxPossible;
 
-    grouped.forEach((group) => {
-        const startRank = processedCount + 1;
-        const endRank = processedCount + group.members.length;
-        
-        let pointsPool = 0; 
-        for (let r = startRank; r <= endRank; r++) {
-          if (r <= 8 && globalSettings?.fpPayouts) {
-            pointsPool += (globalSettings.fpPayouts[r - 1] || 0);
+        const pointsLost = targetGames.reduce((lost: number, g: any) => {
+          const pick = userPicks[g.id] || userPicks[String(g.id)];
+          const rank = parseInt(String(userRanks[g.id] || userRanks[String(g.id)] || 0), 10);
+
+          if (!pick || !rank) return lost;
+          if (g.status === 'final' && g.winner && pick !== g.winner) {
+            return lost + rank;
           }
-        }
+          return lost;
+        }, 0);
 
-        const rawShare = group.members.length > 0 ? (pointsPool / group.members.length) : 0;
-        
-        const grossPayout = rawShare > 0 ? Math.ceil(rawShare) : 0;
-        const netFP = grossPayout - 12;
+        const score = userMaxPossible - pointsLost;
+        const tbDiff = Math.abs(userTB - actualTB);
+        const savedNet = u.weeklyFantasyHistory?.[resultsSelectedWeek];
 
-        const totalPaidOutForGroup = grossPayout * group.members.length;
-        if (totalPaidOutForGroup > pointsPool) {
-          totalRoundingDollarsLost += (totalPaidOutForGroup - pointsPool);
-        }
+        return {
+          ...u,
+          score,
+          confidenceScore: score,
+          tbDiff,
+          savedNet,
+          validPickCount,
+          firstName: u.firstName || '',
+          lastName: u.lastName || ''
+        };
+      });
 
-        group.members.forEach((id: string) => { 
-          const ui = finalData.findIndex(d => d.id === id); 
-          if (ui === -1) return; 
-          finalData[ui].weeklyRank = startRank; 
-          
-          finalData[ui].weeklyFP = (isWeekClosed && finalData[ui].weeklyFantasyHistory?.[selectedWeek] !== undefined) 
-            ? finalData[ui].weeklyFantasyHistory[selectedWeek] 
-            : netFP; 
-
-          finalData[ui].displayRank = (!isWeekClosed && finalData[ui].confidenceScore === 0) ? 1 : startRank; 
-        });
-
-        processedCount += group.members.length;
+    // 2. Sort: Points (descending), Tiebreaker Diff (ascending)
+    processed.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.tbDiff !== b.tbDiff) return a.tbDiff - b.tbDiff;
+      return String(a.lastName).localeCompare(String(b.lastName));
     });
 
-    return finalData;
-  }, [allUsers, globalSettings, resultsSelectedWeek, resultsGames, isWeekClosed]);
+    // 3. Apply Equal Tie-Split Payout Engine
+    const payouts = globalSettings?.fpPayouts || [77, 67, 56, 46, 31, 28, 25, 20];
+    calculateTiedPayouts(processed, payouts);
+
+    // 4. Return finalized user rows
+    return processed.map((u) => {
+      const grossVal = u.grossPayout || 0;
+      const calculatedNet = grossVal > 0 ? grossVal - 12 : -12;
+      const netVal = u.savedNet !== undefined ? u.savedNet : calculatedNet;
+
+      return {
+        ...u,
+        weeklyFP: grossVal,
+        netEarnings: netVal,
+        weeklyPicks: u.picks?.[resultsSelectedWeek] || {}
+      };
+    });
+  }, [allUsers, globalSettings, resultsSelectedWeek, resultsGames, games]);
 
   const knockoutTrackerData = useMemo(() => {
     if (!globalSettings || !allUsers.length) return [];
@@ -2422,12 +2903,37 @@ const isLiveSeasonWeekLocked = isWeekLocked;
 
   const statusSummary = useMemo(() => {
     if (!allUsers || !allUsers.length) return { completed: [], inProgress: [], notStarted: [] };
-    const statuses = allUsers.filter(u => u.playsConfidence).map(user => {
-      const picksCount = (games || []).filter((g: any) => user.picks?.[selectedWeek]?.[g.id] && user.ranks?.[selectedWeek]?.[g.id]).length;
-      return { ...user, status: (picksCount === totalGames && totalGames > 0 && (user.tiebreakers?.[selectedWeek] || '').toString().trim() !== '') ? 'Completed' : (picksCount > 0 ? 'In Progress' : 'Not Started') };
-    });
-    return { notStarted: statuses.filter(u => u.status === 'Not Started'), inProgress: statuses.filter(u => u.status === 'In Progress'), completed: statuses.filter(u => u.status === 'Completed') };
-  }, [allUsers, totalGames, selectedWeek, games]);
+
+    const targetWeek = selectedWeek || liveSeasonWeek;
+    const weekGames = globalSettings?.games?.[targetWeek] || games || [];
+
+    const statuses = allUsers
+      .filter((u: any) => u.playsConfidence)
+      .map((user: any) => {
+        const userPicks = user.picks?.[targetWeek] || {};
+        const userRanks = user.ranks?.[targetWeek] || {};
+        const hasTB = String(user.tiebreakers?.[targetWeek] || '').trim() !== '';
+
+        const picksCount = weekGames.filter((g: any) => {
+          const p = userPicks[g.id] || userPicks[String(g.id)];
+          const r = userRanks[g.id] || userRanks[String(g.id)];
+          return p && r;
+        }).length;
+
+        const isComplete = weekGames.length > 0 && picksCount === weekGames.length && hasTB;
+
+        return {
+          ...user,
+          status: isComplete ? 'Completed' : picksCount > 0 ? 'In Progress' : 'Not Started'
+        };
+      });
+
+    return {
+      notStarted: statuses.filter((u) => u.status === 'Not Started'),
+      inProgress: statuses.filter((u) => u.status === 'In Progress'),
+      completed: statuses.filter((u) => u.status === 'Completed')
+    };
+  }, [allUsers, globalSettings, selectedWeek, liveSeasonWeek, games]);
 
   const knockoutStatusSummary = useMemo(() => {
     if (!globalSettings || !allUsers || !allUsers.length) return { submitted: [], waiting: [] };
@@ -2462,24 +2968,41 @@ const isLiveSeasonWeekLocked = isWeekLocked;
   const handleConfidenceQuickPicks = async (forAll = false) => { 
     const usersToUpdate = forAll ? allUsers.filter(u => u.playsConfidence) : [currentUser]; 
     const batch = writeBatch(db); 
+    
+    // 🔒 FIX: Target picksSelectedWeek (the week in your active dropdown)
+    const targetWeek = picksSelectedWeek; 
+    const targetGames = pickGames.length > 0 ? pickGames : games;
+
     usersToUpdate.forEach(u => { 
-      const newPicks = { ...(u.picks[selectedWeek] || {}) }, newRanks = { ...(u.ranks[selectedWeek] || {}) }, availableRanks = Array.from({ length: totalGames }, (_, i) => i + 1); 
+      const newPicks = { ...(u.picks?.[targetWeek] || {}) };
+      const newRanks = { ...(u.ranks?.[targetWeek] || {}) };
+      const availableRanks = Array.from({ length: targetGames.length }, (_, i) => i + 1); 
+
+      // Shuffle ranks 1 through N
       for (let i = availableRanks.length - 1; i > 0; i--) { 
         const j = Math.floor(Math.random() * (i + 1)); 
         [availableRanks[i], availableRanks[j]] = [availableRanks[j], availableRanks[i]]; 
       } 
-      games.forEach((g: any, idx: number) => { 
-        newPicks[g.id] = Math.random() > 0.5 ? g.away : g.home; 
-        newRanks[g.id] = availableRanks[idx]; 
+
+      targetGames.forEach((g: any, idx: number) => { 
+        const gameIdKey = g.id;
+        newPicks[gameIdKey] = Math.random() > 0.5 ? g.away : g.home; 
+        newRanks[gameIdKey] = availableRanks[idx]; 
       }); 
+
       batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), { 
-        [`picks.${selectedWeek}`]: newPicks, 
-        [`ranks.${selectedWeek}`]: newRanks, 
-        [`tiebreakers.${selectedWeek}`]: String(Math.floor(Math.random() * 30) + 30) 
+        [`picks.${targetWeek}`]: newPicks, 
+        [`ranks.${targetWeek}`]: newRanks, 
+        [`tiebreakers.${targetWeek}`]: String(Math.floor(Math.random() * 30) + 30) 
       }); 
     }); 
+
     setIsSaving(true); 
-    try { await batch.commit(); } catch (e) { console.error(e); } 
+    try { 
+      await batch.commit(); 
+    } catch (e) { 
+      console.error("Quick Picks Error:", e); 
+    } 
     setIsSaving(false); 
     setHasSaved(true); 
     setTimeout(() => setHasSaved(false), 2000); 
@@ -3010,13 +3533,43 @@ function ensureAutoTiebreaker(gamesList: any[]) {
       })
     );
   };
-  const updateUserPicks = (userId: string, gameId: number, team: string) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), { [`picks.${picksSelectedWeek}`]: { ...(allUsers.find(u => u.id === userId)?.picks?.[picksSelectedWeek] || {}), [gameId]: team } }));
-const updateUserRank = (userId: string, gameId: number, rankValue: string) => {
-  const currentWeekRanks = { ...(allUsers.find(u => u.id === userId)?.ranks?.[picksSelectedWeek] || {}) };
-  if (!rankValue || rankValue === "") delete currentWeekRanks[gameId];
-  else { const newRank = parseInt(rankValue, 10); const existingGameId = Object.keys(currentWeekRanks).find(id => currentWeekRanks[id] === newRank); if (existingGameId) delete currentWeekRanks[existingGameId]; currentWeekRanks[gameId] = newRank; }
-  trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), { [`ranks.${picksSelectedWeek}`]: currentWeekRanks }));
-};
+  const updateUserPicks = (userId: string, gameId: number | string, team: string) => {
+    const targetUser = allUsers.find((u) => u.id === userId);
+    const existingPicks = targetUser?.picks?.[picksSelectedWeek] || {};
+  
+    trackSaving(
+      updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), {
+        [`picks.${picksSelectedWeek}`]: {
+          ...existingPicks,
+          [gameId]: team
+        }
+      })
+    );
+  };
+  const updateUserRank = (userId: string, gameId: number | string, rankValue: string) => {
+    const targetUser = allUsers.find((u) => u.id === userId);
+    const currentWeekRanks = { ...(targetUser?.ranks?.[picksSelectedWeek] || {}) };
+
+    if (!rankValue || rankValue === '') {
+      delete currentWeekRanks[gameId];
+      delete currentWeekRanks[String(gameId)];
+    } else {
+      const newRank = parseInt(rankValue, 10);
+      // Remove rank if assigned to another game
+      Object.keys(currentWeekRanks).forEach((id) => {
+        if (parseInt(String(currentWeekRanks[id]), 10) === newRank) {
+          delete currentWeekRanks[id];
+        }
+      });
+      currentWeekRanks[gameId] = newRank;
+    }
+
+    trackSaving(
+      updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), {
+        [`ranks.${picksSelectedWeek}`]: currentWeekRanks
+      })
+    );
+  };
   const handleEditUser = (userId: string, field: string, val: any) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', userId), { [field]: val }));
   
   const saveInlineUserEdit = async (userId: string) => { 
@@ -3203,9 +3756,12 @@ const handleResetKnockout = async () => {
     const batch = writeBatch(db);
 
     // 1. Process Confidence deadbeats
-    allUsers.forEach(u => {
+    allUsers.forEach((u) => {
       if (!u.playsConfidence) return;
-      const fullyPicked = games.filter((g: any) => (u.picks?.[selectedWeek] || {})[g.id] && (u.ranks?.[selectedWeek] || {})[g.id]).length === totalGames && String(u.tiebreakers?.[selectedWeek] || '').trim() !== '';
+      const fullyPicked =
+        games.filter((g: any) => (u.picks?.[selectedWeek] || {})[g.id] && (u.ranks?.[selectedWeek] || {})[g.id]).length === totalGames &&
+        String(u.tiebreakers?.[selectedWeek] || '').trim() !== '';
+
       if (!fullyPicked) {
         const dp: any = {}, dr: any = {};
         games.forEach((g: any) => {
@@ -3220,20 +3776,20 @@ const handleResetKnockout = async () => {
       }
     });
 
-    // 2. Safely evaluate Knockout picks without premature elimination
-    allUsers.forEach(u => {
+    // 2. Process Knockout statuses safely
+    allUsers.forEach((u) => {
       if (u.playsKnockout) {
         const pick = u.knockoutPicks?.[selectedWeek];
         let status = 'Undecided';
 
         if (!pick) {
-          status = 'No Pick'; // Only mark No Pick if nothing was selected
+          status = 'No Pick';
         } else {
           const game = games.find((g: any) => g.away === pick || g.home === pick);
           if (game && game.status === 'final') {
             status = game.winner === 'TIE' ? 'Loser' : (game.winner === pick ? 'Winner' : 'Loser');
           } else {
-            status = 'Alive'; // Keep alive while game is upcoming/in-progress
+            status = 'Alive';
           }
         }
 
@@ -3243,7 +3799,7 @@ const handleResetKnockout = async () => {
       }
     });
 
-    // 3. Update week state
+    // 3. Lock week state
     batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
       [`weekStates.${selectedWeek}`]: 'locked'
     });
@@ -3259,62 +3815,56 @@ const handleResetKnockout = async () => {
     setTimeout(() => setHasSaved(false), 2000);
     setDeadbeatsToConfirm(null);
   };
+
+  // 📍 2. DIRECT CLOSE WEEK (ADMIN ACTION) 📍
   const handleCloseWeek = async () => {
     setIsSaving(true);
     try {
       const batch = writeBatch(db);
-  
-      // 1. Get official tiebreaker total points from global settings
       const actualTB = globalSettings?.actualTiebreakers?.[selectedWeek] ?? 0;
-  
-      // 2. Calculate actual confidence points for each user for the selected week
       const standardMaxPossible = (games || []).reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
-  
-      const sortedTrackerData = [...weeklyTrackerData].map(u => {
+
+      // A. Process and sort scores
+      const sortedTrackerData = [...weeklyTrackerData].map((u) => {
         const userPicks = u.picks?.[selectedWeek] || {};
         const userRanks = u.ranks?.[selectedWeek] || {};
         const userTB = parseInt(u.tiebreakers?.[selectedWeek] || '0', 10);
-  
-        // Check deadbeat status
-        const isDeadbeat = u.tiebreakers?.[selectedWeek] === '0' || 
+
+        const isDeadbeat =
+          u.tiebreakers?.[selectedWeek] === '0' ||
           ((games || []).length > 0 && (games || []).every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
-  
+
         const userMaxPossible = isDeadbeat ? (games || []).length * 5 : standardMaxPossible;
-  
-        // Calculate points lost on incorrect picks
+
         const pointsLost = (games || []).reduce((lost: number, g: any) => {
           const pick = userPicks[g.id];
           const rank = parseInt(userRanks[g.id] || 0, 10);
           if (!pick || !rank) return lost;
-  
+
           if (g.status === 'final' && g.winner && pick !== g.winner) {
             return lost + rank;
           }
           return lost;
         }, 0);
-  
+
         const calculatedScore = userMaxPossible - pointsLost;
         const tbDiff = Math.abs(userTB - actualTB);
-  
+
         return {
           ...u,
           score: calculatedScore,
-          tbDiff: tbDiff
+          tbDiff
         };
       });
-  
-      // 3. STRICT SORT: Points FIRST (descending), Tiebreaker SECOND (closest diff ascending)
+
+      // Sort: Points First (descending), Tiebreaker Difference Second (ascending)
       sortedTrackerData.sort((a, b) => {
-        if (b.score !== a.score) {
-          return b.score - a.score; // Higher confidence points win
-        }
-        if (a.tbDiff !== b.tbDiff) {
-          return a.tbDiff - b.tbDiff; // Smaller tiebreaker difference wins on ties
-        }
+        if (b.score !== a.score) return b.score - a.score;
+        if (a.tbDiff !== b.tbDiff) return a.tbDiff - b.tbDiff;
         return String(a.lastName || '').localeCompare(String(b.lastName || ''));
       });
-  
-      // 4. Assign Rankings
+
+      // Assign Rankings
       let currentRank = 1;
       sortedTrackerData.forEach((player, idx) => {
         if (idx > 0) {
@@ -3325,31 +3875,26 @@ const handleResetKnockout = async () => {
         }
         player.calculatedRank = currentRank;
       });
-  
-      // 5. Calculate Payouts based on league settings
-      const weeklyPot = globalSettings?.weeklyPot || (allUsers.length * (globalSettings?.weeklyDues || 10));
-      const firstPayout = globalSettings?.payouts?.first ?? Math.round(weeklyPot * 0.6);
-      const secondPayout = globalSettings?.payouts?.second ?? Math.round(weeklyPot * 0.3);
-      const thirdPayout = globalSettings?.payouts?.third ?? Math.round(weeklyPot * 0.1);
-  
-      const payoutsByRank: { [key: number]: number } = {
-        1: firstPayout,
-        2: secondPayout,
-        3: thirdPayout
-      };
-  
-      // 6. Save accurate calculated scores and payouts to Firestore
-      sortedTrackerData.forEach(u => {
-        const prizeWon = payoutsByRank[u.calculatedRank] || 0;
-  
+
+      // B. Fetch Gross Payout Matrix
+      const activeCount = allUsers.filter((u) => u.playsConfidence).length;
+      const matrix = calculateFanaticsPayouts(activeCount);
+      const grossPayouts = globalSettings?.fpPayouts || matrix.weeklyGross;
+
+      // C. Record Net Earnings to Firestore (-$12 for rank 9+, Gross - $12 for top 8)
+      sortedTrackerData.forEach((u) => {
+        const playerRank = u.calculatedRank || 99;
+        const grossAward = playerRank <= 8 ? (grossPayouts[playerRank - 1] || 0) : 0;
+        const netEarnings = grossAward > 0 ? grossAward - 12 : -12;
+
         batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), {
-          [`weeklyFantasyHistory.${selectedWeek}`]: prizeWon,
+          [`weeklyFantasyHistory.${selectedWeek}`]: netEarnings,
           [`weeklyConfidenceHistory.${selectedWeek}`]: u.score
         });
       });
-  
-      // 7. Process Knockout Pool Statuses
-      allUsers.forEach(u => {
+
+      // D. Process Knockout Pool Statuses
+      allUsers.forEach((u) => {
         if (u.playsKnockout) {
           const pick = u.knockoutPicks?.[selectedWeek];
           let status = 'No Pick';
@@ -3366,12 +3911,12 @@ const handleResetKnockout = async () => {
           });
         }
       });
-  
-      // 8. Lock/Close the week in global pool settings
+
+      // E. Lock/Close the week state
       batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
         [`weekStates.${selectedWeek}`]: 'closed'
       });
-  
+
       await batch.commit();
       setHasSaved(true);
       setTimeout(() => setHasSaved(false), 2000);
@@ -3628,20 +4173,36 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 
 {activeTab === 'c-tracker' && (
   <div className="space-y-6 max-w-[1400px] mx-auto">
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex items-center justify-between">
-      <WeekSelector week={resultsSelectedWeek} setWeek={setResultsSelectedWeek} maxActiveWeeks={maxActiveWeeks} />
-      {!isWeekLocked && isAdmin && !adminForceReveal && <button onClick={() => setAdminForceReveal(true)} className="px-6 py-2 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase tracking-widest shadow-xl hover:scale-105 transition-all text-[10px]">Admin Peek</button>}
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="flex items-center gap-3 w-full sm:w-auto">
+        <WeekSelector week={resultsSelectedWeek} setWeek={setResultsSelectedWeek} maxActiveWeeks={maxActiveWeeks} />
+        {resultsSelectedWeek < liveSeasonWeek && (
+          <span className="bg-amber-100 text-amber-900 border border-amber-300 text-xs sm:text-sm font-black uppercase italic px-4 py-2 rounded-xl">
+            ⏮️ {getDisplayWeekLabel(resultsSelectedWeek)} Settled View
+          </span>
+        )}
+      </div>
+
+      {!isWeekLocked && isAdmin && !adminForceReveal && (
+        <button 
+          onClick={() => setAdminForceReveal(true)} 
+          className="px-6 py-2.5 bg-slate-900 text-[#FFB81C] rounded-xl font-black italic uppercase tracking-widest shadow-xl hover:scale-105 transition-all text-xs"
+        >
+          Admin Peek
+        </button>
+      )}
     </div>
+
     <LiveScoreTicker games={resultsGames} />
     <ConfidenceTrackerBoard 
-        data={weeklyTrackerData} 
-        games={resultsGames} 
-        week={resultsSelectedWeek} 
-        isWeekComplete={globalSettings?.weekStates?.[resultsSelectedWeek] === 'closed'} 
-        currentUser={currentUser} 
-        isWeekLocked={globalSettings?.weekStates?.[resultsSelectedWeek] === 'locked' || globalSettings?.weekStates?.[resultsSelectedWeek] === 'closed'} 
-        adminForceReveal={adminForceReveal} 
-        globalSettings={globalSettings}
+      data={weeklyTrackerData} 
+      games={resultsGames} 
+      week={resultsSelectedWeek} 
+      isWeekComplete={globalSettings?.weekStates?.[resultsSelectedWeek] === 'closed'} 
+      currentUser={currentUser} 
+      isWeekLocked={globalSettings?.weekStates?.[resultsSelectedWeek] === 'locked' || globalSettings?.weekStates?.[resultsSelectedWeek] === 'closed'} 
+      adminForceReveal={adminForceReveal} 
+      globalSettings={globalSettings}
     />
   </div>
 )}
@@ -3686,16 +4247,20 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
   />
 )}
 
-        {activeTab === 'admin' && isAdmin && (
+{/* === ISOLATED ADMIN TAB === */}{/* === FULLY RESTORED ADMIN TAB === */}
+{/* === ADMIN TAB === */}
+{activeTab === 'admin' && isAdmin && (
           <div className="space-y-6 max-w-[1200px] mx-auto">
+            {/* ADMIN SUB-NAV BAR */}
             <div className="flex bg-white rounded-2xl shadow-md border border-slate-200 p-1.5 mb-6 overflow-x-auto scrollbar-hide">
               <AdminNavButton icon={PieChart} label="Pick Status" active={adminTab === 'status'} onClick={() => setAdminTab('status')} />
               <AdminNavButton icon={UserCog} label="Manage Users" active={adminTab === 'users'} onClick={() => setAdminTab('users')} />
               <AdminNavButton icon={ListChecks} label="Manage Games" active={adminTab === 'games'} onClick={() => setAdminTab('games')} />
               <AdminNavButton icon={DollarSign} label="Financials" active={adminTab === 'financials'} onClick={() => setAdminTab('financials')} />
               <AdminNavButton icon={Settings} label="Site Settings" active={adminTab === 'settings'} onClick={() => setAdminTab('settings')} />
-          </div>
-            
+            </div>
+
+            {/* 1. PICK STATUS SUB-TAB */}
             {adminTab === 'status' && (
               <div className="space-y-10 bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b-2 border-slate-100 pb-6">
@@ -3703,11 +4268,28 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                   
                   <div className="flex flex-wrap gap-2">
                     <button 
+                      onClick={() => handleConfidenceQuickPicks(true)} 
+                      disabled={isSaving}
+                      className="px-5 py-3 bg-[#FFB81C] text-slate-900 rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-amber-400 transition-all flex items-center gap-2"
+                    >
+                      <Zap className="w-4 h-4 text-slate-900" /> Auto-Fill Quick Picks (All)
+                    </button>
+
+                    <button 
+                      onClick={() => handleKnockoutQuickPick(true)} 
+                      disabled={isSaving}
+                      className="px-5 py-3 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-red-700 transition-all flex items-center gap-2"
+                    >
+                      <Skull className="w-4 h-4 text-white" /> Quick Pick KnockOut (All)
+                    </button>
+
+                    <button 
                       onClick={handleCopyMissingEmails} 
                       className="px-5 py-3 bg-slate-900 text-[#FFB81C] rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-slate-800 transition-all flex items-center gap-2"
                     >
                       <FileText className="w-4 h-4" /> Copy Email List ({getMissingEmailsList().length})
                     </button>
+                    
                     <button 
                       onClick={handleEmailReminders} 
                       className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-indigo-700 transition-all flex items-center gap-2"
@@ -3733,11 +4315,30 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                   </div>
                 )}
 
-                <div><h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 mb-4 flex items-center gap-2"><CalendarDays className="w-6 h-6 text-[#FFB81C]" /> Fanatics Pick Status</h3><div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><StatusColumn title="Not Started" count={(statusSummary?.notStarted || []).length} users={statusSummary?.notStarted || []} color="slate" icon={UserMinus} onOverride={(id: string) => { setOverrideUserId(id); setActiveTab('confidence'); }} /><StatusColumn title="In Progress" count={(statusSummary?.inProgress || []).length} users={statusSummary?.inProgress || []} color="blue" icon={Play} onOverride={(id: string) => { setOverrideUserId(id); setActiveTab('confidence'); }} /><StatusColumn title="Completed" count={(statusSummary?.completed || []).length} users={statusSummary?.completed || []} color="green" icon={CheckCircle} onOverride={(id: string) => { setOverrideUserId(id); setActiveTab('confidence'); }} /></div></div>
-                <div className="pt-8 border-t-2 border-slate-100"><h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 mb-4 flex items-center gap-2"><Skull className="w-6 h-6 text-[#FFB81C]" /> KnockOut Pick Status</h3><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><StatusColumn title="Waiting on Pick" count={(knockoutStatusSummary?.waiting || []).length} users={knockoutStatusSummary?.waiting || []} color="slate" icon={Clock} onOverride={(id: string) => { setOverrideUserId(id); setActiveTab('knockout'); }} /><StatusColumn title="Pick Submitted" count={(knockoutStatusSummary?.submitted || []).length} users={knockoutStatusSummary?.submitted || []} color="green" icon={CheckCircle} onOverride={(id: string) => { setOverrideUserId(id); setActiveTab('knockout'); }} /></div></div>
+                <div>
+                  <h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 mb-4 flex items-center gap-2">
+                    <CalendarDays className="w-6 h-6 text-[#FFB81C]" /> Fanatics Pick Status
+                  </h3>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <StatusColumn title="Not Started" count={(statusSummary?.notStarted || []).length} users={statusSummary?.notStarted || []} color="slate" icon={UserMinus} onOverride={(id: string) => { setOverrideUserId(id); setActiveTab('confidence'); }} />
+                    <StatusColumn title="In Progress" count={(statusSummary?.inProgress || []).length} users={statusSummary?.inProgress || []} color="blue" icon={Play} onOverride={(id: string) => { setOverrideUserId(id); setActiveTab('confidence'); }} />
+                    <StatusColumn title="Completed" count={(statusSummary?.completed || []).length} users={statusSummary?.completed || []} color="green" icon={CheckCircle} onOverride={(id: string) => { setOverrideUserId(id); setActiveTab('confidence'); }} />
+                  </div>
+                </div>
+
+                <div className="pt-8 border-t-2 border-slate-100">
+                  <h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 mb-4 flex items-center gap-2">
+                    <Skull className="w-6 h-6 text-[#FFB81C]" /> KnockOut Pick Status
+                  </h3>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <StatusColumn title="Waiting on Pick" count={(knockoutStatusSummary?.waiting || []).length} users={knockoutStatusSummary?.waiting || []} color="slate" icon={Clock} onOverride={(id: string) => { setOverrideUserId(id); setActiveTab('knockout'); }} />
+                    <StatusColumn title="Pick Submitted" count={(knockoutStatusSummary?.submitted || []).length} users={knockoutStatusSummary?.submitted || []} color="green" icon={CheckCircle} onOverride={(id: string) => { setOverrideUserId(id); setActiveTab('knockout'); }} />
+                  </div>
+                </div>
               </div>
             )}
 
+            {/* 2. MANAGE USERS SUB-TAB */}
             {adminTab === 'users' && (
               <div className="space-y-6">
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6">
@@ -3747,636 +4348,369 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-4 items-end">
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">First Name</label>
-                      <input 
-                        value={newUserForm.firstName} 
-                        onChange={e => {
-                          const fn = e.target.value;
-                          const autoUser = (fn.charAt(0) + newUserForm.lastName).toLowerCase().replace(/[^a-z0-9]/g, '');
-                          setNewUserForm({...newUserForm, firstName: fn, username: autoUser} as any);
-                        }} 
-                        className="w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#FFB81C]" 
-                        placeholder="Andy" 
-                      />
+                      <input value={newUserForm.firstName} onChange={e => setNewUserForm({...newUserForm, firstName: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#FFB81C]" placeholder="First" />
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Last Name</label>
-                      <input 
-                        value={newUserForm.lastName} 
-                        onChange={e => {
-                          const ln = e.target.value;
-                          const autoUser = (newUserForm.firstName.charAt(0) + ln).toLowerCase().replace(/[^a-z0-9]/g, '');
-                          setNewUserForm({...newUserForm, lastName: ln, username: autoUser} as any);
-                        }} 
-                        className="w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#FFB81C]" 
-                        placeholder="Smith" 
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Username</label>
-                      <input 
-                        value={(newUserForm as any).username || ''} 
-                        onChange={e => setNewUserForm({...newUserForm, username: e.target.value.toLowerCase()} as any)} 
-                        className="w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#FFB81C]" 
-                        placeholder="asmith" 
-                      />
+                      <input value={newUserForm.lastName} onChange={e => setNewUserForm({...newUserForm, lastName: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#FFB81C]" placeholder="Last" />
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Email</label>
-                      <input value={newUserForm.email} onChange={e => setNewUserForm({...newUserForm, email: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#FFB81C]" placeholder="andy@example.com" />
+                      <input value={newUserForm.email} onChange={e => setNewUserForm({...newUserForm, email: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#FFB81C]" placeholder="Email" />
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">System Role</label>
-                      <select 
-                        value={newUserForm.role || 'user'} 
-                        onChange={e => setNewUserForm({...newUserForm, role: e.target.value})} 
-                        className="w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#FFB81C] bg-white cursor-pointer"
-                      >
-                        <option value="user">User</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    </div>
-                    <button onClick={handleAddUser} className="w-full bg-slate-900 text-[#FFB81C] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest shadow-lg hover:scale-105 transition-all">Add Player</button>
+                    <button onClick={handleAddUser} className="w-full bg-slate-900 text-[#FFB81C] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest shadow-lg">Add Player</button>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-black uppercase italic text-slate-900 flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-[#FFB81C]" /> Bulk Player Importer (CSV / Text)
-                      </h3>
-                      <p className="text-xs text-slate-500 font-bold mt-1">
-                        Paste comma-separated entries in format: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-800">FirstName, LastName, Nickname, Email, PaymentStatus</code>
-                      </p>
-                    </div>
-                  </div>
-
-                  <textarea
-                    id="bulkUserCsvInput"
-                    placeholder={`John, Smith, Big John, john@example.com, paid\nJane, Doe, Queen, jane@example.com, unpaid`}
-                    className="w-full h-32 bg-slate-50 border-2 border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-800 outline-none focus:border-[#FFB81C] mb-3"
-                  />
-
-                  <div className="flex justify-end gap-3">
-                    <button
-                      disabled={isSaving}
-                      onClick={() => {
-                        const el = document.getElementById('bulkUserCsvInput') as HTMLTextAreaElement;
-                        if (el) handleBulkImportUsers(el.value);
-                      }}
-                      className="bg-slate-900 text-[#FFB81C] hover:bg-slate-800 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
-                    >
-                      <UserPlus className="w-4 h-4" /> Import Player Roster
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden overflow-x-auto">
-                  <table className="w-full text-left min-w-[1250px]">
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                  <table className="w-full text-left">
                     <thead>
-                    <tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]">
-  <th className="p-5">Player Identity</th>
-  <th className="p-5">Email Address</th>
-  <th className="p-5 text-center">Last Active</th>
-  <th className="p-5 text-center">Security Status</th>
-  <th className="p-5 text-center">System Role</th>
-  <th className="p-5 text-center">Payment Status</th>
-  <th className="p-5 text-center">Fanatics</th>
-  <th className="p-5 text-center">KnockOut</th>
-  <th className="p-5 text-right">Actions</th>
-</tr>
+                      <tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]">
+                        <th className="p-5">Player Identity</th>
+                        <th className="p-5">Email Address</th>
+                        <th className="p-5 text-center">System Role</th>
+                        <th className="p-5 text-center">Payment Status</th>
+                        <th className="p-5 text-center">Fanatics</th>
+                        <th className="p-5 text-center">KnockOut</th>
+                        <th className="p-5 text-right">Actions</th>
+                      </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {(allUsers || []).map(user => {
-                        const isEditing = editingUserId === user.id;
-                        if (isEditing) return <EditUserRow key={user.id} user={user} form={editUserForm} setForm={setEditUserForm} onCancel={() => setEditingUserId(null)} onSave={saveInlineUserEdit} />;
-                        return (
-                          <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-  <td className="p-5 font-black text-slate-900 text-base">
-    {formatFullName(user)}
-    <span className="block text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">@{String(user.username || '')}</span>
-  </td>
-  <td className="p-5 font-medium text-slate-600 text-sm">{String(user.email || 'No Email')}</td>
-  
-  {/* Last Login Time */}
-  <td className="p-5 text-center font-mono text-xs text-slate-600">
-    {user.lastLoginTime 
-      ? new Date(user.lastLoginTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-      : <span className="text-slate-300 font-bold italic">Never</span>
-    }
-  </td>
-
- {/* Security / Lock Status */}
- <td className="p-5 text-center whitespace-nowrap">
-    {(user.isLocked || (user.failedLogins >= 5)) ? (
-      <button
-        onClick={async () => {
-          setIsSaving(true);
-          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', user.id), {
-            isLocked: false,
-            failedLogins: 0
-          });
-          setIsSaving(false);
-          alert(`Unlocked account for ${user.firstName}!`);
-        }}
-        className="bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black uppercase px-2.5 py-1 rounded-full shadow-sm animate-pulse whitespace-nowrap"
-        title="Click to unlock account"
-      >
-        🔒 Locked ({user.failedLogins || 0} failed)
-      </button>
-    ) : user.requiresPasswordChange ? (
-      <span className="bg-amber-100 text-amber-800 border border-amber-300 text-[9px] font-black px-2.5 py-1 rounded-full uppercase whitespace-nowrap">
-        🔑 Reset Req.
-      </span>
-    ) : (
-      <span className="bg-emerald-100 text-emerald-700 border border-emerald-300 text-[9px] font-black px-2.5 py-1 rounded-full uppercase whitespace-nowrap">
-        Active
-      </span>
-    )}
-  </td>
-                            <td className="p-5 text-center">
-                              <select
-                                value={user.role || 'user'}
-                                onChange={(e) => handleEditUser(user.id, 'role', e.target.value)}
-                                className={`border rounded-xl px-2.5 py-1 text-xs font-black uppercase tracking-wider outline-none cursor-pointer ${
-                                  user.role === 'admin' ? 'bg-purple-100 text-purple-800 border-purple-300' : 'bg-slate-50 text-slate-600 border-slate-200'
-                                }`}
-                              >
-                                <option value="user">User</option>
-                                <option value="admin">Admin</option>
-                              </select>
-                            </td>
-                            <td className="p-5 text-center"><select value={user.paymentStatus || 'unpaid'} onChange={(e) => handleEditUser(user.id, 'paymentStatus', e.target.value)} className={`border border-slate-200 rounded p-1 text-xs font-bold uppercase tracking-wider outline-none cursor-pointer ${(user.paymentStatus || 'unpaid') === 'paid' ? 'bg-green-50 text-green-700' : (user.paymentStatus || 'unpaid') === 'unpaid' ? 'bg-orange-50 text-orange-700' : 'bg-red-600 text-white'}`}><option value="paid">Paid</option><option value="unpaid">Unpaid</option><option value="disqualified">Disqualified</option></select></td>
-                            <td className="p-5 text-center"><input type="checkbox" checked={user.playsConfidence} onChange={(e) => handleEditUser(user.id, 'playsConfidence', e.target.checked)} className="w-5 h-5 accent-blue-600 cursor-pointer" /></td>
-                            <td className="p-5 text-center"><input type="checkbox" checked={user.playsKnockout} onChange={(e) => handleEditUser(user.id, 'playsKnockout', e.target.checked)} className="w-5 h-5 accent-[#FFB81C] cursor-pointer" /></td>
-                            <td className="p-5 text-right flex justify-end gap-2"><button onClick={() => { setEditingUserId(user.id); setEditUserForm(user); }} className="text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-900 hover:text-white transition-all">Edit</button>{confirmDeleteId === user.id ? <button onClick={() => handleDeleteUser(user.id)} className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl bg-red-600 text-white shadow-lg animate-pulse transition-all">Sure?</button> : <button onClick={() => setConfirmDeleteId(user.id)} className="p-2 rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition-all"><Trash2 className="w-4 h-4" /></button>}</td>
-                          </tr>
-                        );
-                      })}
+                      {(allUsers || []).map(user => (
+                        <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-5 font-black text-slate-900 text-base">{formatFullName(user)}</td>
+                          <td className="p-5 font-medium text-slate-600 text-sm">{String(user.email || 'No Email')}</td>
+                          <td className="p-5 text-center font-bold text-xs uppercase">{user.role || 'user'}</td>
+                          <td className="p-5 text-center font-bold text-xs uppercase">{user.paymentStatus || 'unpaid'}</td>
+                          <td className="p-5 text-center"><input type="checkbox" checked={user.playsConfidence} onChange={(e) => handleEditUser(user.id, 'playsConfidence', e.target.checked)} className="w-5 h-5 accent-blue-600" /></td>
+                          <td className="p-5 text-center"><input type="checkbox" checked={user.playsKnockout} onChange={(e) => handleEditUser(user.id, 'playsKnockout', e.target.checked)} className="w-5 h-5 accent-[#FFB81C]" /></td>
+                          <td className="p-5 text-right"><button onClick={() => handleDeleteUser(user.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
               </div>
             )}
 
+            {/* 3. MANAGE GAMES SUB-TAB */}
             {adminTab === 'games' && (
-                <div className="space-y-6">
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                   <AdminLifecycleCard 
-  week={selectedWeek} 
-  status={currentWeekState} 
-  onLock={handleLockWeek} 
-  onClose={handleCloseWeek} 
-  onOpen={handleOpenWeek}
-  onPreviewClose={() => setIsPreviewOpen(true)}
-/>
-                       <AdminWeekCard week={selectedWeek} onChange={(e: any) => setSelectedWeek(Number(e.target.value))} maxActiveWeeks={maxActiveWeeks} />
-                   </div>
-
-                   <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 mt-6">
-                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                       <div>
-                         <h2 className="text-xl font-bold text-slate-900">Manage Season Schedule & Weeks</h2>
-                         <p className="text-sm text-slate-500">
-                           Import schedules week-by-week, flex kickoff times, or clear specific weeks.
-                         </p>
-                       </div>
-                       <button
-                         disabled={isSyncing}
-                         onClick={handleSyncAllWeekTimes}
-                         className="bg-slate-900 hover:bg-slate-800 text-[#FFB81C] text-xs font-black uppercase tracking-widest px-5 py-3 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                       >
-                         {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 text-[#FFB81C]" />}
-                         Sync All Week Times
-                       </button>
-                     </div>
-
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                       {Array.from({ length: 21 }, (_, i) => i + 1).map((wNum) => {
-                         const weekGames = globalSettings?.games?.[wNum] || [];
-                         const gameCount = weekGames.length;
-                         const isPopulated = gameCount > 0;
-                         const weekLabel = wNum <= 3 ? `Preseason W${wNum}` : `Week ${wNum - 3}`;
-
-                         return (
-                           <div 
-                             key={wNum} 
-                             className={`p-4 rounded-xl border transition-all ${
-                               isPopulated 
-                                 ? 'bg-slate-50 border-slate-200 hover:border-slate-300' 
-                                 : 'bg-slate-50/50 border-slate-100 opacity-75'
-                             }`}
-                           >
-                             <div className="flex items-center justify-between mb-2">
-                               <span className="font-bold text-slate-900 text-base">
-                                 {weekLabel}
-                               </span>
-                               <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
-                                 isPopulated ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-slate-200 text-slate-500'
-                               }`}>
-                                 {gameCount} {gameCount === 1 ? 'Game' : 'Games'}
-                               </span>
-                             </div>
-
-                             <p className="text-xs text-slate-400 mb-4 truncate">
-                               {isPopulated ? `First Kickoff: ${weekGames[0]?.date || ''} @ ${weekGames[0]?.time || ''}` : 'No games imported'}
-                             </p>
-
-                             <div className="flex flex-wrap gap-2">
-                               <button
-                                 disabled={isSyncing}
-                                 onClick={() => handleImportSingleWeek(wNum)}
-                                 className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors disabled:opacity-50"
-                               >
-                                 {isPopulated ? 'Re-Import' : 'Import'}
-                               </button>
-
-                               {isPopulated && (
-                                 <>
-                                   <button
-                                     disabled={isSyncing}
-                                     onClick={() => handleSyncWeekTimes(wNum)}
-                                     className="bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors disabled:opacity-50"
-                                     title="Resync game times without resetting picks"
-                                   >
-                                     Sync Times
-                                   </button>
-                                   <button
-                                     disabled={isSyncing}
-                                     onClick={() => handleClearSingleWeek(wNum)}
-                                     className="bg-rose-100 hover:bg-rose-200 text-rose-700 text-xs font-semibold py-2 px-3 rounded-lg transition-colors"
-                                     title="Clear games for this week"
-                                   >
-                                     Clear
-                                   </button>
-                                 </>
-                               )}
-                             </div>
-                           </div>
-                         );
-                       })}
-                     </div>
-                   </div>
-                   
-                   
-                       
-<div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
-    <div>
-        <h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 flex items-center gap-2">
-            <Zap className="w-5 h-5 text-[#FFB81C]" /> Live Scores Sync
-        </h3>
-        <p className="text-sm text-slate-500 font-bold mt-1">Pull live scores and updates for currently loaded games.</p>
-    </div>
-    
-    {/* Buttons + Badge Container stacked vertically */}
-    <div className="flex flex-col items-center md:items-end gap-2 w-full md:w-auto">
-        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-            <button onClick={handleForceFixGames} disabled={isSaving} className="px-6 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-md hover:bg-red-700 disabled:opacity-50 transition-colors w-full sm:w-auto">
-                Force-Fix Duplicates
-            </button>
-            <button onClick={handleSyncScores} disabled={isSyncing} className="px-6 py-3 bg-slate-900 text-[#FFB81C] rounded-xl font-black uppercase text-xs tracking-widest shadow-md hover:bg-slate-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">
-                {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin"/> : 'Sync Live Scores'}
-            </button>
-        </div>
-
-        {/* 📍 PLACED DIRECTLY BELOW THE SYNC BUTTON 📍 */}
-        <AutoSyncStatusBadge globalSettings={globalSettings} />
-    </div>
-</div>
-                  
-
-                   <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                       <div className="p-6 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4"><div><h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 flex items-center gap-2"><ListChecks className="w-5 h-5 text-[#FFB81C]" /> Manage {selectedWeek <= 3 ? `Preseason Week ${selectedWeek}` : `Week ${selectedWeek - 3}`} Games</h3><p className="text-sm text-slate-500 font-bold mt-1">Manually update game statuses, winners, and designated tiebreaker.</p></div></div>
-                       <div className="overflow-x-auto">
-                         <table className="w-full text-left min-w-[600px]">
-                           <thead><tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]"><th className="p-4 font-black tracking-widest">Matchup</th><th className="p-4 font-black tracking-widest text-center">Status</th><th className="p-4 font-black tracking-widest text-right">Game Result</th></tr></thead>
-                           <tbody className="divide-y divide-slate-100">
-                             {(games || []).map((game: any) => (
-                               <tr key={game.id} className="hover:bg-slate-50 transition-colors">
-                                 <td className="p-4 font-black text-slate-900 text-lg">{String(game.awayName)} @ {String(game.homeName)}<div className="text-xs text-slate-400 uppercase font-bold tracking-widest mt-1">{String(game.date)} • {String(game.time)}</div></td>
-                                 <td className="p-4 text-center">
-                                   <div className="flex items-center justify-center gap-3">
-                                     <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-200 transition-colors">
-                                       <input
-                                         type="checkbox"
-                                         checked={!!game.isTiebreaker}
-                                         onChange={async (e) => {
-                                           const isChecked = e.target.checked;
-                                           try {
-                                             const updatedGames = games.map((g: any) => 
-                                               g.id === game.id ? { ...g, isTiebreaker: isChecked } : g
-                                             );
-                                             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-                                               [`games.${selectedWeek}`]: updatedGames
-                                             });
-                                           } catch (err) {
-                                             console.error("Error updating tiebreaker flag:", err);
-                                           }
-                                         }}
-                                         className="rounded border-slate-300 text-[#FFB81C] focus:ring-[#FFB81C]"
-                                       />
-                                       <span>Tiebreaker (*)</span>
-                                     </label>
-                                     <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full ${game.status === 'final' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{String(game.status)}</span>
-                                   </div>
-                                 </td>
-                                 <td className="p-4 text-right"><select value={game.winner === 'TIE' ? 'TIE' : (game.winner ? game.winner : (game.status === 'final' ? 'final-no-winner' : 'upcoming'))} onChange={(e) => updateGameResult(game.id, e.target.value, e.target.value)} className="border-2 rounded-xl px-4 py-2 text-xs font-black uppercase italic tracking-tighter outline-none focus:border-[#FFB81C] bg-white w-full max-w-[200px] cursor-pointer"><option value="upcoming">Upcoming</option><option value={game.away}>{String(game.awayName)} Won</option><option value={game.home}>{String(game.homeName)} Won</option><option value="TIE">Tie Game</option></select></td>
-                               </tr>
-                             ))}
-                           </tbody>
-                         </table>
-                       </div>
-                       <div className="p-6 border-t border-slate-200 bg-slate-50 flex items-center justify-between"><div><h4 className="font-black text-slate-900 uppercase italic">Actual Tiebreaker Points</h4><p className="text-xs text-slate-500 font-medium">Used to calculate closest tiebreaker</p></div><input type="number" className="border-2 border-slate-200 rounded-xl px-4 py-2 text-xl font-black text-center w-32 outline-none focus:border-[#FFB81C]" value={globalSettings?.actualTiebreakers?.[selectedWeek] || ''} onChange={(e) => { updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { [`actualTiebreakers.${selectedWeek}`]: parseInt(e.target.value) || 0 }); }} /></div>
-                   </div>
-                </div>
-            )}
-            {adminTab === 'financials' && (
               <div className="space-y-6">
-                {(() => {
-                  const activePlayers = allUsers.filter(u => u.playsConfidence).length;
-                  let closedWeeksCount = 0;
-                  for (let wk = 4; wk <= 21; wk++) {
-                    if (globalSettings?.weekStates?.[wk] === 'closed') closedWeeksCount++;
-                  }
-
-                  const totalDuesCollected = activePlayers * 12 * closedWeeksCount;
-                  const weeklyPotPerWeek = activePlayers * 7;
-                  const totalWeeklyPotsPaid = weeklyPotPerWeek * closedWeeksCount;
-                  const halfPotAccumulated = activePlayers * 1.75 * closedWeeksCount;
-                  const seasonPotAccumulated = activePlayers * 1.25 * closedWeeksCount;
-                  const partyFundAccumulated = activePlayers * 2.0 * closedWeeksCount;
-
-                  return (
-                    <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-2xl border-b-8 border-[#FFB81C]">
-                      <div className="flex items-center justify-between mb-6">
-                        <div>
-                          <h2 className="text-3xl font-black italic uppercase text-[#FFB81C] flex items-center gap-2">
-                            <DollarSign className="w-8 h-8" /> League Financial Accounting Ledger
-                          </h2>
-                          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">
-                            Calculated across {activePlayers} Active Players &bull; {closedWeeksCount} Finalized Regular Season Weeks
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                        <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 text-center">
-                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Total Dues Collected</span>
-                          <span className="text-2xl font-black italic text-emerald-400 font-mono">${totalDuesCollected}</span>
-                        </div>
-
-                        <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 text-center">
-                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Weekly Pots Paid</span>
-                          <span className="text-2xl font-black italic text-[#FFB81C] font-mono">${totalWeeklyPotsPaid}</span>
-                        </div>
-
-                        <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 text-center">
-                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Half Pots Accrued</span>
-                          <span className="text-2xl font-black italic text-sky-400 font-mono">${Math.round(halfPotAccumulated)}</span>
-                        </div>
-
-                        <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 text-center">
-                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Season Pot Accrued</span>
-                          <span className="text-2xl font-black italic text-purple-400 font-mono">${Math.round(seasonPotAccumulated)}</span>
-                        </div>
-
-                        <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 text-center col-span-2 sm:col-span-1">
-                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Party / Misc Fund</span>
-                          <span className="text-2xl font-black italic text-indigo-400 font-mono">${Math.round(partyFundAccumulated)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                <div className="bg-white border-2 border-slate-100 rounded-3xl p-6 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-black uppercase text-sm text-slate-900 flex items-center gap-2">
-                        <Coins className="w-5 h-5 text-amber-500" /> Rounding & Tie Variance Tracker
-                      </h4>
-                      <p className="text-xs text-slate-500 font-bold mt-1">
-                        Tracks extra dollars absorbed by the house when true ties round up payouts.
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[10px] font-black uppercase text-slate-400 block">Rounding Variance (This Week)</span>
-                      <span className="text-2xl font-black italic text-rose-600 font-mono">
-                        -${weeklyTrackerData.roundingDollarsLost || 0}.00
-                      </span>
-                    </div>
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <AdminLifecycleCard 
+                    week={selectedWeek} 
+                    status={currentWeekState} 
+                    onLock={handleLockWeek} 
+                    onClose={handleCloseWeek} 
+                    onOpen={handleOpenWeek}
+                    onPreviewClose={() => setIsPreviewOpen(true)}
+                    onGenerateRecap={() => setShowWeeklyRecapModal(true)}
+                  />
+                  <AdminWeekCard week={selectedWeek} onChange={(e: any) => setSelectedWeek(Number(e.target.value))} maxActiveWeeks={maxActiveWeeks} />
                 </div>
 
-                <div className="bg-[#FFB81C]/10 p-8 rounded-3xl border-2 border-[#FFB81C]/30 shadow-sm">
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div>
-                      <h3 className="font-black uppercase tracking-widest text-slate-900 text-sm flex items-center gap-2">
-                        <Coins className="w-4 h-4 text-[#FFB81C]" /> Whole-Dollar Payout Auto-Generator
-                      </h3>
-                      <p className="text-xs text-slate-600 font-medium mt-1">
-                        Calculates rounded whole-dollar payouts based on your spreadsheet matrix for the {allUsers.filter(u => u.playsConfidence).length} active Fanatics players.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        const activeCount = allUsers.filter(u => u.playsConfidence).length;
-                        if (activeCount === 0) return alert("No active Fanatics players found!");
-                        
-                        const payouts = calculateFanaticsPayouts(activeCount);
-                        
-                        updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-                          fpPayouts: payouts.weeklyGross,
-                          seasonBonuses: {
-                            firstHalf: payouts.half1Payouts,
-                            secondHalf: payouts.half2Payouts,
-                            overall: payouts.seasonPayouts
-                          }
-                        });
-                        alert(`Generated whole-dollar payouts for ${activeCount} active players!`);
-                      }}
-                      className="bg-slate-900 text-[#FFB81C] px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest shadow-md hover:bg-slate-800 transition-all whitespace-nowrap"
-                    >
-                      Recalculate Matrix ({allUsers.filter(u => u.playsConfidence).length} Players)
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
-                  <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2">
-                    <Coins className="w-4 h-4" /> Weekly FP Gross Payouts (Top 1-8)
-                  </h3>
-                  <div className="grid grid-cols-4 md:grid-cols-8 gap-4">
-                    {(globalSettings?.fpPayouts || Array(8).fill(0)).map((val: any, i: number) => (
-                      <AdminNumberInput key={i} label={`Rank ${i+1}`} value={val} onSave={(newVal: any) => updateFpPayouts(i, newVal)} />
-                    ))}
-                  </div>
-                </div>
-                
-                <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
-                    <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2">
-                      <Trophy className="w-4 h-4" /> Season/Half Payouts (Top 1-8)
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-[#FFB81C]" /> Live Scores Sync
                     </h3>
-                    <div className="flex flex-col gap-8">
-                        {(['firstHalf', 'secondHalf', 'overall']).map(key => {
-                            const bonusesObj = globalSettings?.seasonBonuses || {};
-                            const safeArray = Array.isArray(bonusesObj) ? bonusesObj : (bonusesObj[key === 'firstHalf' ? 'firstHalf' : key === 'secondHalf' ? 'secondHalf' : 'overall'] || Array(8).fill(0));
-                            return (
-                                <div key={key}>
-                                  <label className="block text-[12px] font-black uppercase text-slate-900 border-b-2 border-slate-100 pb-2 mb-3">
-                                    {key === 'firstHalf' ? 'First Half (Weeks 4-12)' : key === 'secondHalf' ? 'Second Half (Weeks 13-21)' : 'Overall Season (Weeks 4-21)'}
-                                  </label>
-                                  <div className="grid grid-cols-4 md:grid-cols-8 gap-4">
-                                    {(safeArray || Array(8).fill(0)).map((val: any, i: number) => (
-                                      <AdminNumberInput key={`${key}-${i}`} label={`Rank ${i+1}`} value={val} onSave={(newVal: any) => updateSeasonBonuses(key, i, newVal)} />
-                                    ))}
-                                  </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                    <p className="text-sm text-slate-500 font-bold mt-1">Pull live scores and updates for currently loaded games.</p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button onClick={handleForceFixGames} disabled={isSaving} className="px-6 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-xs shadow-md">Force-Fix Duplicates</button>
+                    <button onClick={handleSyncScores} disabled={isSyncing} className="px-6 py-3 bg-slate-900 text-[#FFB81C] rounded-xl font-black uppercase text-xs shadow-md">{isSyncing ? 'Syncing...' : 'Sync Live Scores'}</button>
+                  </div>
                 </div>
 
-                <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
-                  <h3 className="font-black uppercase tracking-widest text-slate-900 text-sm mb-2">
-                    Period Settlement & Bonus Payout Actions
-                  </h3>
-                  <p className="text-xs text-slate-500 font-bold mb-6">
-                    Click any period to preview the top 8 standings and dollar awards before finalizing.
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <button
-                      onClick={() => handlePrepareSettlement('firstHalf')}
-                      className="bg-indigo-600 text-white p-4 rounded-2xl font-black uppercase text-xs tracking-wider shadow-md hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2"
-                    >
-                      <Trophy className="w-4 h-4 text-[#FFB81C]" /> Award 1st Half Pot
-                    </button>
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="p-6 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 flex items-center gap-2">
+                        <ListChecks className="w-5 h-5 text-[#FFB81C]" /> Manage {selectedWeek <= 3 ? `Preseason Week ${selectedWeek}` : `Week ${selectedWeek - 3}`} Games
+                      </h3>
+                      <p className="text-sm text-slate-500 font-bold mt-1">Manually update game statuses, winners, and designated tiebreaker.</p>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left min-w-[600px]">
+                      <thead>
+                        <tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]">
+                          <th className="p-4 font-black tracking-widest">Matchup</th>
+                          <th className="p-4 font-black tracking-widest text-center">Status</th>
+                          <th className="p-4 font-black tracking-widest text-right">Game Result</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(resultsGames || games || []).map((game: any) => (
+                          <tr key={game.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-4 font-black text-slate-900 text-lg">
+                              {String(game.awayName || game.away)} @ {String(game.homeName || game.home)}
+                              <div className="text-xs text-slate-400 uppercase font-bold tracking-widest mt-1">{String(game.date)} • {String(game.time)}</div>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="flex items-center justify-center gap-3">
+                                <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-200 transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!game.isTiebreaker}
+                                    onChange={async (e) => {
+                                      const isChecked = e.target.checked;
+                                      try {
+                                        const updatedGames = (resultsGames || games).map((g: any) => 
+                                          g.id === game.id ? { ...g, isTiebreaker: isChecked } : g
+                                        );
+                                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+                                          [`games.${selectedWeek}`]: updatedGames
+                                        });
+                                      } catch (err) {
+                                        console.error("Error updating tiebreaker flag:", err);
+                                      }
+                                    }}
+                                    className="rounded border-slate-300 text-[#FFB81C] focus:ring-[#FFB81C]"
+                                  />
+                                  <span>Tiebreaker (*)</span>
+                                </label>
+                                <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full ${game.status === 'final' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{String(game.status)}</span>
+                              </div>
+                            </td>
+                            <td className="p-4 text-right">
+                              <select value={game.winner === 'TIE' ? 'TIE' : (game.winner ? game.winner : (game.status === 'final' ? 'final-no-winner' : 'upcoming'))} onChange={(e) => updateGameResult(game.id, e.target.value, e.target.value)} className="border-2 rounded-xl px-4 py-2 text-xs font-black uppercase italic tracking-tighter outline-none focus:border-[#FFB81C] bg-white w-full max-w-[200px] cursor-pointer">
+                                <option value="upcoming">Upcoming</option>
+                                <option value={game.away}>{String(game.awayName || game.away)} Won</option>
+                                <option value={game.home}>{String(game.homeName || game.home)} Won</option>
+                                <option value="TIE">Tie Game</option>
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="p-6 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <div>
+                      <h4 className="font-black text-slate-900 uppercase italic">Actual Tiebreaker Points</h4>
+                      <p className="text-xs text-slate-500 font-medium">Used to calculate closest tiebreaker</p>
+                    </div>
+                    <input type="number" className="border-2 border-slate-200 rounded-xl px-4 py-2 text-xl font-black text-center w-32 outline-none focus:border-[#FFB81C]" value={globalSettings?.actualTiebreakers?.[selectedWeek] || ''} onChange={(e) => { updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { [`actualTiebreakers.${selectedWeek}`]: parseInt(e.target.value) || 0 }); }} />
+                  </div>
+                </div>
 
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900">Manage Season Schedule & Weeks</h2>
+                      <p className="text-sm text-slate-500">Import schedules week-by-week, flex kickoff times, or clear specific weeks.</p>
+                    </div>
                     <button
-                      onClick={() => handlePrepareSettlement('secondHalf')}
-                      className="bg-indigo-600 text-white p-4 rounded-2xl font-black uppercase text-xs tracking-wider shadow-md hover:bg-indigo-700 transition-all text-center flex items-center justify-center gap-2"
+                      disabled={isSyncing}
+                      onClick={handleSyncAllWeekTimes}
+                      className="bg-slate-900 hover:bg-slate-800 text-[#FFB81C] text-xs font-black uppercase tracking-widest px-5 py-3 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                      <Trophy className="w-4 h-4 text-[#FFB81C]" /> Award 2nd Half Pot
+                      {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 text-[#FFB81C]" />}
+                      Sync All Week Times
                     </button>
+                  </div>
 
-                    <button
-                      onClick={() => handlePrepareSettlement('overall')}
-                      className="bg-amber-500 text-slate-900 p-4 rounded-2xl font-black uppercase text-xs tracking-wider shadow-md hover:bg-amber-400 transition-all text-center flex items-center justify-center gap-2"
-                    >
-                      <Trophy className="w-4 h-4 text-slate-900" /> Award Overall Season Pot
-                    </button>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Array.from({ length: 21 }, (_, i) => i + 1).map((wNum) => {
+                      const weekGames = globalSettings?.games?.[wNum] || [];
+                      const gameCount = weekGames.length;
+                      const isPopulated = gameCount > 0;
+                      const weekLabel = wNum <= 3 ? `Preseason W${wNum}` : `Week ${wNum - 3}`;
+
+                      return (
+                        <div 
+                          key={wNum} 
+                          className={`p-4 rounded-xl border transition-all ${
+                            isPopulated ? 'bg-slate-50 border-slate-200 hover:border-slate-300' : 'bg-slate-50/50 border-slate-100 opacity-75'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-bold text-slate-900 text-base">{weekLabel}</span>
+                            <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${isPopulated ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-slate-200 text-slate-500'}`}>
+                              {gameCount} {gameCount === 1 ? 'Game' : 'Games'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 mb-4 truncate">
+                            {isPopulated ? `First Kickoff: ${weekGames[0]?.date || ''} @ ${weekGames[0]?.time || ''}` : 'No games imported'}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button disabled={isSyncing} onClick={() => handleImportSingleWeek(wNum)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors disabled:opacity-50">
+                              {isPopulated ? 'Re-Import' : 'Import'}
+                            </button>
+                            {isPopulated && (
+                              <>
+                                <button disabled={isSyncing} onClick={() => handleSyncWeekTimes(wNum)} className="bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors disabled:opacity-50" title="Resync game times without resetting picks">
+                                  Sync Times
+                                </button>
+                                <button disabled={isSyncing} onClick={() => handleClearSingleWeek(wNum)} className="bg-rose-100 hover:bg-rose-200 text-rose-700 text-xs font-semibold py-2 px-3 rounded-lg transition-colors" title="Clear games for this week">
+                                  Clear
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
             )}
 
-{adminTab === 'settings' && (
-  <div className="space-y-6">
-    <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
-      <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-2 flex items-center gap-2">
-        <CalendarDays className="w-4 h-4 text-[#FFB81C]" /> Max Active Pool Weeks
-      </h3>
-      <p className="text-sm text-slate-500 font-bold mb-4">
-        Controls how many weeks players can view and submit picks for in the week selector.
-      </p>
-      <div className="flex items-center gap-4">
-        <input
-          type="number"
-          min="1"
-          max="22"
-          value={globalSettings?.maxActiveWeeks || 18}
-          onChange={async (e) => {
-            const val = parseInt(e.target.value) || 1;
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-              maxActiveWeeks: val
-            });
-          }}
-          className="w-24 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-2 font-black text-slate-900 text-lg outline-none focus:border-[#FFB81C]"
-        />
-        <span className="text-sm font-semibold text-slate-600">
-          Weeks currently accessible to players (1 to {globalSettings?.maxActiveWeeks || 18})
-        </span>
-      </div>
-    </div>
+            {/* 4. FINANCIALS SUB-TAB */}
+            {adminTab === 'financials' && (
+              <div className="space-y-8 max-w-[1400px] mx-auto">
+                {(() => {
+                  const fanaticsPlayers = allUsers.filter(u => u.playsConfidence);
+                  const activeCount = fanaticsPlayers.length;
+                  const maxWeeksVal = globalSettings?.maxActiveWeeks || 18;
+                  const half1Weeks = Math.ceil(maxWeeksVal / 2);
+                  const half2Weeks = Math.floor(maxWeeksVal / 2);
 
-    <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
-      <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2">
-        <Megaphone className="w-4 h-4" /> Global Announcement
-      </h3>
-      <p className="text-xs text-slate-500 font-medium mb-3">
-        This message will appear prominently on every player's Dashboard tab.
-      </p>
-      <textarea 
-        value={globalSettings?.announcement || ''} 
-        onChange={(e) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { announcement: e.target.value }))} 
-        className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-4 font-medium text-slate-900 outline-none focus:border-[#FFB81C] min-h-[100px]" 
-        placeholder="Welcome to Hanover Football Fanatics!" 
-      />
-    </div>
-    
-    <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
-      <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2">
-        <KeyRound className="w-4 h-4 text-[#FFB81C]" /> API-Sports Integration Configuration
-      </h3>
-      <div className="space-y-2">
-        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Secret API Key</label>
-        <input 
-          type="text" 
-          value={globalSettings?.apiSportsKey || ''} 
-          onChange={(e) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { apiSportsKey: e.target.value }))} 
-          className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-4 font-bold text-slate-900 outline-none focus:border-[#FFB81C]" 
-          placeholder="Paste your API-Sports v1 Key here..." 
-        />
-      </div>
-    </div>
+                  let closedWeeksCount = 0;
+                  for (let wk = 1; wk <= maxWeeksVal; wk++) {
+                    if (globalSettings?.weekStates?.[wk] === 'closed') closedWeeksCount++;
+                  }
 
-    <div className="bg-white p-8 rounded-3xl border-4 border-slate-100 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 mt-12">
-      <div className="text-center md:text-left">
-        <h3 className="text-2xl font-black italic uppercase text-slate-900">Reset Fanatics Pool</h3>
-        <p className="text-slate-500 font-medium">Wipes all picks, ranks, tiebreakers, and history for a new season.</p>
-      </div>
-      {!showFanaticsResetConfirm ? (
-        <button onClick={() => setShowFanaticsResetConfirm(true)} className="px-10 py-4 bg-slate-900 text-[#FFB81C] rounded-2xl font-black italic uppercase tracking-tighter flex items-center justify-center gap-3 hover:scale-105 transition-all w-full md:w-auto shadow-lg">
-          <RefreshCw className="w-6 h-6" /> Reset Fanatics
-        </button>
-      ) : (
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-          <button onClick={() => setShowFanaticsResetConfirm(false)} className="px-6 py-4 bg-white text-slate-700 rounded-2xl font-black italic uppercase tracking-tighter hover:bg-slate-100 transition-all w-full sm:w-auto border-2 border-slate-200">
-            Cancel
-          </button>
-          <button onClick={handleResetFanatics} className="px-6 py-4 bg-red-900 text-white rounded-2xl font-black italic uppercase tracking-tighter shadow-xl hover:bg-red-800 transition-all flex items-center justify-center gap-2 w-full sm:w-auto animate-pulse">
-            Confirm Reset
-          </button>
-        </div>
-      )}
-    </div>
+                  const matrix = calculateFanaticsPayouts(activeCount, maxWeeksVal, half1Weeks, half2Weeks);
+                  const totalSeasonDues = activeCount * 12 * maxWeeksVal;
+                  const totalCollectedToDate = activeCount * 12 * closedWeeksCount;
 
-    <div className="bg-white p-8 rounded-3xl border-4 border-slate-100 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
-      <div className="text-center md:text-left">
-        <h3 className="text-2xl font-black italic uppercase text-slate-900">Reset KnockOut Pool</h3>
-        <p className="text-slate-500 font-medium">Completely wipes all KnockOut picks and statuses to restart the pool for the season.</p>
-      </div>
-      {!showResetConfirm ? (
-        <button onClick={() => setShowResetConfirm(true)} className="px-10 py-4 bg-slate-900 text-[#FFB81C] rounded-2xl font-black italic uppercase tracking-tighter flex items-center justify-center gap-3 hover:scale-105 transition-all w-full md:w-auto shadow-lg">
-          <RefreshCw className="w-6 h-6" /> Reset KnockOut Season
-        </button>
-      ) : (
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-          <button onClick={() => setShowResetConfirm(false)} className="px-6 py-4 bg-white text-slate-700 rounded-2xl font-black italic uppercase tracking-tighter hover:bg-slate-100 transition-all w-full sm:w-auto border-2 border-slate-200">
-            Cancel
-          </button>
-          <button onClick={handleResetKnockout} className="px-6 py-4 bg-red-900 text-white rounded-2xl font-black italic uppercase tracking-tighter shadow-xl hover:bg-red-800 transition-all flex items-center justify-center gap-2 w-full sm:w-auto animate-pulse">
-            Confirm Reset
-          </button>
-        </div>
-      )}
-    </div>
-  </div>
-)}
+                  return (
+                    <div className="space-y-6">
+                      <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-2xl border-b-8 border-[#FFB81C]">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-800">
+                          <div>
+                            <span className="text-xs font-black uppercase tracking-widest text-[#FFB81C]">Fanatics Pool Master Ledger</span>
+                            <h2 className="text-3xl font-black italic uppercase text-white flex items-center gap-2 mt-1">
+                              <DollarSign className="w-8 h-8 text-[#FFB81C]" /> Financial Accounting Overview
+                            </h2>
+                            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">
+                              {activeCount} Fanatics Players &bull; $12/Week Dues &bull; {closedWeeksCount} / {maxWeeksVal} Weeks Closed
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                          <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center">
+                            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Dues Collected</span>
+                            <span className="text-2xl font-black italic text-emerald-400 font-mono">${totalCollectedToDate}</span>
+                            <span className="text-[9px] text-slate-500 block mt-0.5">Projected: ${totalSeasonDues}</span>
+                          </div>
+                          <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center">
+                            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Weekly Pots Paid</span>
+                            <span className="text-2xl font-black italic text-[#FFB81C] font-mono">${Math.round(matrix.weeklyPot * closedWeeksCount)}</span>
+                            <span className="text-[9px] text-slate-500 block mt-0.5">${matrix.weeklyPot}/week</span>
+                          </div>
+                          <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center">
+                            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Half Pots Accrued</span>
+                            <span className="text-2xl font-black italic text-sky-400 font-mono">${Math.round(activeCount * 1.75 * Math.min(closedWeeksCount, half1Weeks))}</span>
+                          </div>
+                          <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center">
+                            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Season Pot Accrued</span>
+                            <span className="text-2xl font-black italic text-purple-400 font-mono">${Math.round(activeCount * 1.25 * closedWeeksCount)}</span>
+                          </div>
+                          <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center col-span-2 sm:col-span-1">
+                            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Party / Expense Fund</span>
+                            <span className="text-2xl font-black italic text-indigo-400 font-mono">${Math.round(activeCount * 2.0 * closedWeeksCount)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* 5. SITE SETTINGS SUB-TAB */}
+            {adminTab === 'settings' && (
+              <div className="space-y-6">
+                <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
+                  <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-2 flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4 text-[#FFB81C]" /> Max Active Pool Weeks
+                  </h3>
+                  <p className="text-sm text-slate-500 font-bold mb-4">Controls how many weeks players can view and submit picks for in the week selector.</p>
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="number"
+                      min="1"
+                      max="22"
+                      value={globalSettings?.maxActiveWeeks || 18}
+                      onChange={async (e) => {
+                        const val = parseInt(e.target.value) || 1;
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { maxActiveWeeks: val });
+                      }}
+                      className="w-24 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-2 font-black text-slate-900 text-lg outline-none focus:border-[#FFB81C]"
+                    />
+                    <span className="text-sm font-semibold text-slate-600">Weeks currently accessible to players (1 to {globalSettings?.maxActiveWeeks || 18})</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
+                  <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2">
+                    <Megaphone className="w-4 h-4" /> Global Announcement
+                  </h3>
+                  <textarea 
+                    value={globalSettings?.announcement || ''} 
+                    onChange={(e) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { announcement: e.target.value }))} 
+                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-4 font-medium text-slate-900 outline-none focus:border-[#FFB81C] min-h-[100px]" 
+                    placeholder="Welcome to Hanover Football Fanatics!" 
+                  />
+                </div>
+
+                <div className="bg-white p-8 rounded-3xl border-2 border-slate-100 shadow-sm">
+                  <h3 className="font-black uppercase tracking-widest text-slate-400 text-xs mb-6 flex items-center gap-2">
+                    <KeyRound className="w-4 h-4 text-[#FFB81C]" /> API-Sports Integration Configuration
+                  </h3>
+                  <input 
+                    type="text" 
+                    value={globalSettings?.apiSportsKey || ''} 
+                    onChange={(e) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { apiSportsKey: e.target.value }))} 
+                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-4 font-bold text-slate-900 outline-none focus:border-[#FFB81C]" 
+                    placeholder="Paste your API-Sports v1 Key here..." 
+                  />
+                </div>
+
+                <div className="bg-white p-8 rounded-3xl border-4 border-slate-100 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+                  <div>
+                    <h3 className="text-2xl font-black italic uppercase text-slate-900">Reset Fanatics Pool</h3>
+                    <p className="text-slate-500 font-medium">Wipes all picks, ranks, tiebreakers, and history for a new season.</p>
+                  </div>
+                  {!showFanaticsResetConfirm ? (
+                    <button onClick={() => setShowFanaticsResetConfirm(true)} className="px-10 py-4 bg-slate-900 text-[#FFB81C] rounded-2xl font-black italic uppercase flex items-center gap-3 shadow-lg">
+                      <RefreshCw className="w-6 h-6" /> Reset Fanatics
+                    </button>
+                  ) : (
+                    <div className="flex gap-3">
+                      <button onClick={() => setShowFanaticsResetConfirm(false)} className="px-6 py-4 bg-white text-slate-700 rounded-2xl font-black border-2 border-slate-200">Cancel</button>
+                      <button onClick={handleResetFanatics} className="px-6 py-4 bg-red-900 text-white rounded-2xl font-black shadow-xl animate-pulse">Confirm Reset</button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-white p-8 rounded-3xl border-4 border-slate-100 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+                  <div>
+                    <h3 className="text-2xl font-black italic uppercase text-slate-900">Reset KnockOut Pool</h3>
+                    <p className="text-slate-500 font-medium">Completely wipes all KnockOut picks and statuses to restart the pool.</p>
+                  </div>
+                  {!showResetConfirm ? (
+                    <button onClick={() => setShowResetConfirm(true)} className="px-10 py-4 bg-slate-900 text-[#FFB81C] rounded-2xl font-black italic uppercase flex items-center gap-3 shadow-lg">
+                      <RefreshCw className="w-6 h-6" /> Reset KnockOut
+                    </button>
+                  ) : (
+                    <div className="flex gap-3">
+                      <button onClick={() => setShowResetConfirm(false)} className="px-6 py-4 bg-white text-slate-700 rounded-2xl font-black border-2 border-slate-200">Cancel</button>
+                      <button onClick={handleResetKnockout} className="px-6 py-4 bg-red-900 text-white rounded-2xl font-black shadow-xl animate-pulse">Confirm Reset</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
-      {/* CLOSE WEEK PREVIEW MODAL */}
+
+      {/* MODAL DIALOGS INSIDE MAINAPP */}
       <CloseWeekPreviewModal
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
@@ -4386,66 +4720,23 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
         allUsers={allUsers}
         globalSettings={globalSettings}
       />
-      {showPrintModal && <PrintModal user={currentUser} week={selectedWeek} games={games} onClose={() => setShowPrintModal(false)} bannerImg={imgErrors.logo ? null : "/hff-logo.png"} />}
-{settlementPreview && (
-  <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-    <div className="bg-white max-w-2xl w-full rounded-3xl shadow-2xl overflow-hidden border-t-8 border-[#FFB81C]">
-      <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
-        <div>
-          <h2 className="text-xl font-black italic uppercase text-[#FFB81C] flex items-center gap-2">
-            <Trophy className="w-6 h-6" /> Settlement Preview
-          </h2>
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
-            {settlementPreview.title}
-          </p>
-        </div>
-        <button onClick={() => setSettlementPreview(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-          <X className="w-6 h-6 text-slate-400" />
-        </button>
-      </div>
-
-      <div className="p-6 max-h-[60vh] overflow-y-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b-2 border-slate-200 text-[10px] font-black uppercase text-slate-400">
-              <th className="pb-3 italic">Rank</th>
-              <th className="pb-3">Player Name</th>
-              <th className="pb-3 text-center">Period CP</th>
-              <th className="pb-3 text-right">Award Amount</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 text-sm">
-            {settlementPreview.winners.map((w) => (
-              <tr key={w.rank} className="font-bold">
-                <td className="py-3 font-black italic text-slate-400">#{w.rank}</td>
-                <td className="py-3 text-slate-900 font-black">{w.name}</td>
-                <td className="py-3 text-center font-mono text-slate-600">{w.points} CP</td>
-                <td className="py-3 text-right font-black italic text-emerald-600 text-base">
-                  +${w.bonusAmount}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="p-6 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row justify-end gap-3">
-        <button
-          onClick={() => setSettlementPreview(null)}
-          className="px-6 py-3 bg-slate-200 text-slate-700 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-slate-300 transition-all"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleConfirmSettlement}
-          className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
-        >
-          <CheckCircle className="w-4 h-4" /> Confirm & Apply Payouts
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+      <WeeklyRecapModal
+        isOpen={showWeeklyRecapModal}
+        onClose={() => setShowWeeklyRecapModal(false)}
+        week={resultsSelectedWeek || liveSeasonWeek}
+        games={games}
+        allUsers={allUsers}
+        globalSettings={globalSettings}
+      />
+      {showPrintModal && (
+        <PrintModal 
+          user={currentUser} 
+          week={selectedWeek} 
+          games={games} 
+          onClose={() => setShowPrintModal(false)} 
+          bannerImg={imgErrors.logo ? null : "/hff-logo.png"} 
+        />
+      )}
     </div>
   );
 }
@@ -4462,12 +4753,8 @@ class AppErrorBoundary extends React.Component<any, any> {
     if (this.state.hasError) {
       return (
         <div style={{ padding: '2rem', backgroundColor: '#450a0a', color: 'white', minHeight: '100vh', fontFamily: 'monospace' }}>
-          <h2 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '1rem', color: '#fca5a5' }}>React Render Crash</h2>
-          <p style={{ marginBottom: '1rem', fontSize: '1.2rem' }}>The app hit a fatal error. Please copy this entire stack trace and send it to your assistant:</p>
-          <div style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: '1rem', borderRadius: '0.5rem', overflowX: 'auto' }}>
-            <p style={{ fontWeight: 'bold', color: '#fca5a5', fontSize: '1.2rem' }}>{this.state.error && this.state.error.toString()}</p>
-            <pre style={{ marginTop: '1rem', fontSize: '0.9rem', color: '#fecaca' }}>{this.state.info && this.state.info.componentStack}</pre>
-          </div>
+          <h2 style={{ fontSize: '2rem', fontWeight: 'bold' }}>React Render Crash</h2>
+          <pre>{this.state.error && this.state.error.toString()}</pre>
         </div>
       );
     }
@@ -4475,4 +4762,10 @@ class AppErrorBoundary extends React.Component<any, any> {
   }
 }
 
-export default function App() { return <AppErrorBoundary><MainApp /></AppErrorBoundary>; }
+export default function App() {
+  return (
+    <AppErrorBoundary>
+      <MainApp />
+    </AppErrorBoundary>
+  );
+}
