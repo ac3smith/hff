@@ -3012,6 +3012,74 @@ const isLiveSeasonWeekLocked = isWeekLocked;
     setTimeout(() => setHasSaved(false), 2000); 
   };
 
+  // 📥 EXPORT WEEKLY PICKS CSV BACKUP
+// 📥 EXPORT WEEKLY PICKS CSV BACKUP (FANATICS + KNOCKOUT + GAME #s)
+const handleExportPicksCSV = () => {
+  if (!allUsers || allUsers.length === 0) return alert("No player data available to export.");
+
+  const targetWeek = selectedWeek;
+  const targetGames = globalSettings?.games?.[targetWeek] || games || [];
+  
+  // 1. Build Header Row
+  // [Player Info, Knockout Pick, Fanatics Tiebreaker, Game 1 Pick/Rank, Game 2 Pick/Rank, ...]
+  const headers = [
+    'First Name', 
+    'Last Name', 
+    'Email', 
+    'Payment Status', 
+    `Week ${targetWeek} Knockout Pick`, 
+    `Week ${targetWeek} Tiebreaker`
+  ];
+
+  targetGames.forEach((g: any, index: number) => {
+    const gameNum = index + 1;
+    const matchup = `${g.awayAbbr || g.away} @ ${g.homeAbbr || g.home}`;
+    headers.push(`"Game ${gameNum}: ${matchup} (Pick)"`);
+    headers.push(`"Game ${gameNum}: ${matchup} (Rank)"`);
+  });
+
+  const csvRows: string[] = [headers.join(',')];
+
+  // 2. Build Data Rows for All Active Players
+  allUsers.forEach((u: any) => {
+    const userPicks = u.picks?.[targetWeek] || {};
+    const userRanks = u.ranks?.[targetWeek] || {};
+    const koPick = u.knockoutPicks?.[targetWeek] || 'NO PICK';
+    const tbVal = u.tiebreakers?.[targetWeek] || '';
+
+    const row = [
+      `"${u.firstName || ''}"`,
+      `"${u.lastName || ''}"`,
+      `"${u.email || ''}"`,
+      `"${u.paymentStatus || 'unpaid'}"`,
+      `"${koPick}"`,
+      `"${tbVal}"`
+    ];
+
+    // Add Game # Picks & Ranks
+    targetGames.forEach((g: any) => {
+      const p = userPicks[g.id] || userPicks[String(g.id)] || '';
+      const r = userRanks[g.id] || userRanks[String(g.id)] || '';
+      row.push(`"${p}"`);
+      row.push(`"${r}"`);
+    });
+
+    csvRows.push(row.join(','));
+  });
+
+  // 3. Download Spreadsheet File
+  const csvContent = csvRows.join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `hff-week-${targetWeek}-full-picks-backup.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
   const handleKnockoutQuickPick = async (forAll = false) => { 
     const usersToUpdate = forAll ? allUsers.filter(u => u.playsKnockout) : [currentUser]; 
     const batch = writeBatch(db); 
@@ -4271,7 +4339,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                   <WeekSelector week={selectedWeek} setWeek={setSelectedWeek} maxActiveWeeks={maxActiveWeeks} />
                   
                   <div className="flex flex-wrap gap-2">
-                    <button 
+{/* SAVE FOR TROUBLESHOOTING OUTSIDE NORMAL SEASON                   <button 
                       onClick={() => handleConfidenceQuickPicks(true)} 
                       disabled={isSaving}
                       className="px-5 py-3 bg-[#FFB81C] text-slate-900 rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-amber-400 transition-all flex items-center gap-2"
@@ -4286,6 +4354,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                     >
                       <Skull className="w-4 h-4 text-white" /> Quick Pick KnockOut (All)
                     </button>
+            */}
 
                     <button 
                       onClick={handleCopyMissingEmails} 
@@ -4293,6 +4362,21 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                     >
                       <FileText className="w-4 h-4" /> Copy Email List ({getMissingEmailsList().length})
                     </button>
+
+                    <button 
+  onClick={handleCopyMissingEmails} 
+  className="px-5 py-3 bg-slate-900 text-[#FFB81C] rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-slate-800 transition-all flex items-center gap-2"
+>
+  <FileText className="w-4 h-4" /> Copy Email List ({getMissingEmailsList().length})
+</button>
+
+{/* 🟢 PASTE THE EXPORT BUTTON RIGHT HERE */}
+<button 
+  onClick={handleExportPicksCSV} 
+  className="px-5 py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-emerald-700 transition-all flex items-center gap-2"
+>
+  <Printer className="w-4 h-4 text-white" /> Export Week {selectedWeek} CSV Backup
+</button>
                     
                     <button 
                       onClick={handleEmailReminders} 
@@ -4343,13 +4427,15 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             )}
 
             {/* 2. MANAGE USERS SUB-TAB */}
+            {/* 2. MANAGE USERS SUB-TAB (FULLY RESTORED) */}
             {adminTab === 'users' && (
               <div className="space-y-6">
+                {/* SINGLE USER REGISTRATION */}
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6">
                   <h3 className="text-lg font-black uppercase italic text-slate-900 mb-4 flex items-center gap-2">
                     <UserPlus className="w-5 h-5 text-[#FFB81C]" /> Register Single Player
                   </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-4 items-end">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">First Name</label>
                       <input value={newUserForm.firstName} onChange={e => setNewUserForm({...newUserForm, firstName: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#FFB81C]" placeholder="First" />
@@ -4362,37 +4448,163 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Email</label>
                       <input value={newUserForm.email} onChange={e => setNewUserForm({...newUserForm, email: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#FFB81C]" placeholder="Email" />
                     </div>
-                    <button onClick={handleAddUser} className="w-full bg-slate-900 text-[#FFB81C] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest shadow-lg">Add Player</button>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Role</label>
+                      <select value={newUserForm.role || 'user'} onChange={e => setNewUserForm({...newUserForm, role: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-[#FFB81C] bg-white">
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                    <button onClick={handleAddUser} className="w-full bg-slate-900 text-[#FFB81C] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest shadow-lg hover:scale-105 transition-all">Add Player</button>
                   </div>
                 </div>
 
+                {/* BULK CSV USER IMPORT TOOL */}
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6">
+                  <h3 className="text-lg font-black uppercase italic text-slate-900 mb-2 flex items-center gap-2">
+                    <Users className="w-5 h-5 text-[#FFB81C]" /> Bulk Roster CSV Import
+                  </h3>
+                  <p className="text-xs text-slate-500 font-bold mb-3">Paste CSV lines formatted as: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-800">FirstName, LastName, Nickname, Email, PaymentStatus</code></p>
+                  <textarea id="bulkUserCsvInput" rows={3} className="w-full border-2 border-slate-100 rounded-2xl p-3 text-xs font-mono outline-none focus:border-[#FFB81C] mb-3" placeholder="John, Doe, Johnny, john@example.com, paid" />
+                  <button onClick={() => { const el = document.getElementById('bulkUserCsvInput') as HTMLTextAreaElement; if (el) handleBulkImportUsers(el.value); }} className="bg-slate-900 text-[#FFB81C] rounded-xl px-5 py-2.5 text-xs font-black uppercase tracking-widest shadow-md">
+                    Import Roster CSV
+                  </button>
+                </div>
+
+                {/* FULL FEATURED ROSTER TABLE */}
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]">
-                        <th className="p-5">Player Identity</th>
-                        <th className="p-5">Email Address</th>
-                        <th className="p-5 text-center">System Role</th>
-                        <th className="p-5 text-center">Payment Status</th>
-                        <th className="p-5 text-center">Fanatics</th>
-                        <th className="p-5 text-center">KnockOut</th>
-                        <th className="p-5 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {(allUsers || []).map(user => (
-                        <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-5 font-black text-slate-900 text-base">{formatFullName(user)}</td>
-                          <td className="p-5 font-medium text-slate-600 text-sm">{String(user.email || 'No Email')}</td>
-                          <td className="p-5 text-center font-bold text-xs uppercase">{user.role || 'user'}</td>
-                          <td className="p-5 text-center font-bold text-xs uppercase">{user.paymentStatus || 'unpaid'}</td>
-                          <td className="p-5 text-center"><input type="checkbox" checked={user.playsConfidence} onChange={(e) => handleEditUser(user.id, 'playsConfidence', e.target.checked)} className="w-5 h-5 accent-blue-600" /></td>
-                          <td className="p-5 text-center"><input type="checkbox" checked={user.playsKnockout} onChange={(e) => handleEditUser(user.id, 'playsKnockout', e.target.checked)} className="w-5 h-5 accent-[#FFB81C]" /></td>
-                          <td className="p-5 text-right"><button onClick={() => handleDeleteUser(user.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></td>
+                  <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                    <h3 className="text-xl font-black italic uppercase text-slate-900">Registered Players ({allUsers.length})</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left min-w-[1100px]">
+                      <thead>
+                        <tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]">
+                          <th className="p-4">Player Identity</th>
+                          <th className="p-4">Login Details</th>
+                          <th className="p-4 text-center">Payment</th>
+                          <th className="p-4 text-center">Pool Access</th>
+                          <th className="p-4 text-center">Security & Login</th>
+                          <th className="p-4 text-right">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(allUsers || []).map(user => {
+                          const isEditing = editingUserId === user.id;
+
+                          if (isEditing) {
+                            return (
+                              <EditUserRow
+                                key={user.id}
+                                user={user}
+                                form={editUserForm}
+                                setForm={setEditUserForm}
+                                onCancel={() => setEditingUserId(null)}
+                                onSave={saveInlineUserEdit}
+                              />
+                            );
+                          }
+
+                          return (
+                            <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                              {/* Player Identity */}
+                              <td className="p-4">
+                                <div className="font-black text-slate-900 text-base">{formatFullName(user)}</div>
+                                <div className="text-xs text-slate-500 font-bold">{user.email || 'No Email Set'}</div>
+                              </td>
+
+                              {/* Login Details */}
+                              <td className="p-4 text-xs">
+                                <div className="font-bold text-slate-700">Username: <span className="font-mono text-slate-900">{user.username || 'N/A'}</span></div>
+                                <div className="text-slate-400">Role: <span className="font-black uppercase text-slate-700">{user.role || 'user'}</span></div>
+                              </td>
+
+                              {/* Payment Status Dropdown */}
+                              <td className="p-4 text-center">
+                                <select
+                                  value={user.paymentStatus || 'unpaid'}
+                                  onChange={(e) => handleEditUser(user.id, 'paymentStatus', e.target.value)}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase outline-none cursor-pointer border-2 ${
+                                    user.paymentStatus === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
+                                    user.paymentStatus === 'disqualified' ? 'bg-red-50 text-red-700 border-red-300' :
+                                    'bg-amber-50 text-amber-800 border-amber-300'
+                                  }`}
+                                >
+                                  <option value="paid">Paid</option>
+                                  <option value="unpaid">Unpaid</option>
+                                  <option value="disqualified">Disqualified</option>
+                                </select>
+                              </td>
+
+                              {/* Pool Toggles */}
+                              <td className="p-4 text-center">
+                                <div className="flex items-center justify-center gap-4 text-xs font-bold">
+                                  <label className="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" checked={user.playsConfidence} onChange={(e) => handleEditUser(user.id, 'playsConfidence', e.target.checked)} className="w-4 h-4 accent-blue-600" />
+                                    <span>Fanatics</span>
+                                  </label>
+                                  <label className="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" checked={user.playsKnockout} onChange={(e) => handleEditUser(user.id, 'playsKnockout', e.target.checked)} className="w-4 h-4 accent-[#FFB81C]" />
+                                    <span>Knockout</span>
+                                  </label>
+                                </div>
+                              </td>
+
+                              {/* Security & Last Login */}
+                              <td className="p-4 text-center text-xs">
+                                {user.isLocked || (user.failedLogins >= 5) ? (
+                                  <button
+                                    onClick={() => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', user.id), { isLocked: false, failedLogins: 0 })}
+                                    className="px-3 py-1 bg-red-600 text-white rounded-lg font-black uppercase text-[10px] shadow-sm hover:bg-red-700 transition-all"
+                                  >
+                                    Unlock Account
+                                  </button>
+                                ) : (
+                                  <div>
+                                    <span className="text-slate-400 font-bold block text-[10px] uppercase">Last Login:</span>
+                                    <span className="font-mono font-bold text-slate-700">
+                                      {user.lastLoginTime ? new Date(user.lastLoginTime).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never'}
+                                    </span>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Actions */}
+                              <td className="p-4 text-right">
+                                <div className="flex justify-end gap-1">
+                                  <button
+                                    onClick={() => {
+                                      setEditingUserId(user.id);
+                                      setEditUserForm({
+                                        firstName: user.firstName || '',
+                                        lastName: user.lastName || '',
+                                        username: user.username || '',
+                                        nickname: user.nickname || '',
+                                        email: user.email || '',
+                                        password: user.password || '',
+                                        role: user.role || 'user'
+                                      });
+                                    }}
+                                    className="p-2 text-slate-400 hover:text-slate-900 transition-colors"
+                                    title="Edit User"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteUser(user.id)}
+                                    className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                                    title="Delete User"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
