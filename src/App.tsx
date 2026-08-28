@@ -2606,7 +2606,11 @@ if (nextWeekGames && nextWeekGames.length > 0) {
   useEffect(() => { 
     if (globalSettings && allUsers.length > 0 && !dbReady) { 
         const availableWeeks = Array.from({ length: maxActiveWeeks }, (_, i) => i + 1);
-        const active = availableWeeks.find(w => globalSettings.weekStates?.[w] !== 'closed') || 1;
+        // 🔒 Smart Active Week: Find the highest week number that has games populated in Firestore
+const active = Math.max(
+  ...availableWeeks.filter(w => (globalSettings?.games?.[w] || []).length > 0),
+  1
+);
         
         setLiveSeasonWeek(active);
         setPicksSelectedWeek(active);
