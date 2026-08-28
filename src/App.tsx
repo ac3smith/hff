@@ -2382,6 +2382,7 @@ function MainApp() {
   const [liveSeasonWeek, setLiveSeasonWeek] = useState(1);        // Fixed anchor for Dashboard & Standings
   const [picksSelectedWeek, setPicksSelectedWeek] = useState(1);   // Advance picks selector
   const [resultsSelectedWeek, setResultsSelectedWeek] = useState(1); // Historical results selector
+  const [showMobileAccountDrawer, setShowMobileAccountDrawer] = useState(false);
   
   // Safety aliases for legacy handlers
   const currentActiveWeek = liveSeasonWeek;
@@ -4025,22 +4026,21 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
       {deadbeatsToConfirm && (
           <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4"><div className="bg-white max-w-lg w-full rounded-3xl p-8 shadow-2xl animate-in zoom-in-95"><h2 className="text-2xl font-black italic uppercase text-red-600 mb-4 flex items-center gap-2"><AlertCircle /> Confirm Deadbeats</h2><p className="text-slate-600 font-bold mb-4">The following players have incomplete picks and will receive default deadbeat assignments:</p><div className="max-h-60 overflow-y-auto mb-6 bg-slate-50 rounded-xl p-4 border border-slate-200">{deadbeatsToConfirm.length === 0 ? <p className="text-slate-400 italic">None! All active players have fully submitted picks.</p> : <ul className="space-y-2">{deadbeatsToConfirm.map((u: any, i: number) => <li key={i} className="font-black text-slate-800 flex items-center">{String(u.name)} <span className="text-[10px] text-slate-400 bg-white px-2 py-0.5 rounded ml-2 border uppercase tracking-widest">{String(u.type)}</span></li>)}</ul>}</div><div className="flex gap-4"><button onClick={() => setDeadbeatsToConfirm(null)} className="flex-1 px-6 py-4 bg-slate-100 text-slate-700 rounded-xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button><button onClick={executeLockWeek} className="flex-1 px-6 py-4 bg-red-600 text-white rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-red-700 transition-all">Lock & Apply</button></div></div></div>
       )}
-      <header className="bg-slate-900 text-white sticky top-0 z-40 shadow-xl print:hidden border-b-4 border-[#FFB81C]">
-        <div className="max-w-[1600px] mx-auto px-4 py-3 flex flex-col gap-3">
-          {/* TOP BAR: LOGO + DESKTOP NAV + PROFILE/LOGOUT */}
-          <div className="flex items-center justify-between gap-4">
-            {/* LOGO */}
+      <header className="bg-slate-900 text-white sticky top-0 z-40 shadow-xl print:hidden border-b-2 sm:border-b-4 border-[#FFB81C]">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-1.5 sm:py-3">
+          
+          {/* DESKTOP HEADER (UNCHANGED) */}
+          <div className="hidden md:flex items-center justify-between gap-4 h-16">
             <div className="flex items-center gap-4 py-1 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
               <div className="bg-white/5 p-2 rounded-2xl backdrop-blur-sm border border-white/10 flex items-center gap-3">
                 {!imgErrors?.logo ? (
-                  <img src="/hff-logo.png" alt="HFF Logo" className="h-10 md:h-16 w-auto object-contain drop-shadow-lg" onError={() => handleImgError('logo')} />
+                  <img src="/hff-logo.png" alt="HFF Logo" className="h-12 w-auto object-contain drop-shadow-lg" onError={() => handleImgError('logo')} />
                 ) : (
-                  <h1 className="text-lg md:text-2xl font-black italic uppercase tracking-tighter text-[#FFB81C]">Hanover Football Fanatics</h1>
+                  <h1 className="text-xl font-black italic uppercase tracking-tighter text-[#FFB81C]">Hanover Football Fanatics</h1>
                 )}
               </div>
             </div>
 
-            {/* DESKTOP NAVIGATION BUTTONS */}
             <div className="hidden lg:flex items-center gap-1 bg-white/10 rounded-full p-1 border border-white/10 backdrop-blur-md">
               <NavButton icon={Home} label="Home" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
               {currentUser?.playsConfidence && (
@@ -4066,8 +4066,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
               )}
             </div>
 
-            {/* RIGHT SIDE: DESKTOP PROFILE CONTROLS */}
-            <div className="hidden md:flex items-center gap-4">
+            <div className="flex items-center gap-4">
               <div className="flex flex-col items-end gap-1">
                 {isAdmin ? (
                   <div className="flex items-center gap-2">
@@ -4099,46 +4098,96 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                   </button>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-full bg-[#FFB81C] text-slate-900 flex items-center justify-center text-lg font-black shadow-lg border-2 border-white/20 flex-shrink-0">
-                {String(currentUser.firstName?.[0] || 'U')}
-              </div>
-            </div>
-
-            {/* MOBILE ONLY: LOGOUT & AVATAR QUICK BUTTON */}
-            <div className="flex md:hidden items-center gap-2">
-              <button
-                onClick={async () => { setIsLoggedIn(false); setCurrentUserId(''); setOverrideUserId(null); if (user) await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'session', 'current')); }}
-                className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 text-[#FFB81C] rounded-xl text-[10px] font-black uppercase border border-slate-700 shadow-md"
-              >
-                <LogOut className="w-3.5 h-3.5" /> Logout
-              </button>
-              <div className="w-9 h-9 rounded-full bg-[#FFB81C] text-slate-900 flex items-center justify-center text-sm font-black shadow-md border border-white/20 shrink-0">
+              <div className="w-10 h-10 rounded-full bg-[#FFB81C] text-slate-900 flex items-center justify-center text-base font-black shadow-lg border-2 border-white/20 flex-shrink-0">
                 {String(currentUser.firstName?.[0] || 'U')}
               </div>
             </div>
           </div>
 
-          {/* MOBILE ONLY: ADMIN "PLAYING AS" OVERRIDE BAR */}
-          {isAdmin && (
-            <div className="md:hidden flex items-center justify-between gap-2 bg-slate-800/90 p-2 rounded-xl border border-slate-700 shadow-inner">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider whitespace-nowrap">Playing As:</span>
-              <select
-                value={overrideUserId || currentUserId}
-                onChange={(e) => { setOverrideUserId(e.target.value); setActiveTab('dashboard'); }}
-                className="bg-slate-900 text-[#FFB81C] border border-white/20 text-xs font-black uppercase py-1 px-2 rounded-lg outline-none flex-1 truncate"
-              >
-                <option value={currentUserId}>Yourself</option>
-                <option disabled>──────</option>
-                {allUsers.filter(u => u.id !== currentUserId).map(u => (
-                  <option key={u.id} value={u.id}>{String(u.firstName)} {String(u.lastName)}</option>
-                ))}
-              </select>
-              <button onClick={() => setShowChangePassword(true)} className="p-1.5 bg-slate-700 text-slate-300 rounded-lg text-[10px] font-bold shrink-0">
-                <KeyRound className="w-3.5 h-3.5" />
+          {/* MOBILE ONLY: OPTION 2 - ULTRA MINIMAL HEADER WITH AVATAR DRAWER TRIGGER */}
+          <div className="flex md:hidden items-center justify-between gap-2 h-8">
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
+              <span className="text-sm font-black italic uppercase text-[#FFB81C] tracking-tight">HFF '26</span>
+              {isAdmin && overrideUserId && (
+                <span className="bg-amber-500/20 text-[#FFB81C] border border-[#FFB81C]/30 text-[9px] font-black uppercase px-2 py-0.5 rounded-full truncate max-w-[130px]">
+                  As: {currentUser.firstName}
+                </span>
+              )}
+            </div>
+
+            {/* EXPANDABLE AVATAR PILL BUTTON */}
+            <button
+              onClick={() => setShowMobileAccountDrawer(!showMobileAccountDrawer)}
+              className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-full pl-2.5 pr-1.5 py-0.5 shadow-md active:scale-95 transition-all"
+            >
+              <span className="text-[10px] font-black uppercase text-slate-200 truncate max-w-[90px]">
+                {currentUser.firstName}
+              </span>
+              <div className="w-6 h-6 rounded-full bg-[#FFB81C] text-slate-900 flex items-center justify-center text-[10px] font-black shrink-0">
+                {String(currentUser.firstName?.[0] || 'U')}
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* MOBILE SLIDE-DOWN ACCOUNT DRAWER OVERLAY */}
+        {showMobileAccountDrawer && (
+          <div className="md:hidden bg-slate-950 border-b-2 border-[#FFB81C] p-4 space-y-3 animate-in slide-in-from-top duration-200 shadow-2xl">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <div>
+                <span className="text-[9px] font-black uppercase text-slate-400 block tracking-widest">Logged In Player</span>
+                <span className="text-sm font-black text-white italic uppercase">{formatFullName(currentUser)}</span>
+              </div>
+              <button onClick={() => setShowMobileAccountDrawer(false)} className="p-1 text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
               </button>
             </div>
-          )}
-        </div>
+
+            {/* ADMIN "PLAYING AS" OVERRIDE DROPDOWN */}
+            {isAdmin && (
+              <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 space-y-1">
+                <label className="text-[9px] font-black uppercase text-[#FFB81C] tracking-wider block">Admin Override (Playing As)</label>
+                <select
+                  value={overrideUserId || currentUserId}
+                  onChange={(e) => { 
+                    setOverrideUserId(e.target.value); 
+                    setActiveTab('dashboard'); 
+                    setShowMobileAccountDrawer(false); 
+                  }}
+                  className="bg-slate-800 text-white border border-slate-700 text-xs font-black uppercase py-1.5 px-2 rounded-lg outline-none w-full"
+                >
+                  <option value={currentUserId}>Yourself ({sessionUser.firstName})</option>
+                  <option disabled>──────</option>
+                  {allUsers.filter(u => u.id !== currentUserId).map(u => (
+                    <option key={u.id} value={u.id}>{String(u.firstName)} {String(u.lastName)}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* ACCOUNT ACTION BUTTONS */}
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => { setShowChangePassword(true); setShowMobileAccountDrawer(false); }}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 text-slate-200 py-2.5 rounded-xl text-xs font-black uppercase border border-slate-700 shadow-sm"
+              >
+                <KeyRound className="w-4 h-4 text-[#FFB81C]" /> Change Password
+              </button>
+              <button
+                onClick={async () => { 
+                  setIsLoggedIn(false); 
+                  setCurrentUserId(''); 
+                  setOverrideUserId(null); 
+                  setShowMobileAccountDrawer(false);
+                  if (user) await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'session', 'current')); 
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-rose-950/80 text-rose-300 py-2.5 rounded-xl text-xs font-black uppercase border border-rose-900 shadow-sm"
+              >
+                <LogOut className="w-4 h-4 text-rose-400" /> Log Out
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t-2 border-[#FFB81C] z-40 print:hidden overflow-x-auto scrollbar-hide">
