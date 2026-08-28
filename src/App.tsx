@@ -4026,24 +4026,118 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
           <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4"><div className="bg-white max-w-lg w-full rounded-3xl p-8 shadow-2xl animate-in zoom-in-95"><h2 className="text-2xl font-black italic uppercase text-red-600 mb-4 flex items-center gap-2"><AlertCircle /> Confirm Deadbeats</h2><p className="text-slate-600 font-bold mb-4">The following players have incomplete picks and will receive default deadbeat assignments:</p><div className="max-h-60 overflow-y-auto mb-6 bg-slate-50 rounded-xl p-4 border border-slate-200">{deadbeatsToConfirm.length === 0 ? <p className="text-slate-400 italic">None! All active players have fully submitted picks.</p> : <ul className="space-y-2">{deadbeatsToConfirm.map((u: any, i: number) => <li key={i} className="font-black text-slate-800 flex items-center">{String(u.name)} <span className="text-[10px] text-slate-400 bg-white px-2 py-0.5 rounded ml-2 border uppercase tracking-widest">{String(u.type)}</span></li>)}</ul>}</div><div className="flex gap-4"><button onClick={() => setDeadbeatsToConfirm(null)} className="flex-1 px-6 py-4 bg-slate-100 text-slate-700 rounded-xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button><button onClick={executeLockWeek} className="flex-1 px-6 py-4 bg-red-600 text-white rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-red-700 transition-all">Lock & Apply</button></div></div></div>
       )}
       <header className="bg-slate-900 text-white sticky top-0 z-40 shadow-xl print:hidden border-b-4 border-[#FFB81C]">
-        <div className="max-w-[1600px] mx-auto px-4 h-24 flex items-center justify-between overflow-hidden">
-          <div className="flex items-center gap-4 h-full py-2"><div className="bg-white/5 p-2 rounded-2xl backdrop-blur-sm border border-white/10 flex items-center h-full gap-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>{!imgErrors.logo ? <img src="/hff-logo.png" alt="HFF Logo" className="h-14 md:h-16 w-auto object-contain drop-shadow-lg" onError={() => handleImgError('logo')} /> : <h1 className="text-xl md:text-2xl font-black italic uppercase tracking-tighter text-[#FFB81C]">Hanover Football Fanatics</h1>}</div></div>
-          <div className="hidden lg:flex items-center gap-1 bg-white/10 rounded-full p-1 border border-white/10 backdrop-blur-md">
-            <NavButton icon={Home} label="Home" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-            {currentUser?.playsConfidence && <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1"><NavButton icon={CalendarDays} label="Fanatics" active={activeTab === 'confidence'} onClick={() => setActiveTab('confidence')} /><NavButton icon={Users} label="F-Results" active={activeTab === 'c-tracker'} onClick={() => setActiveTab('c-tracker')} /><NavButton icon={Trophy} label="Standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} /></div>}
-            {currentUser?.playsKnockout && <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1"><NavButton icon={Skull} label="KnockOut" active={activeTab === 'knockout'} onClick={() => setActiveTab('knockout')} className="text-red-300 hover:text-red-100" /><NavButton icon={HeartPulse} label="KO-Results" active={activeTab === 'k-tracker'} onClick={() => setActiveTab('k-tracker')} className="text-red-300 hover:text-red-100" /></div>}
-            <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1">
-              <NavButton icon={BarChart2} label="Stats" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
+        <div className="max-w-[1600px] mx-auto px-4 py-3 flex flex-col gap-3">
+          {/* TOP BAR: LOGO + DESKTOP NAV + PROFILE/LOGOUT */}
+          <div className="flex items-center justify-between gap-4">
+            {/* LOGO */}
+            <div className="flex items-center gap-4 py-1 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
+              <div className="bg-white/5 p-2 rounded-2xl backdrop-blur-sm border border-white/10 flex items-center gap-3">
+                {!imgErrors?.logo ? (
+                  <img src="/hff-logo.png" alt="HFF Logo" className="h-10 md:h-16 w-auto object-contain drop-shadow-lg" onError={() => handleImgError('logo')} />
+                ) : (
+                  <h1 className="text-lg md:text-2xl font-black italic uppercase tracking-tighter text-[#FFB81C]">Hanover Football Fanatics</h1>
+                )}
+              </div>
             </div>
-            {isAdmin && <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1"><NavButton icon={ShieldCheck} label="Admin" active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} className="text-[#FFB81C]" /></div>}
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex flex-col items-end gap-1">
-                {isAdmin ? <div className="flex items-center gap-2"><span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Playing As</span><select value={overrideUserId || currentUserId} onChange={(e) => { setOverrideUserId(e.target.value); setActiveTab('dashboard'); }} className="bg-slate-800 text-[#FFB81C] border border-white/20 text-xs font-black uppercase py-1 px-2 rounded outline-none shadow-lg cursor-pointer max-w-[150px] truncate"><option value={currentUserId}>Yourself</option><option disabled>──────</option>{allUsers.filter(u => u.id !== currentUserId).map(u => <option key={u.id} value={u.id}>{String(u.firstName)} {String(u.lastName)}</option>)}</select></div> : <div className="flex items-center gap-2"><span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Logged In As</span><span className="text-sm font-black uppercase text-white tracking-tighter truncate max-w-[150px]">{formatFullName(currentUser)}</span></div>}
-                <div className="flex items-center gap-2 mt-1"><button onClick={() => setShowChangePassword(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg text-[10px] font-black uppercase transition-all border border-slate-700"><KeyRound className="w-3 h-3"/> Password</button><button onClick={async () => { setIsLoggedIn(false); setCurrentUserId(''); setOverrideUserId(null); if (user) await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'session', 'current')); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg text-[10px] font-black uppercase transition-all border border-slate-700"><LogOut className="w-3 h-3"/> Logout</button></div>
+
+            {/* DESKTOP NAVIGATION BUTTONS */}
+            <div className="hidden lg:flex items-center gap-1 bg-white/10 rounded-full p-1 border border-white/10 backdrop-blur-md">
+              <NavButton icon={Home} label="Home" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+              {currentUser?.playsConfidence && (
+                <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1">
+                  <NavButton icon={CalendarDays} label="Fanatics" active={activeTab === 'confidence'} onClick={() => setActiveTab('confidence')} />
+                  <NavButton icon={Users} label="F-Results" active={activeTab === 'c-tracker'} onClick={() => setActiveTab('c-tracker')} />
+                  <NavButton icon={Trophy} label="Standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
+                </div>
+              )}
+              {currentUser?.playsKnockout && (
+                <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1">
+                  <NavButton icon={Skull} label="KnockOut" active={activeTab === 'knockout'} onClick={() => setActiveTab('knockout')} className="text-red-300 hover:text-red-100" />
+                  <NavButton icon={HeartPulse} label="KO-Results" active={activeTab === 'k-tracker'} onClick={() => setActiveTab('k-tracker')} className="text-red-300 hover:text-red-100" />
+                </div>
+              )}
+              <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1">
+                <NavButton icon={BarChart2} label="Stats" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
+              </div>
+              {isAdmin && (
+                <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1">
+                  <NavButton icon={ShieldCheck} label="Admin" active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} className="text-[#FFB81C]" />
+                </div>
+              )}
             </div>
-            <div className="w-12 h-12 rounded-full bg-[#FFB81C] text-slate-900 flex items-center justify-center text-lg font-black shadow-lg border-2 border-white/20 flex-shrink-0">{String(currentUser.firstName?.[0] || 'U')}</div>
+
+            {/* RIGHT SIDE: DESKTOP PROFILE CONTROLS */}
+            <div className="hidden md:flex items-center gap-4">
+              <div className="flex flex-col items-end gap-1">
+                {isAdmin ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Playing As</span>
+                    <select
+                      value={overrideUserId || currentUserId}
+                      onChange={(e) => { setOverrideUserId(e.target.value); setActiveTab('dashboard'); }}
+                      className="bg-slate-800 text-[#FFB81C] border border-white/20 text-xs font-black uppercase py-1 px-2 rounded outline-none shadow-lg cursor-pointer max-w-[150px] truncate"
+                    >
+                      <option value={currentUserId}>Yourself</option>
+                      <option disabled>──────</option>
+                      {allUsers.filter(u => u.id !== currentUserId).map(u => (
+                        <option key={u.id} value={u.id}>{String(u.firstName)} {String(u.lastName)}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Logged In As</span>
+                    <span className="text-sm font-black uppercase text-white tracking-tighter truncate max-w-[150px]">{formatFullName(currentUser)}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mt-1">
+                  <button onClick={() => setShowChangePassword(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg text-[10px] font-black uppercase transition-all border border-slate-700">
+                    <KeyRound className="w-3 h-3"/> Password
+                  </button>
+                  <button onClick={async () => { setIsLoggedIn(false); setCurrentUserId(''); setOverrideUserId(null); if (user) await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'session', 'current')); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg text-[10px] font-black uppercase transition-all border border-slate-700">
+                    <LogOut className="w-3 h-3"/> Logout
+                  </button>
+                </div>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-[#FFB81C] text-slate-900 flex items-center justify-center text-lg font-black shadow-lg border-2 border-white/20 flex-shrink-0">
+                {String(currentUser.firstName?.[0] || 'U')}
+              </div>
+            </div>
+
+            {/* MOBILE ONLY: LOGOUT & AVATAR QUICK BUTTON */}
+            <div className="flex md:hidden items-center gap-2">
+              <button
+                onClick={async () => { setIsLoggedIn(false); setCurrentUserId(''); setOverrideUserId(null); if (user) await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'session', 'current')); }}
+                className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 text-[#FFB81C] rounded-xl text-[10px] font-black uppercase border border-slate-700 shadow-md"
+              >
+                <LogOut className="w-3.5 h-3.5" /> Logout
+              </button>
+              <div className="w-9 h-9 rounded-full bg-[#FFB81C] text-slate-900 flex items-center justify-center text-sm font-black shadow-md border border-white/20 shrink-0">
+                {String(currentUser.firstName?.[0] || 'U')}
+              </div>
+            </div>
           </div>
+
+          {/* MOBILE ONLY: ADMIN "PLAYING AS" OVERRIDE BAR */}
+          {isAdmin && (
+            <div className="md:hidden flex items-center justify-between gap-2 bg-slate-800/90 p-2 rounded-xl border border-slate-700 shadow-inner">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider whitespace-nowrap">Playing As:</span>
+              <select
+                value={overrideUserId || currentUserId}
+                onChange={(e) => { setOverrideUserId(e.target.value); setActiveTab('dashboard'); }}
+                className="bg-slate-900 text-[#FFB81C] border border-white/20 text-xs font-black uppercase py-1 px-2 rounded-lg outline-none flex-1 truncate"
+              >
+                <option value={currentUserId}>Yourself</option>
+                <option disabled>──────</option>
+                {allUsers.filter(u => u.id !== currentUserId).map(u => (
+                  <option key={u.id} value={u.id}>{String(u.firstName)} {String(u.lastName)}</option>
+                ))}
+              </select>
+              <button onClick={() => setShowChangePassword(true)} className="p-1.5 bg-slate-700 text-slate-300 rounded-lg text-[10px] font-bold shrink-0">
+                <KeyRound className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
