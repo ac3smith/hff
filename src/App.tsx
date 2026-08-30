@@ -170,10 +170,7 @@ const INITIAL_USERS = [
 
 // --- HELPER TO CONVERT NFL SYSTEM WEEKS TO DISPLAY WEEKS ---
 function getDisplayWeekLabel(weekNum: number): string {
-  if (weekNum <= 3) {
-    return `Preseason Week ${weekNum}`;
-  }
-  return `Week ${weekNum - 3}`;
+  return `Week ${weekNum}`;
 }
 
 // --- HELPERS ---
@@ -1089,38 +1086,33 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
   const maxWeeks = globalSettings?.maxActiveWeeks || 18;
   const startWeek = globalSettings?.knockoutStartWeek || 1;
 
-  // Only render week columns starting from when the session was reset
   const activeWeeks = Array.from({ length: Math.max(1, maxWeeks - startWeek + 1) }, (_, i) => startWeek + i);
 
-  // Process rows safely with central canonical resolver
-// Process rows safely with central canonical resolver
-const sortedGridData = useMemo(() => {
-  if (!data || !Array.isArray(data)) return [];
+  const sortedGridData = useMemo(() => {
+    if (!data || !Array.isArray(data)) return [];
 
-  const startWeek = globalSettings?.knockoutStartWeek || 1;
+    const startWk = globalSettings?.knockoutStartWeek || 1;
 
-  return [...data].map((user: any) => {
-    if (!user) return null;
+    return [...data].map((user: any) => {
+      if (!user) return null;
 
-    let eliminatedWeek: number | null = null;
-    const statuses = user.knockoutStatuses || {};
+      let eliminatedWeek: number | null = null;
+      const statuses = user.knockoutStatuses || {};
 
-    // Start loop from startWeek instead of 1 so pre-reset weeks are completely ignored
-    for (let wk = startWeek; wk <= maxWeeks; wk++) {
-      const wkStatus = statuses[wk];
-      const wkState = globalSettings?.koWeekStates?.[wk] || globalSettings?.weekStates?.[wk];
+      for (let wk = startWk; wk <= maxWeeks; wk++) {
+        const wkStatus = statuses[wk];
+        const wkState = globalSettings?.koWeekStates?.[wk] || globalSettings?.weekStates?.[wk];
 
-      if (['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) {
-        eliminatedWeek = wk;
-        break;
+        if (['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) {
+          eliminatedWeek = wk;
+          break;
+        }
+
+        if ((wkState === 'locked' || wkState === 'closed') && wk < week && (wkStatus === 'No Pick' || !user.knockoutPicks?.[wk])) {
+          eliminatedWeek = wk;
+          break;
+        }
       }
-
-      // Only eliminate for "No Pick" if the week is closed AND it occurred on or after startWeek
-      if ((wkState === 'locked' || wkState === 'closed') && wk < week && (wkStatus === 'No Pick' || !user.knockoutPicks?.[wk])) {
-        eliminatedWeek = wk;
-        break;
-      }
-    }
 
       if (user.paymentStatus === 'disqualified') {
         eliminatedWeek = eliminatedWeek || 1;
@@ -1139,15 +1131,15 @@ const sortedGridData = useMemo(() => {
       }
       return String(a.lastName || '').localeCompare(String(b.lastName || ''));
     });
-  }, [data, maxWeeks, globalSettings?.weekStates]);
+  }, [data, maxWeeks, globalSettings?.weekStates, week]);
 
   return (
-    
-    <div className="bg-white rounded-3xl sm:rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden border-t-8 border-red-600 max-w-full mx-auto">    {/* HEADER */}
+    <div className="bg-white rounded-3xl sm:rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden border-t-8 border-red-600 max-w-full mx-auto">
+      {/* HEADER */}
       <div className="p-4 sm:p-6 bg-slate-50 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
           <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tight flex items-center gap-2 text-slate-900">
-            <Skull className="w-6 h-6 text-red-600" /> KnockOut Survival Matrix
+            <Skull className="w-6 h-6 text-red-600" /> Knockout Results
           </h2>
           <p className="text-xs text-slate-500 font-bold mt-0.5">
             Full season ledger &bull; Longest survivors listed on top
@@ -1160,7 +1152,7 @@ const sortedGridData = useMemo(() => {
         <table className="w-full text-left border-collapse table-auto">
           <thead>
             <tr className="bg-slate-900 text-white uppercase border-b-4 border-[#FFB81C]">
-            <th className="p-3 sticky left-0 bg-slate-900 z-30 w-44 sm:w-56 shadow-[3px_0_10px_rgba(0,0,0,0.3)] tracking-widest italic font-black text-xs sm:text-sm rounded-tl-3xl">
+              <th className="p-3 sticky left-0 bg-slate-900 z-30 w-44 sm:w-56 shadow-[3px_0_10px_rgba(0,0,0,0.3)] tracking-widest italic font-black text-xs sm:text-sm rounded-tl-3xl">
                 Player
               </th>
 
@@ -1175,7 +1167,7 @@ const sortedGridData = useMemo(() => {
                     wk === week ? 'bg-amber-500/20 text-[#FFB81C]' : 'text-slate-300'
                   }`}
                 >
-                  {wk <= 3 ? `Pre ${wk}` : `Wk ${wk - 3}`}
+                  Wk {wk}
                 </th>
               ))}
             </tr>
@@ -1217,8 +1209,8 @@ const sortedGridData = useMemo(() => {
                     const rawPick = user.knockoutPicks?.[wk];
                     const wkState = globalSettings?.weekStates?.[wk];
                     const isCurrentWeek = wk === week;
+                    const isFutureWeek = wk > week; // Checks if week is in the future
 
-                    // Match game via canonical team codes
                     const weekGamesList = globalSettings?.games?.[wk] || [];
                     const canonicalPick = getCanonicalTeamCode(rawPick);
                     const game = weekGamesList.find((g: any) => 
@@ -1226,7 +1218,6 @@ const sortedGridData = useMemo(() => {
                       getCanonicalTeamCode(g.home) === canonicalPick
                     );
 
-                    // Compute winner status dynamically from schedule
                     let wkStatus = user.knockoutStatuses?.[wk] || 'Pending';
                     if (game && rawPick && (game.status === 'final' || game.winner)) {
                       const winnerCanonical = getCanonicalTeamCode(game.winner);
@@ -1240,14 +1231,12 @@ const sortedGridData = useMemo(() => {
                     const wasOutBefore = user.eliminatedWeek !== null && wk > user.eliminatedWeek;
                     const wasEliminatedThisWeek = user.eliminatedWeek === wk || ['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus);
 
-                    // Reveal rules: Show if week is past, closed, locked, admin forced, or current user
                     const isPastOrLockedWeek = wk < week || wkState === 'locked' || wkState === 'closed' || (wk === week && (isLocked || globalSettings?.isLocked));
                     const canRevealPick = isPastOrLockedWeek || adminForceReveal || isMe;
                     const isHidden = !canRevealPick;
 
                     const displayPick = canonicalPick || 'NO PICK';
 
-                    // Cell Background Styling
                     let cellBg = 'bg-white text-slate-800';
                     const isWeekClosed = wkState === 'closed' || wk < week;
 
@@ -1265,11 +1254,12 @@ const sortedGridData = useMemo(() => {
                       <td 
                         key={wk} 
                         className={`p-1 text-center border-r border-slate-100 text-xs font-black ${
-                          isCurrentWeek ? 'border-amber-300' : ''
+                          isCurrentWeek ? 'border-amber-300 bg-amber-50/30' : ''
                         }`}
                       >
-                        {wasOutBefore ? (
-                          <span className="text-[9px] font-bold text-slate-300 uppercase block text-center">
+                        {/* Render a clean dash for eliminated players or future weeks */}
+                        {wasOutBefore || isFutureWeek ? (
+                          <span className="text-[10px] font-bold text-slate-300 block text-center">
                             —
                           </span>
                         ) : isHidden ? (
@@ -1651,7 +1641,7 @@ function AdminWeekCard({ week, onChange, maxActiveWeeks = 18 }: any) {
       <select value={week} onChange={onChange} className="w-full bg-slate-100 border-none rounded-2xl p-4 font-black italic text-2xl uppercase tracking-tighter outline-none focus:ring-4 focus:ring-[#FFB81C]/20 cursor-pointer">
         {Array.from({ length: maxActiveWeeks }, (_, i) => i + 1).map(w => (
           <option key={w} value={w}>
-            {w <= 3 ? `Preseason Week ${w}` : `Week ${w - 3}`}
+            Week {w}
           </option>
         ))}
       </select>
@@ -1735,7 +1725,7 @@ function PickWeekSelector({ week, setWeek, currentActiveWeek, maxActiveWeeks = 1
           .filter(w => w >= currentActiveWeek)
           .map(w => (
             <option key={w} value={w}>
-              {w <= 3 ? `Preseason W${w}` : `Week ${w - 3}`} {w === currentActiveWeek ? '(Current)' : '(Advance Pick)'}
+              Week {w} {w === currentActiveWeek ? '(Current)' : '(Advance Pick)'}
             </option>
           ))}
       </select>
@@ -1750,7 +1740,7 @@ function WeekSelector({ week, setWeek, maxActiveWeeks = 18 }: any) {
       <select value={week} onChange={(e) => setWeek(Number(e.target.value))} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-black italic uppercase text-xl tracking-tighter outline-none focus:ring-4 focus:ring-[#FFB81C]/20 transition-all cursor-pointer">
         {Array.from({ length: maxActiveWeeks }, (_, i) => i + 1).map(w => (
           <option key={w} value={w}>
-            {w <= 3 ? `Preseason W${w}` : `Week ${w - 3}`}
+            Week {w}
           </option>
         ))}
       </select>
@@ -2606,28 +2596,17 @@ if (nextWeekGames && nextWeekGames.length > 0) {
 
   useEffect(() => { 
     if (globalSettings && allUsers.length > 0 && !dbReady) { 
-        const availableWeeks = Array.from({ length: maxActiveWeeks }, (_, i) => i + 1);
-        // 🔒 Smart Active Week: Find the highest week number that has games populated in Firestore
-const active = Math.max(
-  ...availableWeeks.filter(w => (globalSettings?.games?.[w] || []).length > 0),
-  1
-);
+        // Force all views to default to Week 1 on load
+        const defaultWeek = 1;
         
-        setLiveSeasonWeek(active);
-        setPicksSelectedWeek(active);
-        
-        // 🔒 DEFAULT RESULTS TO PREVIOUS WEEK IF ACTIVE WEEK IS STILL OPEN
-        const activeState = globalSettings.weekStates?.[active];
-        const isActiveLocked = activeState === 'locked' || activeState === 'closed';
-        if (!isActiveLocked && active > 1) {
-          setResultsSelectedWeek(active - 1);
-        } else {
-          setResultsSelectedWeek(active);
-        }
+        setLiveSeasonWeek(defaultWeek);
+        setPicksSelectedWeek(defaultWeek);
+        setResultsSelectedWeek(defaultWeek);
+        setSelectedWeek(defaultWeek);
 
         setDbReady(true); 
     } 
-  }, [globalSettings, allUsers, dbReady, maxActiveWeeks]);
+  }, [globalSettings, allUsers, dbReady]);
 
   useEffect(() => { setAdminForceReveal(false); }, [selectedWeek]);
 
@@ -3212,37 +3191,8 @@ const handleExportPicksCSV = () => {
         return month === 8;
       };
 
-      if (weekNum === 1) {
-        weekTitle = "Preseason Week 1";
-        const hofGame = allGames.filter((g: any) => String(g.game?.week || '').includes("Hall of Fame"));
-        const week1PreGames = allGames.filter((g: any) => String(g.game?.week || '') === "Week 1" && isAugustGame(g));
-        targetGames = [...hofGame, ...week1PreGames];
-
-      } else if (weekNum === 2) {
-        weekTitle = "Preseason Week 2";
-        targetGames = allGames.filter((g: any) => String(g.game?.week || '') === "Week 2" && isAugustGame(g));
-
-      } else if (weekNum === 3) {
-        weekTitle = "Preseason Week 3";
-        targetGames = allGames.filter((g: any) => String(g.game?.week || '') === "Week 3" && isAugustGame(g));
-
-      } else if (weekNum === 4) {
-        weekTitle = "Regular Season Week 1";
-        targetGames = allGames.filter((g: any) => String(g.game?.week || '') === "Week 1" && !isAugustGame(g));
-
-      } else if (weekNum === 5) {
-        weekTitle = "Regular Season Week 2";
-        targetGames = allGames.filter((g: any) => String(g.game?.week || '') === "Week 2" && !isAugustGame(g));
-
-      } else if (weekNum === 6) {
-        weekTitle = "Regular Season Week 3";
-        targetGames = allGames.filter((g: any) => String(g.game?.week || '') === "Week 3" && !isAugustGame(g));
-
-      } else {
-        const regWeekNum = weekNum - 3;
-        weekTitle = `Regular Season Week ${regWeekNum}`;
-        targetGames = allGames.filter((g: any) => String(g.game?.week || '') === `Week ${regWeekNum}`);
-      }
+      weekTitle = `Regular Season Week ${weekNum}`;
+      targetGames = allGames.filter((g: any) => String(g.game?.week || '') === `Week ${weekNum}` && !isAugustGame(g));
 
       if (targetGames.length === 0) {
         alert(`No games found for ${weekTitle} (Slot ${weekNum}).`);
@@ -4268,7 +4218,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
   <CalendarDays className="w-10 h-10 text-indigo-500 mb-3" />
   <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Current Active Week</div>
   <div className="text-4xl font-black italic text-slate-900">
-    {liveSeasonWeek <= 3 ? `Preseason W${liveSeasonWeek}` : `Week ${liveSeasonWeek - 3}`}
+  Week {liveSeasonWeek}
   </div>
 </div>
  {currentUser.playsConfidence ? <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center cursor-pointer hover:border-[#FFB81C] transition-all" onClick={() => setActiveTab('standings')}><Trophy className="w-10 h-10 text-[#FFB81C]" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Rank</div><div className="text-4xl font-black italic text-slate-900 mb-1">#{String(myRank)}</div>{pointsBehind > 0 && <div className="text-xs font-bold text-slate-500">{String(pointsBehind)} pts behind 1st</div>}{pointsBehind === 0 && myPoints > 0 && <div className="text-xs font-bold text-green-600">You are in 1st!</div>}{rankChange > 0 && <div className="text-xs font-bold text-green-500 mt-1 flex items-center justify-center gap-1"><TrendingUp className="w-3 h-3"/> Up {String(rankChange)} spots</div>}{rankChange < 0 && <div className="text-xs font-bold text-red-500 mt-1 flex items-center justify-center gap-1"><TrendingDown className="w-3 h-3"/> Down {String(Math.abs(rankChange))} spots</div>}</div> : <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center opacity-50"><Trophy className="w-10 h-10 text-slate-400 mb-3" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Pool</div><div className="text-sm font-bold text-slate-500 uppercase">Not Registered</div></div>}
@@ -4343,8 +4293,8 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
           <div className="flex items-center gap-3 mb-4">
             <Skull className="w-10 h-10 text-[#FFB81C]" />
             <h2 className="text-4xl font-black italic uppercase tracking-tighter">
-              KnockOut <span className="text-[#FFB81C]">S{globalSettings?.knockoutSession || 1} &bull; {liveSeasonWeek <= 3 ? `PRE W${liveSeasonWeek}` : `WK ${liveSeasonWeek - 3}`}</span>
-            </h2>
+            KnockOut <span className="text-[#FFB81C]">Week {liveSeasonWeek}</span>
+</h2>
           </div>
           <p className="text-slate-400 font-bold max-w-lg">One winner per week. Stay alive. No team reused.</p>
         </div>
@@ -4871,11 +4821,11 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {Array.from({ length: 21 }, (_, i) => i + 1).map((wNum) => {
-                      const weekGames = globalSettings?.games?.[wNum] || [];
-                      const gameCount = weekGames.length;
-                      const isPopulated = gameCount > 0;
-                      const weekLabel = wNum <= 3 ? `Preseason W${wNum}` : `Week ${wNum - 3}`;
+                  {Array.from({ length: 18 }, (_, i) => i + 1).map((wNum) => {
+  const weekGames = globalSettings?.games?.[wNum] || [];
+  const gameCount = weekGames.length;
+  const isPopulated = gameCount > 0;
+  const weekLabel = `Week ${wNum}`;
 
                       return (
                         <div 
