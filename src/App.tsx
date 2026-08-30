@@ -1148,7 +1148,7 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
       </div>
 
       {/* MATRIX TABLE */}
-      <div className="overflow-x-auto scrollbar-hide relative z-0" style={{ touchAction: 'pan-x pan-y', WebkitOverflowScrolling: 'touch' }}>
+      <div className="w-full max-w-full overflow-x-auto scrollbar-hide relative z-0" style={{ touchAction: 'pan-x pan-y', WebkitOverflowScrolling: 'touch' }}>
         <table className="w-full text-left border-collapse table-auto">
           <thead>
             <tr className="bg-slate-900 text-white uppercase border-b-4 border-[#FFB81C]">
@@ -3971,13 +3971,13 @@ isKnockedOut = wasAlreadyOut(currentUser, liveSeasonWeek, globalSettings);
 let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 
   return (
-    <div className="min-h-screen font-sans text-slate-900 pb-24 md:pb-0 relative" style={fieldBackgroundStyle}>
+    <div className="min-h-screen w-full overflow-x-hidden font-sans text-slate-900 pb-24 md:pb-0 relative" style={fieldBackgroundStyle}>
       {showChangePassword && <ChangePasswordModal user={sessionUser} onClose={() => setShowChangePassword(false)} onSave={handleChangePassword} />}
       {deadbeatsToConfirm && (
           <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4"><div className="bg-white max-w-lg w-full rounded-3xl p-8 shadow-2xl animate-in zoom-in-95"><h2 className="text-2xl font-black italic uppercase text-red-600 mb-4 flex items-center gap-2"><AlertCircle /> Confirm Deadbeats</h2><p className="text-slate-600 font-bold mb-4">The following players have incomplete picks and will receive default deadbeat assignments:</p><div className="max-h-60 overflow-y-auto mb-6 bg-slate-50 rounded-xl p-4 border border-slate-200">{deadbeatsToConfirm.length === 0 ? <p className="text-slate-400 italic">None! All active players have fully submitted picks.</p> : <ul className="space-y-2">{deadbeatsToConfirm.map((u: any, i: number) => <li key={i} className="font-black text-slate-800 flex items-center">{String(u.name)} <span className="text-[10px] text-slate-400 bg-white px-2 py-0.5 rounded ml-2 border uppercase tracking-widest">{String(u.type)}</span></li>)}</ul>}</div><div className="flex gap-4"><button onClick={() => setDeadbeatsToConfirm(null)} className="flex-1 px-6 py-4 bg-slate-100 text-slate-700 rounded-xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button><button onClick={executeLockWeek} className="flex-1 px-6 py-4 bg-red-600 text-white rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-red-700 transition-all">Lock & Apply</button></div></div></div>
       )}
       <header className="bg-slate-900 text-white sticky top-0 z-40 shadow-xl print:hidden border-b-2 sm:border-b-4 border-[#FFB81C]">
-        <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-1.5 sm:py-3">
+      <div className="w-full max-w-[1600px] mx-auto px-3 sm:px-4 py-1.5 sm:py-3">
           
           {/* DESKTOP HEADER (UNCHANGED) */}
           <div className="hidden md:flex items-center justify-between gap-4 h-16">
@@ -3994,21 +3994,19 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             <div className="hidden lg:flex items-center gap-1 bg-white/10 rounded-full p-1 border border-white/10 backdrop-blur-md">
               <NavButton icon={Home} label="Home" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
               {currentUser?.playsConfidence && (
-                <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1">
-                  <NavButton icon={CalendarDays} label="Fanatics" active={activeTab === 'confidence'} onClick={() => setActiveTab('confidence')} />
-                  <NavButton icon={Users} label="F-Results" active={activeTab === 'c-tracker'} onClick={() => setActiveTab('c-tracker')} />
-                  <NavButton icon={Trophy} label="Standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
-                </div>
-              )}
-              {currentUser?.playsKnockout && (
-                <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1">
-                  <NavButton icon={Skull} label="KnockOut" active={activeTab === 'knockout'} onClick={() => setActiveTab('knockout')} className="text-red-300 hover:text-red-100" />
-                  <NavButton icon={HeartPulse} label="KO-Results" active={activeTab === 'k-tracker'} onClick={() => setActiveTab('k-tracker')} className="text-red-300 hover:text-red-100" />
-                </div>
-              )}
-              <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1">
-                <NavButton icon={BarChart2} label="Stats" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
-              </div>
+  <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1">
+    <NavButton icon={CalendarDays} label="Fanatics" active={activeTab === 'confidence'} onClick={() => setActiveTab('confidence')} />
+    <NavButton icon={Users} label="F-Results" active={activeTab === 'c-tracker'} onClick={() => setActiveTab('c-tracker')} />
+    <NavButton icon={BarChart2} label="Stats" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
+    <NavButton icon={Trophy} label="Standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
+  </div>
+)}
+{currentUser?.playsKnockout && (
+  <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1">
+    <NavButton icon={Skull} label="KnockOut" active={activeTab === 'knockout'} onClick={() => setActiveTab('knockout')} className="text-red-300 hover:text-red-100" />
+    <NavButton icon={HeartPulse} label="KO-Results" active={activeTab === 'k-tracker'} onClick={() => setActiveTab('k-tracker')} className="text-red-300 hover:text-red-100" />
+  </div>
+)}
               {isAdmin && (
                 <div className="flex items-center gap-1 pl-2 border-l-2 border-white/10 ml-1">
                   <NavButton icon={ShieldCheck} label="Admin" active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} className="text-[#FFB81C]" />
@@ -4141,14 +4139,25 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
       </header>
 
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t-2 border-[#FFB81C] z-40 print:hidden overflow-x-auto scrollbar-hide">
-        <div className="flex justify-start items-center p-2 gap-2 min-w-max">
-            <MobileNavButton icon={Home} label="Home" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-            {currentUser?.playsConfidence && <><MobileNavButton icon={CalendarDays} label="Fanatics" active={activeTab === 'confidence'} onClick={() => setActiveTab('confidence')} /><MobileNavButton icon={Users} label="F-Results" active={activeTab === 'c-tracker'} onClick={() => setActiveTab('c-tracker')} /><MobileNavButton icon={Trophy} label="Standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} /></>}
-            {currentUser?.playsKnockout && <><MobileNavButton icon={Skull} label="KnockOut" active={activeTab === 'knockout'} onClick={() => setActiveTab('knockout')} /><MobileNavButton icon={HeartPulse} label="KO-Results" active={activeTab === 'k-tracker'} onClick={() => setActiveTab('k-tracker')} /></>}
-            <MobileNavButton icon={BarChart2} label="Stats" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
-            {isAdmin && <MobileNavButton icon={ShieldCheck} label="Admin" active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} />}
-        </div>
-      </nav>
+  <div className="flex justify-start items-center p-2 gap-2 min-w-max">
+    <MobileNavButton icon={Home} label="Home" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+    {currentUser?.playsConfidence && (
+      <>
+        <MobileNavButton icon={CalendarDays} label="Fanatics" active={activeTab === 'confidence'} onClick={() => setActiveTab('confidence')} />
+        <MobileNavButton icon={Users} label="F-Results" active={activeTab === 'c-tracker'} onClick={() => setActiveTab('c-tracker')} />
+        <MobileNavButton icon={BarChart2} label="Stats" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
+        <MobileNavButton icon={Trophy} label="Standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
+      </>
+    )}
+    {currentUser?.playsKnockout && (
+      <>
+        <MobileNavButton icon={Skull} label="KnockOut" active={activeTab === 'knockout'} onClick={() => setActiveTab('knockout')} />
+        <MobileNavButton icon={HeartPulse} label="KO-Results" active={activeTab === 'k-tracker'} onClick={() => setActiveTab('k-tracker')} />
+      </>
+    )}
+    {isAdmin && <MobileNavButton icon={ShieldCheck} label="Admin" active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} />}
+  </div>
+</nav>
 
       <main className="max-w-[1600px] mx-auto px-4 py-6 print:hidden">
       {activeTab === 'dashboard' && (

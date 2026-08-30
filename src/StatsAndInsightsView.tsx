@@ -395,7 +395,7 @@ export function StatsAndInsightsView({
               >
                 {Array.from({ length: maxActiveWeeks }, (_, i) => i + 1).map(w => (
                   <option key={w} value={w}>
-                    {w <= 3 ? `Preseason Week ${w}` : `Week ${w - 3}`}
+                    Week {w}
                   </option>
                 ))}
               </select>
