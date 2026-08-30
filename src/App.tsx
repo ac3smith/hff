@@ -949,7 +949,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                   return (
                     <tr key={user.id} className={`${isMe ? 'bg-[#FFB81C]/20 border-l-4 border-[#FFB81C] font-black' : isProjection ? 'hover:bg-amber-100/40' : 'hover:bg-slate-50'} transition-colors group relative`}>
                       {/* Sticky Name Column */}
-                      <td className={`px-2 py-1 sticky left-0 z-20 ${isMe ? 'bg-[#FFB81C]/30 border-l-4 border-[#FFB81C]' : isProjection ? 'bg-amber-50' : 'bg-white'} border-r-2 border-slate-300 shadow-md`}>
+                      <td className={`px-2 py-1 sticky left-0 z-20 ${isMe ? 'bg-[#F7D870] border-l-4 border-[#FFB81C]' : isProjection ? 'bg-amber-50' : 'bg-white'} border-r-2 border-slate-300 shadow-md`}>
   <div className="flex items-center gap-1.5">
     <span className="font-black italic text-xs sm:text-sm text-slate-900 w-5 text-right shrink-0">
       {activeRank}.
