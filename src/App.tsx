@@ -1621,16 +1621,7 @@ function AdminLifecycleCard({ week, status, onLock, onClose, onOpen, onPreviewCl
         </div>
       </div>
 
-      {/* 📧 EMAIL RECAP BUTTON (POSITIONED DIRECTLY BELOW LIFECYCLE CONTROLS) */}
-      <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
-        <button
-          onClick={onGenerateRecap}
-          className="w-full sm:w-auto bg-[#FFB81C] text-slate-900 hover:bg-amber-400 px-6 py-3 rounded-xl font-black italic uppercase tracking-wider text-xs shadow-md transition-all flex items-center justify-center gap-2"
-        >
-          <Megaphone className="w-4 h-4 text-slate-900" />
-          Generate Email Recap
-        </button>
-      </div>
+      
     </div>
   );
 }
@@ -4723,7 +4714,6 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                     onClose={handleCloseWeek} 
                     onOpen={handleOpenWeek}
                     onPreviewClose={() => setIsPreviewOpen(true)}
-                    onGenerateRecap={() => setShowWeeklyRecapModal(true)}
                   />
                   <AdminWeekCard week={selectedWeek} onChange={(e: any) => setSelectedWeek(Number(e.target.value))} maxActiveWeeks={maxActiveWeeks} />
                 </div>
@@ -5210,6 +5200,12 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                 >
                   <Skull className="w-4 h-4 text-rose-400" /> Copy Knockout Emails ({knockoutEmails.length})
                 </button>
+                <button
+  onClick={() => setShowWeeklyRecapModal(true)}
+  className="px-4 py-2.5 bg-[#FFB81C] text-slate-900 rounded-xl font-black text-xs uppercase hover:bg-amber-400 transition-all flex items-center gap-1.5 shadow-md"
+>
+  <Megaphone className="w-4 h-4 text-slate-900" /> Launch Rich Email Recap Modal
+</button>
               </div>
             </div>
           </div>
