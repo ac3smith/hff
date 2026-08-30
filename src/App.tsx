@@ -4428,6 +4428,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             {/* ADMIN SUB-NAV BAR */}
             <div className="flex bg-white rounded-2xl shadow-md border border-slate-200 p-1.5 mb-6 overflow-x-auto scrollbar-hide">
               <AdminNavButton icon={PieChart} label="Pick Status" active={adminTab === 'status'} onClick={() => setAdminTab('status')} />
+              <AdminNavButton icon={Megaphone} label="Recap & Scenarios" active={adminTab === 'recap'} onClick={() => setAdminTab('recap')} />
               <AdminNavButton icon={UserCog} label="Manage Users" active={adminTab === 'users'} onClick={() => setAdminTab('users')} />
               <AdminNavButton icon={ListChecks} label="Manage Games" active={adminTab === 'games'} onClick={() => setAdminTab('games')} />
               <AdminNavButton icon={DollarSign} label="Financials" active={adminTab === 'financials'} onClick={() => setAdminTab('financials')} />
@@ -4876,69 +4877,499 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             )}
 
             {/* 4. FINANCIALS SUB-TAB */}
-            {adminTab === 'financials' && (
-              <div className="space-y-8 max-w-[1400px] mx-auto">
-                {(() => {
-                  const fanaticsPlayers = allUsers.filter(u => u.playsConfidence);
-                  const activeCount = fanaticsPlayers.length;
-                  const maxWeeksVal = globalSettings?.maxActiveWeeks || 18;
-                  const half1Weeks = Math.ceil(maxWeeksVal / 2);
-                  const half2Weeks = Math.floor(maxWeeksVal / 2);
+            {/* 4. FINANCIALS SUB-TAB */}
+{adminTab === 'financials' && (
+  <div className="space-y-8 max-w-[1400px] mx-auto">
+    {(() => {
+      const fanaticsPlayers = allUsers.filter(u => u.playsConfidence);
+      const activeCount = fanaticsPlayers.length;
+      const maxWeeksVal = globalSettings?.maxActiveWeeks || 18;
+      const half1Weeks = Math.ceil(maxWeeksVal / 2);
+      const half2Weeks = Math.floor(maxWeeksVal / 2);
 
-                  let closedWeeksCount = 0;
-                  for (let wk = 1; wk <= maxWeeksVal; wk++) {
-                    if (globalSettings?.weekStates?.[wk] === 'closed') closedWeeksCount++;
-                  }
+      let closedWeeksCount = 0;
+      for (let wk = 1; wk <= maxWeeksVal; wk++) {
+        if (globalSettings?.weekStates?.[wk] === 'closed') closedWeeksCount++;
+      }
 
-                  const matrix = calculateFanaticsPayouts(activeCount, maxWeeksVal, half1Weeks, half2Weeks);
-                  const totalSeasonDues = activeCount * 12 * maxWeeksVal;
-                  const totalCollectedToDate = activeCount * 12 * closedWeeksCount;
+      const matrix = calculateFanaticsPayouts(activeCount, maxWeeksVal, half1Weeks, half2Weeks);
+      const totalSeasonDues = activeCount * 12 * maxWeeksVal;
+      const totalCollectedToDate = activeCount * 12 * closedWeeksCount;
 
-                  return (
-                    <div className="space-y-6">
-                      <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-2xl border-b-8 border-[#FFB81C]">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-800">
-                          <div>
-                            <span className="text-xs font-black uppercase tracking-widest text-[#FFB81C]">Fanatics Pool Master Ledger</span>
-                            <h2 className="text-3xl font-black italic uppercase text-white flex items-center gap-2 mt-1">
-                              <DollarSign className="w-8 h-8 text-[#FFB81C]" /> Financial Accounting Overview
-                            </h2>
-                            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">
-                              {activeCount} Fanatics Players &bull; $12/Week Dues &bull; {closedWeeksCount} / {maxWeeksVal} Weeks Closed
-                            </p>
-                          </div>
+      const weeklyPayouts = globalSettings?.fpPayouts || matrix.weeklyGross;
+      const half1Payouts = globalSettings?.seasonBonuses?.firstHalf || matrix.half1Payouts;
+      const half2Payouts = globalSettings?.seasonBonuses?.secondHalf || matrix.half2Payouts;
+      const overallPayouts = globalSettings?.seasonBonuses?.overall || matrix.seasonPayouts;
+
+      return (
+        <div className="space-y-8">
+          {/* HEADER SUMMARY BAR */}
+          <div className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-2xl border-b-8 border-[#FFB81C]">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-800">
+              <div>
+                <span className="text-xs font-black uppercase tracking-widest text-[#FFB81C]">
+                  Fanatics Pool Financial Ledger
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-black italic uppercase text-white flex items-center gap-2 mt-1">
+                  <DollarSign className="w-7 h-7 sm:w-8 sm:h-8 text-[#FFB81C]" /> Prize Pool & Payout Calculator
+                </h2>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">
+                  {activeCount} Active Players &bull; $12/Week Dues &bull; {closedWeeksCount} / {maxWeeksVal} Weeks Closed
+                </p>
+              </div>
+            </div>
+
+            {/* HIGH LEVEL METRICS GRID */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+              <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center">
+                <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Dues Collected</span>
+                <span className="text-2xl font-black italic text-emerald-400 font-mono">${totalCollectedToDate}</span>
+                <span className="text-[9px] text-slate-500 block mt-0.5">Projected: ${totalSeasonDues}</span>
+              </div>
+              <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center">
+                <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Weekly Gross Pot</span>
+                <span className="text-2xl font-black italic text-[#FFB81C] font-mono">${matrix.weeklyPot}</span>
+                <span className="text-[9px] text-slate-500 block mt-0.5">$7.00/player/wk</span>
+              </div>
+              <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center">
+                <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">1st & 2nd Half Pots</span>
+                <span className="text-2xl font-black italic text-sky-400 font-mono">${Math.round(matrix.half1Pot)}</span>
+                <span className="text-[9px] text-slate-500 block mt-0.5">$1.75/player/wk</span>
+              </div>
+              <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center">
+                <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Overall Season Pot</span>
+                <span className="text-2xl font-black italic text-purple-400 font-mono">${Math.round(matrix.seasonPot)}</span>
+                <span className="text-[9px] text-slate-500 block mt-0.5">$1.25/player/wk</span>
+              </div>
+              <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center col-span-2 sm:col-span-1">
+                <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Expense / Party Fund</span>
+                <span className="text-2xl font-black italic text-indigo-400 font-mono">${Math.round(activeCount * 2.0 * maxWeeksVal)}</span>
+                <span className="text-[9px] text-slate-500 block mt-0.5">$2.00/player/wk</span>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 1: WEEKLY PAYOUT POSITION BREAKDOWN */}
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-5 sm:p-6 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div>
+                <h3 className="text-lg sm:text-xl font-black italic uppercase text-slate-900 flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-[#FFB81C]" /> Weekly Payout Schedule (Ranks 1 – 8)
+                </h3>
+                <p className="text-xs text-slate-500 font-bold mt-0.5">
+                  Calculated based on {activeCount} active players ($7.00/wk gross pool = ${matrix.weeklyPot})
+                </p>
+              </div>
+            </div>
+
+            <div className="w-full max-w-full overflow-x-auto">
+              <table className="w-full text-left min-w-[700px]">
+                <thead>
+                  <tr className="bg-slate-900 text-white text-[10px] uppercase border-b-2 border-[#FFB81C]">
+                    <th className="p-3.5 italic">Finish Position</th>
+                    <th className="p-3.5 text-center">% Allocation</th>
+                    <th className="p-3.5 text-center">Gross Payout Award</th>
+                    <th className="p-3.5 text-center">Weekly Dues</th>
+                    <th className="p-3.5 text-right pr-6">Net Earnings</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs sm:text-sm font-bold">
+                  {[
+                    { pos: '1st Place', pct: '22%' },
+                    { pos: '2nd Place', pct: '19%' },
+                    { pos: '3rd Place', pct: '16%' },
+                    { pos: '4th Place', pct: '13%' },
+                    { pos: '5th Place', pct: '9%' },
+                    { pos: '6th Place', pct: '8%' },
+                    { pos: '7th Place', pct: '7%' },
+                    { pos: '8th Place', pct: '6%' },
+                  ].map((row, idx) => {
+                    const gross = weeklyPayouts[idx] || 0;
+                    const net = gross - 12;
+
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-3.5 font-black text-slate-900 italic flex items-center gap-2">
+                          <span className="w-6 text-center text-[#FFB81C] font-black">#{idx + 1}</span> {row.pos}
+                        </td>
+                        <td className="p-3.5 text-center text-slate-500 font-mono">{row.pct}</td>
+                        <td className="p-3.5 text-center font-mono font-black text-slate-900">${gross}</td>
+                        <td className="p-3.5 text-center font-mono text-rose-600">-$12</td>
+                        <td className="p-3.5 text-right pr-6 font-mono font-black italic text-emerald-600">
+                          {net >= 0 ? `+$${net}` : `-$${Math.abs(net)}`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="bg-slate-50 font-black">
+                    <td className="p-3.5 italic text-slate-400">Ranks 9th through {activeCount}th</td>
+                    <td className="p-3.5 text-center text-slate-400 font-mono">0%</td>
+                    <td className="p-3.5 text-center font-mono text-slate-400">$0</td>
+                    <td className="p-3.5 text-center font-mono text-rose-600">-$12</td>
+                    <td className="p-3.5 text-right pr-6 font-mono text-rose-600">-$12</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* SECTION 2: SEASON BONUS PAYOUT TABLES (1ST HALF, 2ND HALF, OVERALL) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* 1ST HALF BONUS TABLE */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="p-4 bg-slate-900 text-white border-b-4 border-sky-400">
+                <h4 className="font-black italic uppercase text-sm sm:text-base text-sky-400 flex items-center gap-1.5">
+                  <Award className="w-4 h-4" /> 1st Half Bonus (Wks 1–{half1Weeks})
+                </h4>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                  Total Pool: ${Math.round(matrix.half1Pot)}
+                </p>
+              </div>
+              <div className="p-3">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-[9px] uppercase text-slate-400 border-b border-slate-100">
+                      <th className="pb-2">Pos</th>
+                      <th className="pb-2 text-center">%</th>
+                      <th className="pb-2 text-right">Bonus Cash</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-bold">
+                    {half1Payouts.slice(0, 8).map((amt: number, i: number) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className="py-2 text-slate-900">#{i + 1} Finish</td>
+                        <td className="py-2 text-center text-slate-400 font-mono">
+                          {[22, 19, 16, 13, 9, 8, 7, 6][i]}%
+                        </td>
+                        <td className="py-2 text-right font-mono font-black text-sky-600">+${amt}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 2ND HALF BONUS TABLE */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="p-4 bg-slate-900 text-white border-b-4 border-purple-400">
+                <h4 className="font-black italic uppercase text-sm sm:text-base text-purple-400 flex items-center gap-1.5">
+                  <Award className="w-4 h-4" /> 2nd Half Bonus (Wks {half1Weeks + 1}–{maxWeeksVal})
+                </h4>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                  Total Pool: ${Math.round(matrix.half2Pot)}
+                </p>
+              </div>
+              <div className="p-3">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-[9px] uppercase text-slate-400 border-b border-slate-100">
+                      <th className="pb-2">Pos</th>
+                      <th className="pb-2 text-center">%</th>
+                      <th className="pb-2 text-right">Bonus Cash</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-bold">
+                    {half2Payouts.slice(0, 8).map((amt: number, i: number) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className="py-2 text-slate-900">#{i + 1} Finish</td>
+                        <td className="py-2 text-center text-slate-400 font-mono">
+                          {[22, 19, 16, 13, 9, 8, 7, 6][i]}%
+                        </td>
+                        <td className="py-2 text-right font-mono font-black text-purple-600">+${amt}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* OVERALL SEASON BONUS TABLE */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="p-4 bg-slate-900 text-white border-b-4 border-[#FFB81C]">
+                <h4 className="font-black italic uppercase text-sm sm:text-base text-[#FFB81C] flex items-center gap-1.5">
+                  <Crown className="w-4 h-4" /> Full Season Leaderboard
+                </h4>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                  Total Pool: ${Math.round(matrix.seasonPot)}
+                </p>
+              </div>
+              <div className="p-3">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-[9px] uppercase text-slate-400 border-b border-slate-100">
+                      <th className="pb-2">Pos</th>
+                      <th className="pb-2 text-center">%</th>
+                      <th className="pb-2 text-right">Grand Prize</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-bold">
+                    {overallPayouts.slice(0, 8).map((amt: number, i: number) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className="py-2 text-slate-900">#{i + 1} Overall</td>
+                        <td className="py-2 text-center text-slate-400 font-mono">
+                          {[22, 19, 16, 13, 9, 8, 7, 6][i]}%
+                        </td>
+                        <td className="py-2 text-right font-mono font-black text-emerald-600">+${amt}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
+  </div>
+)}
+{/* 6. ADMIN RECAP & MONDAY NIGHT SCENARIOS SUB-TAB */}
+{adminTab === 'recap' && (
+  <div className="space-y-8 max-w-[1400px] mx-auto">
+    {(() => {
+      const targetWk = selectedWeek || liveSeasonWeek;
+      const weekGames = globalSettings?.games?.[targetWk] || games || [];
+      const actualTB = globalSettings?.actualTiebreakers?.[targetWk] ?? 0;
+
+      // 1. Email Roster Extraction
+      const fanaticsEmails = allUsers.filter(u => u.playsConfidence && u.email?.trim()).map(u => u.email.trim());
+      const knockoutEmails = allUsers.filter(u => u.playsKnockout && u.email?.trim()).map(u => u.email.trim());
+
+      const copyToClipboard = (text: string, msg: string) => {
+        navigator.clipboard.writeText(text);
+        alert(msg);
+      };
+
+      // 2. Identify Monday Night / Final Games
+      const mondayGames = weekGames.filter((g: any) => {
+        const dateStr = String(g.date || '').toLowerCase();
+        return dateStr.includes('mon') || g.isTiebreaker;
+      });
+
+      // 3. Process Weekly Standings for Great 8 & Basement
+      const standardMaxPossible = weekGames.reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
+      const processedUsers = allUsers.filter(u => u.playsConfidence).map((u: any) => {
+        const userPicks = u.picks?.[targetWk] || {};
+        const userRanks = u.ranks?.[targetWk] || {};
+        const userTB = parseInt(u.tiebreakers?.[targetWk] || '0', 10);
+        const isDeadbeat = u.tiebreakers?.[targetWk] === '0' || (weekGames.length > 0 && weekGames.every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
+
+        const userMaxPossible = isDeadbeat ? weekGames.length * 5 : standardMaxPossible;
+        const pointsLost = weekGames.reduce((lost: number, g: any) => {
+          const pick = userPicks[g.id];
+          const rank = parseInt(userRanks[g.id] || 0, 10);
+          if (!pick || !rank) return lost;
+          if (g.status === 'final' && g.winner && pick !== g.winner) return lost + rank;
+          return lost;
+        }, 0);
+
+        const score = userMaxPossible - pointsLost;
+        const tbDiff = Math.abs(userTB - actualTB);
+
+        return { ...u, name: formatFullName(u), score, tbDiff, userTB, userPicks, userRanks, isDeadbeat };
+      });
+
+      processedUsers.sort((a, b) => b.score - a.score || a.tbDiff - b.tbDiff);
+      const payouts = globalSettings?.fpPayouts || [77, 67, 56, 46, 31, 28, 25, 20];
+      calculateTiedPayouts(processedUsers, payouts);
+
+      const great8 = processedUsers.filter(u => u.grossPayout > 0);
+      const basement = processedUsers.slice(-8).reverse();
+
+      // 4. Knockout Casualties
+      const koCasualties = allUsers.filter(u => u.playsKnockout && ['Loser', 'Loser (No Pick)'].includes(u.knockoutStatuses?.[targetWk])).map(u => ({
+        name: formatFullName(u),
+        pick: u.knockoutPicks?.[targetWk] || 'No Pick'
+      }));
+
+      return (
+        <div className="space-y-8">
+          {/* HEADER & ROSTER EMAIL EXPORTERS */}
+          <div className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-2xl border-b-8 border-[#FFB81C]">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <span className="text-xs font-black uppercase tracking-widest text-[#FFB81C]">Admin Communications Center</span>
+                <h2 className="text-2xl sm:text-3xl font-black italic uppercase text-white flex items-center gap-2 mt-1">
+                  <Megaphone className="w-7 h-7 text-[#FFB81C]" /> Weekly Email Recap & Scenarios
+                </h2>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">
+                  Week {targetWk} &bull; Separate copy blocks for Fanatics and Knockout updates
+                </p>
+              </div>
+
+              {/* QUICK EMAIL ROSTER COPY BUTTONS */}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => copyToClipboard(fanaticsEmails.join(', '), `Copied ${fanaticsEmails.length} Fanatics emails!`)}
+                  className="px-4 py-2.5 bg-amber-500/20 text-[#FFB81C] border border-[#FFB81C]/40 rounded-xl font-black text-xs uppercase hover:bg-amber-500/30 transition-all flex items-center gap-1.5"
+                >
+                  <Mail className="w-4 h-4" /> Copy Fanatics Emails ({fanaticsEmails.length})
+                </button>
+                <button
+                  onClick={() => copyToClipboard(knockoutEmails.join(', '), `Copied ${knockoutEmails.length} Knockout emails!`)}
+                  className="px-4 py-2.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-xl font-black text-xs uppercase hover:bg-rose-500/30 transition-all flex items-center gap-1.5"
+                >
+                  <Skull className="w-4 h-4 text-rose-400" /> Copy Knockout Emails ({knockoutEmails.length})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 1: MONDAY NIGHT WIN SCENARIOS */}
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-5 bg-slate-900 text-white flex justify-between items-center border-b-4 border-[#FFB81C]">
+              <div>
+                <h3 className="text-lg font-black italic uppercase text-[#FFB81C] flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-[#FFB81C]" /> Monday Night Contenders & Path-To-Victory
+                </h3>
+                <p className="text-xs text-slate-400 font-bold">Live points gap heading into final game(s)</p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {mondayGames.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No remaining Monday Night or tiebreaker games identified for Week {targetWk}.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {processedUsers.slice(0, 5).map((u: any, idx: number) => {
+                    const topScore = processedUsers[0].score;
+                    const gap = topScore - u.score;
+
+                    return (
+                      <div key={u.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex justify-between items-center">
+                        <div>
+                          <span className="text-xs font-black text-[#FFB81C] uppercase italic">#{idx + 1} Place</span>
+                          <h4 className="font-black text-slate-900 text-sm">{u.name}</h4>
+                          <span className="text-[10px] text-slate-500 font-bold">Score: {u.score} PTS | TB Pick: {u.userTB}</span>
                         </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                          <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center">
-                            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Dues Collected</span>
-                            <span className="text-2xl font-black italic text-emerald-400 font-mono">${totalCollectedToDate}</span>
-                            <span className="text-[9px] text-slate-500 block mt-0.5">Projected: ${totalSeasonDues}</span>
-                          </div>
-                          <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center">
-                            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Weekly Pots Paid</span>
-                            <span className="text-2xl font-black italic text-[#FFB81C] font-mono">${Math.round(matrix.weeklyPot * closedWeeksCount)}</span>
-                            <span className="text-[9px] text-slate-500 block mt-0.5">${matrix.weeklyPot}/week</span>
-                          </div>
-                          <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center">
-                            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Half Pots Accrued</span>
-                            <span className="text-2xl font-black italic text-sky-400 font-mono">${Math.round(activeCount * 1.75 * Math.min(closedWeeksCount, half1Weeks))}</span>
-                          </div>
-                          <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center">
-                            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Season Pot Accrued</span>
-                            <span className="text-2xl font-black italic text-purple-400 font-mono">${Math.round(activeCount * 1.25 * closedWeeksCount)}</span>
-                          </div>
-                          <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-center col-span-2 sm:col-span-1">
-                            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Party / Expense Fund</span>
-                            <span className="text-2xl font-black italic text-indigo-400 font-mono">${Math.round(activeCount * 2.0 * closedWeeksCount)}</span>
-                          </div>
+                        <div className="text-right">
+                          <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${gap === 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                            {gap === 0 ? 'Current Leader' : `-${gap} PTS Behind`}
+                          </span>
                         </div>
                       </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* SECTION 2: THE GREAT 8 (FANATICS PAYOUT ZONE) */}
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-5 bg-slate-900 text-white flex justify-between items-center border-b-4 border-[#FFB81C]">
+              <h3 className="text-lg font-black italic uppercase text-white flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-[#FFB81C]" /> The Great 8 (Weekly Fanatics Winners)
+              </h3>
+              <button
+                onClick={() => {
+                  const html = great8.map((u: any) => `#${u.rank} ${u.name} - ${u.score} PTS (+$${u.grossPayout})`).join('\n');
+                  copyToClipboard(html, "Great 8 summary copied to clipboard!");
+                }}
+                className="px-4 py-1.5 bg-[#FFB81C] text-slate-900 font-black text-xs uppercase rounded-lg shadow"
+              >
+                Copy Great 8
+              </button>
+            </div>
+            <div className="p-4">
+              <table className="w-full text-left text-xs font-bold">
+                <thead>
+                  <tr className="text-slate-400 uppercase text-[10px] border-b pb-2">
+                    <th className="p-2">Rank</th>
+                    <th className="p-2">Player</th>
+                    <th className="p-2 text-center">Score</th>
+                    <th className="p-2 text-center">Tiebreaker</th>
+                    <th className="p-2 text-right">Award</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {great8.map((u: any) => (
+                    <tr key={u.id}>
+                      <td className="p-2 font-black italic text-[#FFB81C]">#{u.rank}</td>
+                      <td className="p-2 text-slate-900">{u.name}</td>
+                      <td className="p-2 text-center font-mono">{u.score} PTS</td>
+                      <td className="p-2 text-center font-mono">{u.userTB}</td>
+                      <td className="p-2 text-right font-mono text-emerald-600 font-black">+${u.grossPayout}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* SECTION 3: THE BASEMENT */}
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-5 bg-slate-900 text-white flex justify-between items-center border-b-4 border-rose-600">
+              <h3 className="text-lg font-black italic uppercase text-white flex items-center gap-2">
+                <TrendingDown className="w-5 h-5 text-rose-500" /> The Basement (Bottom 8 Finishers)
+              </h3>
+              <button
+                onClick={() => {
+                  const html = basement.map((u: any) => `#${u.rank} ${u.name} - ${u.score} PTS`).join('\n');
+                  copyToClipboard(html, "Basement list copied!");
+                }}
+                className="px-4 py-1.5 bg-rose-600 text-white font-black text-xs uppercase rounded-lg shadow"
+              >
+                Copy Basement
+              </button>
+            </div>
+            <div className="p-4">
+              <table className="w-full text-left text-xs font-bold">
+                <thead>
+                  <tr className="text-slate-400 uppercase text-[10px] border-b pb-2">
+                    <th className="p-2">Rank</th>
+                    <th className="p-2">Player</th>
+                    <th className="p-2 text-center">Score</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {basement.map((u: any) => (
+                    <tr key={u.id}>
+                      <td className="p-2 font-black italic text-rose-500">#{u.rank}</td>
+                      <td className="p-2 text-slate-900">{u.name} {u.isDeadbeat && '(Deadbeat)'}</td>
+                      <td className="p-2 text-center font-mono text-rose-600">{u.score} PTS</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* SECTION 4: SEPARATE KNOCKOUT POOL RECAP */}
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-5 bg-slate-900 text-white flex justify-between items-center border-b-4 border-red-600">
+              <h3 className="text-lg font-black italic uppercase text-white flex items-center gap-2">
+                <Skull className="w-5 h-5 text-red-600" /> Separate Knockout Email Update
+              </h3>
+              <button
+                onClick={() => {
+                  const text = `KNOCKOUT WEEK ${targetWk} ELIMINATIONS:\n` + koCasualties.map((k: any) => `${k.name} - Picked ${k.pick} ❌`).join('\n');
+                  copyToClipboard(text, "Knockout recap copied to clipboard!");
+                }}
+                className="px-4 py-1.5 bg-red-600 text-white font-black text-xs uppercase rounded-lg shadow"
+              >
+                Copy Knockout Email Content
+              </button>
+            </div>
+            <div className="p-6">
+              {koCasualties.length === 0 ? (
+                <p className="text-xs text-emerald-600 font-black uppercase">No Knockout Eliminations in Week {targetWk}! All active players survived.</p>
+              ) : (
+                <ul className="space-y-2 text-xs font-bold text-slate-800">
+                  {koCasualties.map((k: any, idx: number) => (
+                    <li key={idx} className="flex items-center justify-between p-3 bg-rose-50 rounded-xl border border-rose-200">
+                      <span>{k.name}</span>
+                      <span className="text-rose-700 font-black italic">Picked {k.pick} ❌</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    })()}
+  </div>
+)}
 
             {/* 5. SITE SETTINGS SUB-TAB */}
             {adminTab === 'settings' && (
