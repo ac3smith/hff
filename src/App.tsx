@@ -3453,10 +3453,25 @@ function ensureAutoTiebreaker(gamesList: any[]) {
           const agAwayCanonical = getCanonicalTeamCode(ag.teams?.away?.code || ag.teams?.away?.name);
           const agHomeCanonical = getCanonicalTeamCode(ag.teams?.home?.code || ag.teams?.home?.name);
 
-          return (
-            String(ag.game?.id) === String(g.id) ||
-            (agAwayCanonical === gAwayCanonical && agHomeCanonical === gHomeCanonical)
+          // 1. Primary check: Exact API Game ID match
+          if (String(ag.game?.id) === String(g.id)) return true;
+
+          // 2. Secondary check: Both Home AND Away teams must match
+          const teamsMatchExact = (agAwayCanonical === gAwayCanonical && agHomeCanonical === gHomeCanonical);
+
+          // 3. Safety Check: If target game is upcoming, do not match old finished games from different dates
+          const isApiGameFinal = ['FT', 'AOT', 'POST', 'CANC', 'ABD', 'FINAL', 'FINISHED'].includes(
+            String(ag.game?.status?.short || '').toUpperCase()
           );
+
+          if (teamsMatchExact && (g.status === 'upcoming' || g.status === 'scheduled') && isApiGameFinal) {
+            const apiGameDate = String(ag.game?.date?.date || ag.game?.date || '');
+            if (g.apiDate && apiGameDate && !apiGameDate.includes(g.apiDate)) {
+              return false; // Skip preseason/past games on different dates
+            }
+          }
+
+          return teamsMatchExact;
         });
 
         if (match) {

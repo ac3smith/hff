@@ -98,13 +98,27 @@ exports.autoSyncNFLScores = onSchedule("every 2 minutes", async (event) => {
       const gHomeCanonical = getCanonicalTeamCode(g.home || g.homeAbbr || g.homeName);
 
       const match = apiGames.find((ag) => {
+        // 1. Primary check: Exact API Game ID match
+        if (String(ag.game?.id) === String(g.id)) return true;
+
         const agAwayCanonical = getCanonicalTeamCode(ag.teams?.away?.code || ag.teams?.away?.name);
         const agHomeCanonical = getCanonicalTeamCode(ag.teams?.home?.code || ag.teams?.home?.name);
 
-        return (
-          String(ag.game?.id) === String(g.id) ||
-          (agAwayCanonical === gAwayCanonical && agHomeCanonical === gHomeCanonical)
+        const teamsMatchExact = (agAwayCanonical === gAwayCanonical && agHomeCanonical === gHomeCanonical);
+
+        // 2. Safety Check: Do NOT match an old finished preseason game to an upcoming game on a different date
+        const isApiGameFinal = ['FT', 'AOT', 'POST', 'CANC', 'ABD', 'FINAL', 'FINISHED'].includes(
+          String(ag.game?.status?.short || '').toUpperCase()
         );
+
+        if (teamsMatchExact && (g.status === 'upcoming' || g.status === 'scheduled') && isApiGameFinal) {
+          const apiGameDate = String(ag.game?.date?.date || ag.game?.date || '');
+          if (g.apiDate && apiGameDate && !apiGameDate.includes(g.apiDate)) {
+            return false; // Skip past/preseason games on different dates
+          }
+        }
+
+        return teamsMatchExact;
       });
 
       if (match) {
