@@ -3632,8 +3632,8 @@ function ensureAutoTiebreaker(gamesList: any[]) {
       nickname: newUserForm.nickname || '', 
       email: newUserForm.email || '', 
       username: customUsername.toLowerCase(), 
-      password: customUsername.toLowerCase(), 
-      requiresPasswordChange: true, 
+      password: 'hanover',
+      requiresPasswordChange: true,
       role: newUserForm.role || 'user', 
       paymentStatus: 'unpaid', 
       playsConfidence: true, 
@@ -3684,7 +3684,7 @@ function ensureAutoTiebreaker(gamesList: any[]) {
           nickname,
           email,
           username: baseUsername,
-          password: baseUsername,
+          password: 'hanover', 
           requiresPasswordChange: true,
           role: 'user',
           paymentStatus: ['paid', 'unpaid', 'disqualified'].includes(paymentStatus) ? paymentStatus : 'unpaid',
@@ -4598,7 +4598,10 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {(allUsers || []).map(user => {
+                      // NEW SORTED MAPPER:
+                      {[...(allUsers || [])]
+                        .sort((a, b) => String(a.lastName || '').localeCompare(String(b.lastName || '')))
+                        .map(user => {
                           const isEditing = editingUserId === user.id;
 
                           if (isEditing) {
