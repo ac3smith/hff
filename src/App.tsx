@@ -4639,7 +4639,6 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                           <th className="p-4 text-center">Security & Login</th>
                           <th className="p-4 text-right">Actions</th>
                         </tr>
-                        
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                       {[...(allUsers || [])]
