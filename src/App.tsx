@@ -3620,20 +3620,32 @@ function ensureAutoTiebreaker(gamesList: any[]) {
   
   const handleAddUser = async () => { 
     if (!newUserForm.firstName || !newUserForm.lastName) return; 
-    const newId = `u-${Date.now()}`; 
-    const customUsername = (newUserForm as any).username?.trim() || 
-      (newUserForm.firstName.charAt(0) + newUserForm.lastName).toLowerCase().replace(/[^a-z0-9]/g, ''); 
     
+    const customUsername = (newUserForm as any).username?.trim().toLowerCase() || 
+      (newUserForm.firstName.charAt(0) + newUserForm.lastName).toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+    // 🔒 DUPLICATE USERNAME CHECK
+    const isDuplicate = allUsers.some(
+      u => String(u.username || '').toLowerCase() === customUsername
+    );
+  
+    if (isDuplicate) {
+      alert(`The username "${customUsername}" is already taken! Please specify a unique username.`);
+      return;
+    }
+  
+    const newId = `u-${Date.now()}`; 
     setIsSaving(true); 
+    
     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', newId), { 
       id: newId, 
       firstName: newUserForm.firstName, 
       lastName: newUserForm.lastName, 
       nickname: newUserForm.nickname || '', 
       email: newUserForm.email || '', 
-      username: customUsername.toLowerCase(), 
-      password: 'hanover',
-      requiresPasswordChange: true,
+      username: customUsername, 
+      password: 'hanover', // Default password 
+      requiresPasswordChange: true, 
       role: newUserForm.role || 'user', 
       paymentStatus: 'unpaid', 
       playsConfidence: true, 
@@ -3982,6 +3994,37 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
       {deadbeatsToConfirm && (
           <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4"><div className="bg-white max-w-lg w-full rounded-3xl p-8 shadow-2xl animate-in zoom-in-95"><h2 className="text-2xl font-black italic uppercase text-red-600 mb-4 flex items-center gap-2"><AlertCircle /> Confirm Deadbeats</h2><p className="text-slate-600 font-bold mb-4">The following players have incomplete picks and will receive default deadbeat assignments:</p><div className="max-h-60 overflow-y-auto mb-6 bg-slate-50 rounded-xl p-4 border border-slate-200">{deadbeatsToConfirm.length === 0 ? <p className="text-slate-400 italic">None! All active players have fully submitted picks.</p> : <ul className="space-y-2">{deadbeatsToConfirm.map((u: any, i: number) => <li key={i} className="font-black text-slate-800 flex items-center">{String(u.name)} <span className="text-[10px] text-slate-400 bg-white px-2 py-0.5 rounded ml-2 border uppercase tracking-widest">{String(u.type)}</span></li>)}</ul>}</div><div className="flex gap-4"><button onClick={() => setDeadbeatsToConfirm(null)} className="flex-1 px-6 py-4 bg-slate-100 text-slate-700 rounded-xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button><button onClick={executeLockWeek} className="flex-1 px-6 py-4 bg-red-600 text-white rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-red-700 transition-all">Lock & Apply</button></div></div></div>
       )}
+      {confirmDeleteId && (
+  <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div className="bg-white max-w-md w-full rounded-3xl p-8 shadow-2xl animate-in zoom-in-95 border-t-8 border-red-600">
+      <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center mb-4 text-red-600">
+        <Trash2 className="w-6 h-6" />
+      </div>
+      <h3 className="text-2xl font-black italic uppercase text-slate-900 mb-2">Delete User Account?</h3>
+      <p className="text-slate-600 font-bold text-sm mb-6">
+        Are you sure you want to permanently delete{' '}
+        <span className="text-red-600 font-black">
+          {formatFullName(allUsers.find(u => u.id === confirmDeleteId))}
+        </span>
+        ? This will remove all their picks and standings history.
+      </p>
+      <div className="flex gap-3">
+        <button
+          onClick={() => setConfirmDeleteId(null)}
+          className="flex-1 px-4 py-3 bg-slate-100 text-slate-700 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition-all"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => handleDeleteUser(confirmDeleteId)}
+          className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-red-700 transition-all"
+        >
+          Confirm Delete
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       <header className="bg-slate-900 text-white sticky top-0 z-40 shadow-xl print:hidden border-b-2 sm:border-b-4 border-[#FFB81C]">
       <div className="w-full max-w-[1600px] mx-auto px-3 sm:px-4 py-1.5 sm:py-3">
           
@@ -4598,7 +4641,6 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                      // NEW SORTED MAPPER:
                       {[...(allUsers || [])]
                         .sort((a, b) => String(a.lastName || '').localeCompare(String(b.lastName || '')))
                         .map(user => {
@@ -4703,7 +4745,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                                     <Edit className="w-4 h-4" />
                                   </button>
                                   <button
-                                    onClick={() => handleDeleteUser(user.id)}
+                                    onClick={() => setConfirmDeleteId(user.id)}
                                     className="p-2 text-slate-400 hover:text-red-600 transition-colors"
                                     title="Delete User"
                                   >
