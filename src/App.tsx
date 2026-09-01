@@ -4688,7 +4688,6 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                                   <option value="disqualified">Disqualified</option>
                                 </select>
                               </td>
-
                               {/* Pool Toggles */}
                               <td className="p-4 text-center">
                                 <div className="flex items-center justify-center gap-4 text-xs font-bold">
