@@ -4645,7 +4645,6 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                         .sort((a, b) => String(a.lastName || '').localeCompare(String(b.lastName || '')))
                         .map(user => {
                           const isEditing = editingUserId === user.id;
-
                           if (isEditing) {
                             return (
                               <EditUserRow
