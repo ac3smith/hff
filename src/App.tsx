@@ -2878,31 +2878,40 @@ const isLiveSeasonWeekLocked = isWeekLocked;
 
   const statusSummary = useMemo(() => {
     if (!allUsers || !allUsers.length) return { completed: [], inProgress: [], notStarted: [] };
-
-    const targetWeek = selectedWeek || liveSeasonWeek;
+  
+    const targetWeek = selectedWeek || liveSeasonWeek || 1;
     const weekGames = globalSettings?.games?.[targetWeek] || games || [];
-
+  
     const statuses = allUsers
       .filter((u: any) => u.playsConfidence)
       .map((user: any) => {
-        const userPicks = user.picks?.[targetWeek] || {};
-        const userRanks = user.ranks?.[targetWeek] || {};
-        const hasTB = String(user.tiebreakers?.[targetWeek] || '').trim() !== '';
-
-        const picksCount = weekGames.filter((g: any) => {
-          const p = userPicks[g.id] || userPicks[String(g.id)];
-          const r = userRanks[g.id] || userRanks[String(g.id)];
-          return p && r;
+        const userPicks = user.picks?.[targetWeek] || user.picks?.[String(targetWeek)] || {};
+        const userRanks = user.ranks?.[targetWeek] || user.ranks?.[String(targetWeek)] || {};
+        const userTBs = user.tiebreakers?.[targetWeek] ?? user.tiebreakers?.[String(targetWeek)];
+        const hasTB = userTBs !== undefined && String(userTBs).trim() !== '';
+  
+        // Count games where either a pick OR a rank exists
+        const startedCount = weekGames.filter((g: any) => {
+          const p = userPicks[g.id] ?? userPicks[String(g.id)];
+          const r = userRanks[g.id] ?? userRanks[String(g.id)];
+          return (p !== undefined && p !== '') || (r !== undefined && r !== '');
         }).length;
-
-        const isComplete = weekGames.length > 0 && picksCount === weekGames.length && hasTB;
-
+  
+        // Fully complete only when ALL games have both pick + rank, AND tiebreaker is entered
+        const completedCount = weekGames.filter((g: any) => {
+          const p = userPicks[g.id] ?? userPicks[String(g.id)];
+          const r = userRanks[g.id] ?? userRanks[String(g.id)];
+          return p !== undefined && p !== '' && r !== undefined && r !== '';
+        }).length;
+  
+        const isComplete = weekGames.length > 0 && completedCount === weekGames.length && hasTB;
+  
         return {
           ...user,
-          status: isComplete ? 'Completed' : picksCount > 0 ? 'In Progress' : 'Not Started'
+          status: isComplete ? 'Completed' : startedCount > 0 ? 'In Progress' : 'Not Started'
         };
       });
-
+  
     return {
       notStarted: statuses.filter((u) => u.status === 'Not Started'),
       inProgress: statuses.filter((u) => u.status === 'In Progress'),
@@ -2938,6 +2947,46 @@ const isLiveSeasonWeekLocked = isWeekLocked;
       alert("All active players have submitted their picks!");
     }
   };
+
+  // --- 4-WAY EMAIL COPY HELPERS ---
+const handleCopyMissingFanaticsEmails = () => {
+  const missing = allUsers.filter(u => {
+    if (!u.playsConfidence) return false;
+    const userPicks = u.picks?.[selectedWeek] || {};
+    const userRanks = u.ranks?.[selectedWeek] || {};
+    const hasTB = String(user.tiebreakers?.[selectedWeek] || '').trim() !== '';
+    const picksCount = games.filter((g: any) => userPicks[g.id] && userRanks[g.id]).length;
+    return picksCount < games.length || !hasTB;
+  }).map(u => u.email).filter(Boolean);
+
+  if (missing.length === 0) return alert("All Fanatics players have submitted their picks!");
+  navigator.clipboard.writeText(missing.join(', '));
+  alert(`Copied ${missing.length} missing Fanatics email(s) to clipboard!`);
+};
+
+const handleCopyMissingKoEmails = () => {
+  const missing = allUsers.filter(u => {
+    if (!u.playsKnockout) return false;
+    if (wasAlreadyOut(u, selectedWeek, globalSettings?.weekStates)) return false; // Exclude eliminated
+    return !u.knockoutPicks?.[selectedWeek];
+  }).map(u => u.email).filter(Boolean);
+
+  if (missing.length === 0) return alert("All active KO players have submitted their picks!");
+  navigator.clipboard.writeText(missing.join(', '));
+  alert(`Copied ${missing.length} missing KO email(s) to clipboard!`);
+};
+
+const handleCopyAllFanaticsEmails = () => {
+  const emails = allUsers.filter(u => u.playsConfidence).map(u => u.email).filter(Boolean);
+  navigator.clipboard.writeText(emails.join(', '));
+  alert(`Copied ALL ${emails.length} Fanatics email(s) to clipboard!`);
+};
+
+const handleCopyAllKoEmails = () => {
+  const emails = allUsers.filter(u => u.playsKnockout).map(u => u.email).filter(Boolean);
+  navigator.clipboard.writeText(emails.join(', '));
+  alert(`Copied ALL ${emails.length} Knockout email(s) to clipboard!`);
+};
 
   // --- QUICK PICKS AUTO-FILL HELPERS ---
   const handleConfidenceQuickPicks = async (forAll = false) => { 
@@ -4491,52 +4540,46 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                   <WeekSelector week={selectedWeek} setWeek={setSelectedWeek} maxActiveWeeks={maxActiveWeeks} />
                   
                   <div className="flex flex-wrap gap-2">
-{/* SAVE FOR TROUBLESHOOTING OUTSIDE NORMAL SEASON                   <button 
-                      onClick={() => handleConfidenceQuickPicks(true)} 
-                      disabled={isSaving}
-                      className="px-5 py-3 bg-[#FFB81C] text-slate-900 rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-amber-400 transition-all flex items-center gap-2"
-                    >
-                      <Zap className="w-4 h-4 text-slate-900" /> Auto-Fill Quick Picks (All)
-                    </button>
+  {/* 1. Missing Fanatics Picks */}
+  <button 
+    onClick={handleCopyMissingFanaticsEmails} 
+    className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-2"
+  >
+    <FileText className="w-4 h-4" /> Copy Missing Fanatics Emails
+  </button>
 
-                    <button 
-                      onClick={() => handleKnockoutQuickPick(true)} 
-                      disabled={isSaving}
-                      className="px-5 py-3 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-red-700 transition-all flex items-center gap-2"
-                    >
-                      <Skull className="w-4 h-4 text-white" /> Quick Pick KnockOut (All)
-                    </button>
-            */}
+  {/* 2. Missing KO Picks */}
+  <button 
+    onClick={handleCopyMissingKoEmails} 
+    className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-2"
+  >
+    <FileText className="w-4 h-4" /> Copy Missing KO Emails
+  </button>
 
-                    <button 
-                      onClick={handleCopyMissingEmails} 
-                      className="px-5 py-3 bg-slate-900 text-[#FFB81C] rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-slate-800 transition-all flex items-center gap-2"
-                    >
-                      <FileText className="w-4 h-4" /> Copy Email List ({getMissingEmailsList().length})
-                    </button>
+  {/* 3. ALL Fanatics Addresses */}
+  <button 
+    onClick={handleCopyAllFanaticsEmails} 
+    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-2"
+  >
+    <Mail className="w-4 h-4" /> Copy ALL Fanatics Emails
+  </button>
 
-                    <button 
-  onClick={handleCopyMissingEmails} 
-  className="px-5 py-3 bg-slate-900 text-[#FFB81C] rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-slate-800 transition-all flex items-center gap-2"
->
-  <FileText className="w-4 h-4" /> Copy Email List ({getMissingEmailsList().length})
-</button>
+  {/* 4. ALL KO Addresses */}
+  <button 
+    onClick={handleCopyAllKoEmails} 
+    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-2"
+  >
+    <Mail className="w-4 h-4" /> Copy ALL KO Emails
+  </button>
 
-{/* 🟢 PASTE THE EXPORT BUTTON RIGHT HERE */}
-<button 
-  onClick={handleExportPicksCSV} 
-  className="px-5 py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-emerald-700 transition-all flex items-center gap-2"
->
-  <Printer className="w-4 h-4 text-white" /> Export Week {selectedWeek} CSV Backup
-</button>
-                    
-                    <button 
-                      onClick={handleEmailReminders} 
-                      className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-indigo-700 transition-all flex items-center gap-2"
-                    >
-                      <Mail className="w-4 h-4" /> Open Email Client
-                    </button>
-                  </div>
+  {/* CSV Backup Export */}
+  <button 
+    onClick={handleExportPicksCSV} 
+    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-2"
+  >
+    <Printer className="w-4 h-4 text-white" /> Export Week {selectedWeek} CSV
+  </button>
+</div>
                 </div>
 
                 {getMissingEmailsList().length > 0 && (
