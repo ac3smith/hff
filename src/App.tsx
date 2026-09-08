@@ -828,9 +828,9 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
           isProjection ? 'bg-amber-100/50 border-amber-200' : 'bg-slate-50 border-slate-200'
         }`}>
           <div>
-            <h2 className="text-lg sm:text-2xl font-black italic uppercase text-slate-900 tracking-tight leading-tight flex items-center gap-2">
-              {week <= 3 ? `Preseason W${week}` : `Week ${week - 3}`} {isProjection ? 'Live Projection' : 'Official Results'}
-            </h2>
+          <h2 className="text-lg sm:text-2xl font-black italic uppercase text-slate-900 tracking-tight leading-tight flex items-center gap-2">
+  Week {week} {isProjection ? 'Live Projection' : 'Official Results'}
+</h2>
             <p className="text-[10px] sm:text-xs text-slate-500 font-bold mt-0.5">
               {isProjection ? 'Simulating live standings' : 'Official settled scores'}
             </p>
