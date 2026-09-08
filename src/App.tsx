@@ -2931,6 +2931,18 @@ const isLiveSeasonWeekLocked = isWeekLocked;
     return missingUsers.map(u => u.email).filter(e => e && e.trim() !== '');
   };
 
+  const getMissingKoEmailsList = () => {
+    const targetWeek = selectedWeek || liveSeasonWeek;
+    return allUsers
+      .filter((u: any) => {
+        if (!u.playsKnockout) return false;
+        if (wasAlreadyOut(u, targetWeek, globalSettings?.weekStates)) return false; // Exclude eliminated
+        return !u.knockoutPicks?.[targetWeek]; // Has NOT submitted a KO pick
+      })
+      .map((u: any) => u.email)
+      .filter((email: string) => email && email.trim() !== '');
+  };
+
   const handleCopyMissingEmails = () => {
     const emails = getMissingEmailsList();
     if (emails.length === 0) return alert("All active players have submitted their picks!");
@@ -4540,34 +4552,18 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                   <WeekSelector week={selectedWeek} setWeek={setSelectedWeek} maxActiveWeeks={maxActiveWeeks} />
                   
                   <div className="flex flex-wrap gap-2">
-  {/* 1. Missing Fanatics Picks */}
-  <button 
-    onClick={handleCopyMissingFanaticsEmails} 
-    className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-2"
-  >
-    <FileText className="w-4 h-4" /> Copy Missing Fanatics Emails
-  </button>
-
-  {/* 2. Missing KO Picks */}
-  <button 
-    onClick={handleCopyMissingKoEmails} 
-    className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-2"
-  >
-    <FileText className="w-4 h-4" /> Copy Missing KO Emails
-  </button>
-
-  {/* 3. ALL Fanatics Addresses */}
+  {/* Copy ALL Fanatics Roster */}
   <button 
     onClick={handleCopyAllFanaticsEmails} 
-    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-2"
+    className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-2"
   >
     <Mail className="w-4 h-4" /> Copy ALL Fanatics Emails
   </button>
 
-  {/* 4. ALL KO Addresses */}
+  {/* Copy ALL KO Roster */}
   <button 
     onClick={handleCopyAllKoEmails} 
-    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-2"
+    className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-2"
   >
     <Mail className="w-4 h-4" /> Copy ALL KO Emails
   </button>
@@ -4575,27 +4571,75 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
   {/* CSV Backup Export */}
   <button 
     onClick={handleExportPicksCSV} 
-    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-2"
+    className="px-5 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-slate-800 transition-all flex items-center gap-2"
   >
-    <Printer className="w-4 h-4 text-white" /> Export Week {selectedWeek} CSV
+    <Printer className="w-4 h-4 text-white" /> Export Week {selectedWeek} CSV Backup
+  </button>
+
+  {/* Open Email Client */}
+  <button 
+    onClick={handleEmailReminders} 
+    className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md hover:bg-indigo-700 transition-all flex items-center gap-2"
+  >
+    <Mail className="w-4 h-4" /> Open Email Client
   </button>
 </div>
                 </div>
 
                 {getMissingEmailsList().length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* 1. FANATICS MISSING EMAILS BOX */}
                   <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-5">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="font-black uppercase text-xs text-slate-700 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-orange-500" /> Missing Pick Email Roster ({getMissingEmailsList().length} Players)
+                        <AlertCircle className="w-4 h-4 text-orange-500" /> 
+                        Fanatics Missing Picks ({getMissingEmailsList().length})
                       </h4>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Paste into To / BCC Field
-                      </span>
+                      <button
+                        onClick={() => {
+                          const emails = getMissingEmailsList();
+                          if (emails.length === 0) return alert("All active Fanatics players have submitted!");
+                          navigator.clipboard.writeText(emails.join(', '));
+                          alert(`Copied ${emails.length} Fanatics email(s)!`);
+                        }}
+                        className="px-3 py-1 bg-slate-900 text-[#FFB81C] rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-slate-800 transition-all"
+                      >
+                        Copy List
+                      </button>
                     </div>
                     <div className="bg-white p-3 rounded-xl border border-slate-200 font-mono text-xs text-slate-700 select-all break-all max-h-24 overflow-y-auto">
-                      {getMissingEmailsList().join(', ')}
+                      {getMissingEmailsList().length > 0 
+                        ? getMissingEmailsList().join(', ') 
+                        : <span className="text-slate-400 italic">All active players have submitted Fanatics picks!</span>}
                     </div>
                   </div>
+                
+                  {/* 2. KNOCKOUT (KO) MISSING EMAILS BOX */}
+                  <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-black uppercase text-xs text-slate-700 flex items-center gap-2">
+                        <Skull className="w-4 h-4 text-red-500" /> 
+                        KO Missing Picks ({getMissingKoEmailsList().length})
+                      </h4>
+                      <button
+                        onClick={() => {
+                          const emails = getMissingKoEmailsList();
+                          if (emails.length === 0) return alert("All active KO players have submitted!");
+                          navigator.clipboard.writeText(emails.join(', '));
+                          alert(`Copied ${emails.length} KO email(s)!`);
+                        }}
+                        className="px-3 py-1 bg-slate-900 text-[#FFB81C] rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-slate-800 transition-all"
+                      >
+                        Copy List
+                      </button>
+                    </div>
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 font-mono text-xs text-slate-700 select-all break-all max-h-24 overflow-y-auto">
+                      {getMissingKoEmailsList().length > 0 
+                        ? getMissingKoEmailsList().join(', ') 
+                        : <span className="text-slate-400 italic">All active KO players have submitted picks!</span>}
+                    </div>
+                  </div>
+                </div>
                 )}
 
                 <div>
