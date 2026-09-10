@@ -828,7 +828,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
           isProjection ? 'bg-amber-100/50 border-amber-200' : 'bg-slate-50 border-slate-200'
         }`}>
           <div>
-          <h2 className="text-lg sm:text-2xl font-black italic uppercase text-slate-900 tracking-tight leading-tight flex items-center gap-2">
+            <h2 className="text-lg sm:text-2xl font-black italic uppercase text-slate-900 tracking-tight leading-tight flex items-center gap-2">
   Week {week} {isProjection ? 'Live Projection' : 'Official Results'}
 </h2>
             <p className="text-[10px] sm:text-xs text-slate-500 font-bold mt-0.5">
@@ -1740,7 +1740,28 @@ function WeekSelector({ week, setWeek, maxActiveWeeks = 18 }: any) {
 }
 
 function ProgressBar({ percentage, current, total }: any) { return <div className="flex-1 max-w-sm"><div className="flex justify-between text-[10px] font-black uppercase text-slate-500 mb-2 tracking-widest"><span>Pick Progress</span><span className={percentage === 100 ? 'text-green-600' : ''}>{current}/{total}</span></div><div className="bg-slate-100 h-3 rounded-full overflow-hidden border-2 border-white shadow-inner"><div className={`h-full transition-all duration-1000 ease-out ${percentage === 100 ? 'bg-green-500' : 'bg-[#FFB81C]'}`} style={{ width: `${percentage}%` }}></div></div></div>; }
-function AutoSaveIndicator({ isSaving, hasSaved, count }: any) { if (count === 0) return null; return <div className="text-[10px] font-black uppercase tracking-widest min-w-[120px] flex justify-center items-center h-8 px-4 rounded-full bg-slate-50 border border-slate-100">{isSaving ? (<span className="text-slate-400 flex items-center gap-2"><div className="w-3 h-3 border-2 border-slate-200 border-t-[#FFB81C] rounded-full animate-spin"></div>Syncing...</span>) : hasSaved ? (<span className="text-green-600 flex items-center gap-1.5 animate-in zoom-in-75 duration-300"><CheckCircle className="w-4 h-4" /> Saved</span>) : null}</div>; }
+function AutoSaveIndicator({ isSaving, hasSaved, count }: any) {
+  if (count === 0) return null;
+
+  return (
+    <div className="text-[10px] font-black uppercase tracking-widest min-w-[110px] flex justify-center items-center h-8 px-3.5 rounded-full bg-slate-900 border border-slate-800 text-white shadow-sm shrink-0">
+      {isSaving ? (
+        <span className="text-[#FFB81C] flex items-center gap-2">
+          <div className="w-3 h-3 border-2 border-slate-700 border-t-[#FFB81C] rounded-full animate-spin"></div>
+          Syncing
+        </span>
+      ) : hasSaved ? (
+        <span className="text-emerald-400 flex items-center gap-1 animate-in zoom-in-75 duration-300">
+          <CheckCircle className="w-3.5 h-3.5" /> Saved
+        </span>
+      ) : (
+        <span className="text-slate-300 flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-400"></span> All Saved
+        </span>
+      )}
+    </div>
+  );
+}
 
 function TiebreakerCard({ val, game, isLocked, onSave }: any) {
   const [localVal, setLocalVal] = useState(val);
@@ -2550,6 +2571,8 @@ if (nextWeekGames && nextWeekGames.length > 0) {
     setSettlementPreview(null);
   };
 
+  
+
   useEffect(() => {
     const initAuth = async () => { try { if (typeof (window as any).__initial_auth_token !== 'undefined' && (window as any).__initial_auth_token) { await signInWithCustomToken(auth, (window as any).__initial_auth_token); } else { await signInAnonymously(auth); } } catch (err) { console.error(err); } };
     initAuth();
@@ -2604,6 +2627,23 @@ if (nextWeekGames && nextWeekGames.length > 0) {
   const sessionUser = allUsers.find(u => u.id === currentUserId);
   const currentUser = overrideUserId ? (allUsers.find(u => u.id === overrideUserId) || sessionUser) : sessionUser;
   const isAdmin = sessionUser?.role === 'admin';
+  // ⏱️ Auto-sync live scores every 30 seconds when an admin is viewing live tabs
+useEffect(() => {
+  if (!isLoggedIn || !isAdmin) return;
+
+  const isLiveTab = ['c-tracker', 'k-tracker', 'dashboard'].includes(activeTab);
+  if (!isLiveTab) return;
+
+  // Initial fetch when entering a live tab
+  handleSyncScores();
+
+  // Poll every 30 seconds
+  const timer = setInterval(() => {
+    handleSyncScores();
+  }, 30000);
+
+  return () => clearInterval(timer);
+}, [activeTab, isLoggedIn, isAdmin]);
 // Games for Dashboard, Results, & Standings (Locked to current active week)
 const games = useMemo(() => {
   const rawGames = globalSettings?.games?.[currentActiveWeek] || [];
@@ -3471,123 +3511,79 @@ function ensureAutoTiebreaker(gamesList: any[]) {
 
   const handleSyncScores = async () => {
     const now = Date.now();
-    if (now - lastSyncTimeRef.current < 30000) {
-      return; // Skip execution if called within 30 seconds
+    // Lower throttle to 10s so 30s auto-polling never gets blocked
+    if (now - lastSyncTimeRef.current < 10000) {
+      return;
     }
     lastSyncTimeRef.current = now;
-
+  
     if (!globalSettings?.apiSportsKey?.trim()) {
       return alert("Please enter your API-Sports Key in the Admin Settings tab.");
     }
-    if (!games || games.length === 0) return;
-
+    if (!games || games.length === 0) return alert("No games loaded in current week.");
+  
     setIsSyncing(true);
     try {
       const apiKey = globalSettings.apiSportsKey.trim();
       const headers = { 'x-apisports-key': apiKey };
-
-      // Query Season 2026 directly (bypasses UTC date boundary issues completely)
+  
       const res = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=2026`, { headers });
       if (!res.ok) {
         setIsSyncing(false);
         return;
       }
-
+  
       const json = await res.json();
       const apiGames = json.response || [];
-
       if (apiGames.length === 0) {
         setIsSyncing(false);
         return;
       }
-
-      // Flexible Team & Status Matcher
-      let liveCount = 0;
+  
+      const targetWeek = selectedWeek || liveSeasonWeek || 1;
+  
       const updatedGames = games.map((g: any) => {
-        // Shield finalized games from overwrites
-        if (String(g.status).toLowerCase() === 'final') return g;
-
         const gAwayCanonical = getCanonicalTeamCode(g.away || g.awayAbbr || g.awayName);
         const gHomeCanonical = getCanonicalTeamCode(g.home || g.homeAbbr || g.homeName);
-
+  
         const match = apiGames.find((ag: any) => {
+          if (String(ag.game?.id) === String(g.id)) return true;
           const agAwayCanonical = getCanonicalTeamCode(ag.teams?.away?.code || ag.teams?.away?.name);
           const agHomeCanonical = getCanonicalTeamCode(ag.teams?.home?.code || ag.teams?.home?.name);
-
-          // 1. Primary check: Exact API Game ID match
-          if (String(ag.game?.id) === String(g.id)) return true;
-
-          // 2. Secondary check: Both Home AND Away teams must match
-          const teamsMatchExact = (agAwayCanonical === gAwayCanonical && agHomeCanonical === gHomeCanonical);
-
-          // 3. Safety Check: If target game is upcoming, do not match old finished games from different dates
-          const isApiGameFinal = ['FT', 'AOT', 'POST', 'CANC', 'ABD', 'FINAL', 'FINISHED'].includes(
-            String(ag.game?.status?.short || '').toUpperCase()
-          );
-
-          if (teamsMatchExact && (g.status === 'upcoming' || g.status === 'scheduled') && isApiGameFinal) {
-            const apiGameDate = String(ag.game?.date?.date || ag.game?.date || '');
-            if (g.apiDate && apiGameDate && !apiGameDate.includes(g.apiDate)) {
-              return false; // Skip preseason/past games on different dates
-            }
-          }
-
-          return teamsMatchExact;
+          return (agAwayCanonical === gAwayCanonical && agHomeCanonical === gHomeCanonical);
         });
-
+  
         if (match) {
           const shortStatus = String(match.game?.status?.short || '').toUpperCase();
           const isFinal = ['FT', 'AOT', 'POST', 'CANC', 'ABD', 'FINAL', 'FINISHED'].includes(shortStatus);
           const isLive = ['Q1', 'Q2', 'Q3', 'Q4', 'OT', 'HT', 'LIVE', 'HALFTIME', '1Q', '2Q', '3Q', '4Q', 'IN_PROGRESS'].includes(shortStatus);
-
-          if (isLive) liveCount++;
-
-          const homeTotal = match.scores?.home?.total ?? null;
-          const awayTotal = match.scores?.away?.total ?? null;
-
+  
+          const homeTotal = match.scores?.home?.total ?? g.homeScore ?? 0;
+          const awayTotal = match.scores?.away?.total ?? g.awayScore ?? 0;
+  
           let winner = g.winner || null;
-          if (isFinal && homeTotal !== null && awayTotal !== null) {
+          if (isFinal) {
             if (homeTotal > awayTotal) winner = g.home;
             else if (awayTotal > homeTotal) winner = g.away;
             else winner = 'TIE';
           }
-
-          let statusText = g.status || 'upcoming';
-          if (isFinal) {
-            statusText = 'final';
-          } else if (isLive) {
-            statusText = 'in_progress';
-          }
-
-          const gameClock = match.game?.status?.timer || match.game?.clock || null;
-          const possession = match.game?.possession || match.possession || null;
-
+  
           return {
             ...g,
-            status: statusText,
+            status: isFinal ? 'final' : isLive ? 'in_progress' : g.status,
             gameQuarter: isLive ? shortStatus : (isFinal ? 'FINAL' : null),
-            gameClock: isLive ? gameClock : null,
-            possession: isLive ? possession : null,
-            homeScore: homeTotal !== null ? homeTotal : (g.homeScore ?? null),
-            awayScore: awayTotal !== null ? awayTotal : (g.awayScore ?? null),
-            winner: winner ?? null,
-            isTiebreaker: !!g.isTiebreaker
+            homeScore: homeTotal,
+            awayScore: awayTotal,
+            winner
           };
         }
-
         return g;
       });
-
-      // Write updated scores & syncStatus directly to Firestore
+  
       await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-        [`games.${selectedWeek}`]: updatedGames,
-        syncStatus: {
-          isActivePolling: true,
-          activeGameCount: liveCount,
-          lastCheckedAt: new Date().toISOString()
-        }
+        [`games.${targetWeek}`]: updatedGames
       });
-
+  
     } catch (e: any) {
       console.error("Score Sync Error:", e);
     } finally {
@@ -4359,18 +4355,68 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
     {!currentUser.playsConfidence && <ParticipationAlert game="Fanatics" />}
     {isPickWeekLocked && <LockBanner week={picksSelectedWeek} />}
     
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    {/* DYNAMIC PICKS STATUS & PROGRESS CARD */}
+<div className={`bg-white rounded-3xl p-5 border-4 transition-all duration-300 shadow-sm ${
+  isCompleteFanatics 
+    ? 'border-emerald-600 shadow-emerald-600/10' 
+    : 'border-slate-200'
+}`}>
+  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    
+    {/* LEFT SIDE: WEEK SELECTOR & STATUS BADGE */}
+    <div className="flex flex-wrap items-center gap-3">
       <PickWeekSelector 
         week={picksSelectedWeek} 
         setWeek={setPicksSelectedWeek} 
         currentActiveWeek={currentActiveWeek} 
         maxActiveWeeks={maxActiveWeeks} 
       />
-      <div className="flex flex-col sm:flex-row items-center gap-6 flex-1 w-full md:w-auto">
-        <ProgressBar current={totalItemsCompleted} total={totalItemsRequired} percentage={progressPercentage} />
-      </div>
+
+      {/* PICKS COMPLETE / IN PROGRESS BADGE */}
+      {isCompleteFanatics ? (
+        <div className="flex items-center gap-2 bg-slate-900 border-2 border-emerald-500 text-emerald-400 font-black italic uppercase px-4 py-2 rounded-2xl shadow-md animate-in zoom-in-95 duration-300">
+          <CheckCircle className="w-5 h-5 text-emerald-400 stroke-[3]" />
+          <span className="text-sm tracking-wide">PICKS COMPLETE</span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-300 text-amber-900 font-black italic uppercase px-3.5 py-1.5 rounded-2xl text-xs">
+          <AlertCircle className="w-4 h-4 text-amber-600" />
+          <span>In Progress ({totalItemsCompleted}/{totalItemsRequired})</span>
+        </div>
+      )}
+    </div>
+
+    {/* CENTER / RIGHT SIDE: PROGRESS BAR & AUTO-SAVE INDICATOR */}
+    <div className="flex flex-col sm:flex-row items-center gap-4 flex-1 max-w-md">
+      <ProgressBar current={totalItemsCompleted} total={totalItemsRequired} percentage={progressPercentage} />
       <AutoSaveIndicator isSaving={isSaving} hasSaved={hasSaved} count={totalItemsCompleted} />
     </div>
+
+  </div>
+
+  {/* REASSURANCE BANNER & COUNTDOWN TIMER */}
+  <div className={`mt-4 pt-3.5 border-t flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs font-bold ${
+    isCompleteFanatics ? 'border-emerald-100 text-emerald-900' : 'border-slate-100 text-slate-500'
+  }`}>
+    <div className="flex items-center gap-2">
+      <span className="text-base">{isCompleteFanatics ? '✅' : '🔒'}</span>
+      <span>
+        {isCompleteFanatics 
+          ? "Your picks are saved! You can make changes anytime until the lockdown timer runs out." 
+          : "Make your selections and assign confidence points to all games below."}
+      </span>
+    </div>
+
+    {/* COUNTDOWN TIMER */}
+    {pickLockdownTime && !isPickWeekLocked && (
+      <div className="flex items-center gap-1.5 bg-slate-900 text-[#FFB81C] px-3.5 py-1.5 rounded-xl font-mono text-xs font-black shadow-sm shrink-0">
+        <Clock className="w-3.5 h-3.5 text-[#FFB81C]" />
+        <span>Lockdown In:</span>
+        <CountdownClock targetTime={pickLockdownTime} />
+      </div>
+    )}
+  </div>
+</div>
 
     {/* AVAILABLE RANK POINTS TRACKER BAR */}
     <AvailableRanksBar 
