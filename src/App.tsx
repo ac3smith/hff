@@ -2638,8 +2638,15 @@ if (nextWeekGames && nextWeekGames.length > 0) {
     const unsubSettings = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setGlobalSettings({ ...data, maxActiveWeeks: data.maxActiveWeeks || 18, fpPayouts: data.fpPayouts || [100, 80, 70, 60, 50, 40, 30, 20] });
-      } else setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { maxActiveWeeks: 18, weekStates: { 1: 'open', 2: 'open', 3: 'open', 4: 'open' }, actualTiebreakers: { 1: 0, 2: 0, 3: 0, 4: 0 }, games: initialGamesByWeek, fpPayouts: [100, 80, 70, 60, 50, 40, 30, 20], seasonBonuses: { firstHalf: [500, 400, 300, 200, 100, 50, 25, 10], secondHalf: [500, 400, 300, 200, 100, 50, 25, 10], overall: [1000, 800, 600, 400, 200, 100, 50, 25] }, knockoutSession: 1, announcement: "Welcome to Hanover Football Fanatics! Submit your picks before the first game kicks off." });
+        setGlobalSettings({ 
+          ...data, 
+          maxActiveWeeks: data.maxActiveWeeks || 18, 
+          fpPayouts: data.fpPayouts || [100, 80, 70, 60, 50, 40, 30, 20] 
+        });
+      } else {
+        // 🛡️ SAFE: Never auto-overwrite Firestore settings if missing
+        console.warn("Global pool settings document not found in Firestore.");
+      }
     });
     const unsubPlayers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'players'), async (snapshot) => {
       if (snapshot.empty) { const batch = writeBatch(db); INITIAL_USERS.forEach(u => { batch.set(doc(collection(db, 'artifacts', appId, 'public', 'data', 'players'), u.id), u); }); await batch.commit(); } 
@@ -3763,9 +3770,10 @@ function ensureAutoTiebreaker(gamesList: any[]) {
       paymentStatus: 'unpaid', 
       playsConfidence: true, 
       playsKnockout: true, 
-      picks: {1:{},2:{},3:{},4:{}}, 
-      ranks: {1:{},2:{},3:{},4:{}}, 
-      tiebreakers: {1:'',2:'',3:'',4:''}, 
+      // Inside handleAddUser & handleBulkImportUsers:
+      picks: {},
+      ranks: {},
+      tiebreakers: {}, 
       knockoutPicks: {}, 
       knockoutStatuses: {}, 
       weeklyFantasyHistory: {}, 
@@ -3815,9 +3823,10 @@ function ensureAutoTiebreaker(gamesList: any[]) {
           paymentStatus: ['paid', 'unpaid', 'disqualified'].includes(paymentStatus) ? paymentStatus : 'unpaid',
           playsConfidence: true,
           playsKnockout: true,
-          picks: {1:{},2:{},3:{},4:{}},
-          ranks: {1:{},2:{},3:{},4:{}},
-          tiebreakers: {1:'',2:'',3:'',4:''},
+      // Inside handleAddUser & handleBulkImportUsers:
+      picks: {},
+      ranks: {},
+      tiebreakers: {}, 
           knockoutPicks: {},
           knockoutStatuses: {},
           weeklyFantasyHistory: {},
@@ -3903,8 +3912,56 @@ const handleResetKnockout = async () => {
   }
 };
 
-  const handleResetFanatics = async () => { setIsSaving(true); try { const batch = writeBatch(db); allUsers.forEach(u => { batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), { picks: {1:{},2:{},3:{},4:{}}, ranks: {1:{},2:{},3:{},4:{}}, tiebreakers: {1:'',2:'',3:'',4:''}, weeklyFantasyHistory: {}, weeklyConfidenceHistory: {} }); }); batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { weekStates: { 1: 'open', 2: 'open', 3: 'open', 4: 'open' }, actualTiebreakers: { 1: 0, 2: 0, 3: 0, 4: 0 }}); await batch.commit(); window.location.reload(); } catch (e) { console.error(e); setIsSaving(false); } };
-  const updateGameResult = (gameId: number, resultType: string, teamId: string) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { [`games.${selectedWeek}`]: games.map((g: any) => g.id !== gameId ? g : (resultType === 'upcoming' ? { ...g, status: 'upcoming', winner: null } : { ...g, status: 'final', winner: resultType === 'TIE' ? 'TIE' : teamId })) }));
+const handleResetFanatics = async () => {
+  setIsSaving(true);
+  try {
+    const batch = writeBatch(db);
+    const maxWeeks = globalSettings?.maxActiveWeeks || 18;
+
+    // Build dynamic empty maps for all active weeks
+    const emptyPicks: Record<string, any> = {};
+    const emptyRanks: Record<string, any> = {};
+    const emptyTiebreakers: Record<string, any> = {};
+    const resetWeekStates: Record<string, string> = {};
+    const resetActualTiebreakers: Record<string, number> = {};
+
+    for (let w = 1; w <= maxWeeks; w++) {
+      emptyPicks[w] = {};
+      emptyRanks[w] = {};
+      emptyTiebreakers[w] = '';
+      resetWeekStates[w] = 'open';
+      resetActualTiebreakers[w] = 0;
+    }
+
+    // 1. Reset user picks & histories dynamically across all weeks
+    allUsers.forEach((u) => {
+      batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), {
+        picks: emptyPicks,
+        ranks: emptyRanks,
+        tiebreakers: emptyTiebreakers,
+        weeklyFantasyHistory: {},
+        weeklyConfidenceHistory: {}
+      });
+    });
+
+    // 2. Reset weekStates and actualTiebreakers without touching apiSportsKey or games
+    batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+      weekStates: resetWeekStates,
+      actualTiebreakers: resetActualTiebreakers
+    });
+
+    await batch.commit();
+    alert("Fanatics Pool successfully reset for all weeks!");
+    window.location.reload();
+  } catch (e) {
+    console.error("Reset Fanatics Error:", e);
+    alert("Error resetting Fanatics pool.");
+  } finally {
+    setIsSaving(false);
+    setShowFanaticsResetConfirm(false);
+  }
+};  
+const updateGameResult = (gameId: number, resultType: string, teamId: string) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { [`games.${selectedWeek}`]: games.map((g: any) => g.id !== gameId ? g : (resultType === 'upcoming' ? { ...g, status: 'upcoming', winner: null } : { ...g, status: 'final', winner: resultType === 'TIE' ? 'TIE' : teamId })) }));
   const handleLockWeek = () => { const deadbeats: any[] = []; allUsers.forEach(u => { if (u.playsConfidence && (games.filter((g: any) => (u.picks?.[selectedWeek] || {})[g.id] && (u.ranks?.[selectedWeek] || {})[g.id]).length !== totalGames || String(u.tiebreakers?.[selectedWeek] || '').trim() === '')) deadbeats.push({ name: formatFullName(u), type: 'Fanatics' }); }); if (deadbeats.length > 0) setDeadbeatsToConfirm(deadbeats); else executeLockWeek(); };
   const executeLockWeek = async () => {
     const batch = writeBatch(db);
