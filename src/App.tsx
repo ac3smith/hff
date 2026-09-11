@@ -563,69 +563,109 @@ function LiveTrackerCell({ game, pick, rank, isProjection }: any) {
 
 function LiveScoreTicker({ games }: any) {
   if (!games || games.length === 0) return null;
+
   return (
     <div className="bg-slate-900 rounded-3xl p-4 shadow-xl border-b-4 border-[#FFB81C] mb-6 flex overflow-x-auto gap-4 scrollbar-hide items-center">
+      
+      {/* HEADER BADGE */}
       <div className="flex items-center gap-2 pr-4 border-r border-slate-700 shrink-0">
         <Zap className="w-6 h-6 text-[#FFB81C]" />
         <div>
-          <h3 className="text-white font-black italic uppercase text-sm leading-tight">Live<br/>Scores</h3>
+          <h3 className="text-white font-black italic uppercase text-sm leading-tight">
+            Live<br />Scores
+          </h3>
         </div>
       </div>
+
+      {/* GAME CARDS LOOP */}
       {games.map((g: any) => {
-        const isLive = ['in_progress', 'HALFTIME', '1Q', '2Q', '3Q', '4Q', 'OT', 'HT', 'LIVE', 'Q1', 'Q2', 'Q3', 'Q4'].includes(g.status);
-        const hasPossessionAway = g.possession === g.away || g.possession === g.awayAbbr;
-        const hasPossessionHome = g.possession === g.home || g.possession === g.homeAbbr;
+        const statusUpper = String(g.status || '').toUpperCase();
+        const isLive = ['IN_PROGRESS', 'HALFTIME', '1Q', '2Q', '3Q', '4Q', 'OT', 'HT', 'LIVE', 'Q1', 'Q2', 'Q3', 'Q4'].includes(statusUpper) || Boolean(g.gameQuarter && g.gameQuarter !== 'FINAL');
+        
+        // Canonical codes for team matching
+        const gAwayCanonical = getCanonicalTeamCode(g.away || g.awayAbbr || g.awayName);
+        const gHomeCanonical = getCanonicalTeamCode(g.home || g.homeAbbr || g.homeName);
+        const possessionCanonical = g.possession ? getCanonicalTeamCode(g.possession) : '';
+
+        // Check if either team currently has possession
+        const hasPossessionAway = isLive && possessionCanonical !== '' && possessionCanonical === gAwayCanonical;
+        const hasPossessionHome = isLive && possessionCanonical !== '' && possessionCanonical === gHomeCanonical;
+
+        // Fallback check if possession is sent as raw away/home flag
+        const isPossessionAway = hasPossessionAway || (isLive && (g.possession === 'away' || g.possession === g.away));
+        const isPossessionHome = hasPossessionHome || (isLive && (g.possession === 'home' || g.possession === g.home));
 
         return (
-          <div key={g.id} className="min-w-[150px] bg-slate-800 rounded-xl p-3 border border-slate-700 flex flex-col justify-between shrink-0 shadow-inner">
-{/* STATUS / CLOCK BAR */}
-<div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 flex justify-between items-center">
+          <div key={g.id} className={`min-w-[165px] bg-slate-800 rounded-2xl p-3 border flex flex-col justify-between shrink-0 shadow-inner transition-all ${
+            g.isRedZone ? 'border-rose-500 ring-2 ring-rose-500/40 bg-slate-800/95' : 'border-slate-700'
+          }`}>
+            
+            {/* STATUS / CLOCK / RED ZONE HEADER BAR */}
+            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 flex justify-between items-center gap-1">
               {String(g?.status).toLowerCase() === 'final' ? (
                 <span className="text-slate-400 font-black bg-slate-700/50 px-2 py-0.5 rounded">FINAL</span>
               ) : (isLive || g?.gameQuarter || g?.gameClock) ? (
-                <div className="flex items-center gap-1.5 bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded-md font-mono text-[10px] w-full justify-between">
-                  <span className="flex items-center gap-1 font-black animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    {g?.gameQuarter || g?.quarter || 'LIVE'}
-                  </span>
-                  {(g?.gameClock || g?.clock || g?.timer) && (
-                    <span className="font-bold text-emerald-300">
-                      {g?.gameClock || g?.clock || g?.timer}
+                <div className="flex items-center justify-between w-full gap-1">
+                  <div className="flex items-center gap-1.5 bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded-md font-mono text-[10px] flex-1 justify-between">
+                    <span className="flex items-center gap-1 font-black animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      {g?.gameQuarter || 'LIVE'}
+                    </span>
+                    {(g?.gameClock || g?.clock) && (
+                      <span className="font-bold text-emerald-300">
+                        {g?.gameClock || g?.clock}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* RED ZONE BADGE */}
+                  {g.isRedZone && (
+                    <span className="bg-rose-600 text-white font-black text-[8px] px-1.5 py-0.5 rounded animate-pulse shrink-0 tracking-tighter">
+                      🚨 RED ZONE
                     </span>
                   )}
                 </div>
               ) : (
-                <span className="text-slate-300 font-bold tracking-tight">
+                <span className="text-slate-300 font-bold tracking-tight truncate">
                   {g?.date ? `${g.date} • ${g?.time}` : g?.time || 'UPCOMING'}
                 </span>
               )}
             </div>
 
-            {/* AWAY TEAM */}
+            {/* AWAY TEAM ROW */}
             <div className="flex justify-between items-center mb-1.5">
               <div className="flex items-center gap-1.5">
                 <span className={`font-black text-sm ${g.winner === g.away ? 'text-[#FFB81C]' : 'text-slate-200'}`}>
                   {g.awayAbbr || g.away}
                 </span>
-                {hasPossessionAway && <span className="text-xs" title="In Possession">🏈</span>}
+                {isPossessionAway && (
+                  <span className="text-xs animate-bounce" title="In Possession">
+                    🏈
+                  </span>
+                )}
               </div>
               <span className={`font-bold font-mono text-sm ${g.awayScore !== undefined && g.awayScore !== null ? 'text-white' : 'text-slate-500'}`}>
                 {g.awayScore !== undefined && g.awayScore !== null ? g.awayScore : '-'}
               </span>
             </div>
 
-            {/* HOME TEAM */}
+            {/* HOME TEAM ROW */}
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-1.5">
                 <span className={`font-black text-sm ${g.winner === g.home ? 'text-[#FFB81C]' : 'text-slate-200'}`}>
                   {g.homeAbbr || g.home}
                 </span>
-                {hasPossessionHome && <span className="text-xs" title="In Possession">🏈</span>}
+                {isPossessionHome && (
+                  <span className="text-xs animate-bounce" title="In Possession">
+                    🏈
+                  </span>
+                )}
               </div>
               <span className={`font-bold font-mono text-sm ${g.homeScore !== undefined && g.homeScore !== null ? 'text-white' : 'text-slate-500'}`}>
                 {g.homeScore !== undefined && g.homeScore !== null ? g.homeScore : '-'}
               </span>
             </div>
+
           </div>
         );
       })}
@@ -3179,20 +3219,30 @@ const handleExportPicksCSV = () => {
   const handleForceFixGames = async () => {
     setIsSaving(true);
     try {
-        const fixedGames = games.map((g: any) => ({
-            ...g,
-            awayAbbr: g.awayAbbr || g.away,
-            homeAbbr: g.homeAbbr || g.home
-        }));
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { 
-            [`games.${selectedWeek}`]: fixedGames 
-        });
-        alert("Games scrubbed and formatted successfully.");
+      const cleanedGames = (games || []).map((g: any) => ({
+        ...g,
+        status: 'upcoming',
+        homeScore: null,
+        awayScore: null,
+        winner: null,
+        gameQuarter: null,
+        gameClock: null,
+        possession: null
+      }));
+  
+      const targetWeek = selectedWeek || liveSeasonWeek || 1;
+  
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+        [`games.${targetWeek}`]: cleanedGames,
+        [`actualTiebreakers.${targetWeek}`]: 0
+      });
+  
+      alert(`Successfully reset Week ${targetWeek} games back to 0 - 0!`);
     } catch (e) {
-        console.error("Force fix error:", e);
-        alert("Error fixing games.");
+      console.error("Force reset error:", e);
+      alert("Error resetting game scores.");
     } finally {
-        setIsSaving(false);
+      setIsSaving(false);
     }
   };
 
@@ -3557,24 +3607,30 @@ function ensureAutoTiebreaker(gamesList: any[]) {
           const shortStatus = String(match.game?.status?.short || '').toUpperCase();
           const isFinal = ['FT', 'AOT', 'POST', 'CANC', 'ABD', 'FINAL', 'FINISHED'].includes(shortStatus);
           const isLive = ['Q1', 'Q2', 'Q3', 'Q4', 'OT', 'HT', 'LIVE', 'HALFTIME', '1Q', '2Q', '3Q', '4Q', 'IN_PROGRESS'].includes(shortStatus);
-  
+        
           const homeTotal = match.scores?.home?.total ?? g.homeScore ?? 0;
           const awayTotal = match.scores?.away?.total ?? g.awayScore ?? 0;
-  
-          let winner = g.winner || null;
-          if (isFinal) {
-            if (homeTotal > awayTotal) winner = g.home;
-            else if (awayTotal > homeTotal) winner = g.away;
-            else winner = 'TIE';
-          }
-  
+        
+          // Extract drive & possession information from API-Sports
+          const rawPossession = match.game?.possession || match.game?.teams?.possession || match.possession || null;
+          const yardlineVal = match.game?.yardline || match.game?.field_position || match.yardline || null;
+          
+          // Calculate Red Zone flag (inside opponent's 20-yard line)
+          const numericYardline = parseInt(String(yardlineVal).replace(/[^0-9]/g, ''), 10);
+          const isRedZone = isLive && numericYardline > 0 && numericYardline <= 20;
+        
+          const rawClock = match.game?.status?.timer || match.game?.timer || match.game?.clock || match.clock || null;
+        
           return {
             ...g,
-            status: isFinal ? 'final' : isLive ? 'in_progress' : g.status,
-            gameQuarter: isLive ? shortStatus : (isFinal ? 'FINAL' : null),
-            homeScore: homeTotal,
-            awayScore: awayTotal,
-            winner
+            status: isFinal ? 'final' : (isLive ? 'in_progress' : 'upcoming'),
+            gameQuarter: isFinal ? 'FINAL' : (isLive ? shortStatus : null),
+            gameClock: isLive ? rawClock : null,
+            possession: isLive ? rawPossession : null,
+            isRedZone: isLive ? isRedZone : false,
+            homeScore: isLive || isFinal ? homeTotal : null,
+            awayScore: isLive || isFinal ? awayTotal : null,
+            winner: isFinal ? (homeTotal > awayTotal ? g.home : awayTotal > homeTotal ? g.away : 'TIE') : null
           };
         }
         return g;
