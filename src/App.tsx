@@ -1864,38 +1864,40 @@ function ParticipationAlert({ game }: any) {
   );
 }
 
-// --- DYNAMIC WHOLE-DOLLAR FANATICS PAYOUT ENGINE ---
+// 🏈 DYNAMIC WHOLE-DOLLAR FANATICS PAYOUT ENGINE
 function calculateFanaticsPayouts(numPlayers: number, totalWeeks = 18, half1Weeks = 9, half2Weeks = 9) {
+  // Percentages for top 8 places: 22%, 19%, 16%, 13%, 9%, 8%, 7%, 6%
   const percentages = [0.22, 0.19, 0.16, 0.13, 0.09, 0.08, 0.07, 0.06];
 
-  // Helper to round whole dollars and balance remainders to match the exact pot sum
+  // Round whole dollars and balance rounding remainders to match exact pot sum
   const roundAndBalance = (pot: number) => {
     if (pot <= 0) return Array(8).fill(0);
     const raw = percentages.map(p => Math.round(pot * p));
     const currentSum = raw.reduce((sum, v) => sum + v, 0);
     const diff = Math.round(pot) - currentSum;
-    if (diff !== 0) raw[0] += diff; // Balance $1 rounding variance to 1st place
+    if (diff !== 0) raw[0] += diff; // Adjust $1 rounding variance to 1st place
     return raw;
   };
 
-  // 1. Weekly Split ($12/player = $7 Weekly, $1.75 Half 1/2, $1.25 Season, $2 Expenses)
+  // 1. Weekly Pot ($12/player total = $7 Weekly, $1.75 Half 1, $1.75 Half 2, $1.25 Season, $2 Expense)
   const weeklyPot = numPlayers * 7.0;
   const weeklyGross = roundAndBalance(weeklyPot);
-  const weeklyNet = weeklyGross.map(g => g - 12); // Gross minus $12 weekly dues
+  const weeklyNet = weeklyGross.map(g => g - 12);
 
-  // 2. 1st Half Pot ($1.75 * numPlayers * half1Weeks)
+  // 2. 1st Half Pot
   const half1Pot = numPlayers * 1.75 * half1Weeks;
   const half1Payouts = roundAndBalance(half1Pot);
 
-  // 3. 2nd Half Pot ($1.75 * numPlayers * half2Weeks)
+  // 3. 2nd Half Pot
   const half2Pot = numPlayers * 1.75 * half2Weeks;
   const half2Payouts = roundAndBalance(half2Pot);
 
-  // 4. Overall Season Pot ($1.25 * numPlayers * totalWeeks)
+  // 4. Overall Season Pot
   const seasonPot = numPlayers * 1.25 * totalWeeks;
   const seasonPayouts = roundAndBalance(seasonPot);
 
   return {
+    numPlayers,
     weeklyPot,
     weeklyGross,
     weeklyNet,
