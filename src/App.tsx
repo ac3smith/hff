@@ -2674,23 +2674,25 @@ if (nextWeekGames && nextWeekGames.length > 0) {
   const sessionUser = allUsers.find(u => u.id === currentUserId);
   const currentUser = overrideUserId ? (allUsers.find(u => u.id === overrideUserId) || sessionUser) : sessionUser;
   const isAdmin = sessionUser?.role === 'admin';
-  // ⏱️ Auto-sync live scores every 30 seconds when an admin is viewing live tabs
+
+// ⏱️ Auto-sync ESPN live scores every 10 seconds on active live tabs
 useEffect(() => {
-  if (!isLoggedIn || !isAdmin) return;
+  if (!isLoggedIn) return;
 
   const isLiveTab = ['c-tracker', 'k-tracker', 'dashboard'].includes(activeTab);
   if (!isLiveTab) return;
 
-  // Initial fetch when entering a live tab
+  // Initial fetch when entering tab
   handleSyncScores();
 
-  // Poll every 30 seconds
+  // Fast 10-second polling for active users
   const timer = setInterval(() => {
     handleSyncScores();
-  }, 30000);
+  }, 10000);
 
   return () => clearInterval(timer);
-}, [activeTab, isLoggedIn, isAdmin]);
+}, [activeTab, isLoggedIn]);
+
 // Games for Dashboard, Results, & Standings (Locked to current active week)
 const games = useMemo(() => {
   const rawGames = globalSettings?.games?.[currentActiveWeek] || [];
@@ -3568,76 +3570,82 @@ function ensureAutoTiebreaker(gamesList: any[]) {
 
   const handleSyncScores = async () => {
     const now = Date.now();
-    // Lower throttle to 10s so 30s auto-polling never gets blocked
-    if (now - lastSyncTimeRef.current < 10000) {
-      return;
-    }
+    // Fast 5-second throttle for active users
+    if (now - lastSyncTimeRef.current < 5000) return;
     lastSyncTimeRef.current = now;
   
-    if (!globalSettings?.apiSportsKey?.trim()) {
-      return alert("Please enter your API-Sports Key in the Admin Settings tab.");
-    }
-    if (!games || games.length === 0) return alert("No games loaded in current week.");
+    if (!games || games.length === 0) return;
   
     setIsSyncing(true);
     try {
-      const apiKey = globalSettings.apiSportsKey.trim();
-      const headers = { 'x-apisports-key': apiKey };
-  
-      const res = await fetch(`https://v1.american-football.api-sports.io/games?league=1&season=2026`, { headers });
+      // 🚀 NO API KEY REQUIRED: Public ESPN scoreboard endpoint
+      const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`);
       if (!res.ok) {
         setIsSyncing(false);
         return;
       }
   
       const json = await res.json();
-      const apiGames = json.response || [];
-      if (apiGames.length === 0) {
-        setIsSyncing(false);
-        return;
-      }
-  
+      const espnEvents = json.events || [];
       const targetWeek = selectedWeek || liveSeasonWeek || 1;
   
       const updatedGames = games.map((g: any) => {
         const gAwayCanonical = getCanonicalTeamCode(g.away || g.awayAbbr || g.awayName);
         const gHomeCanonical = getCanonicalTeamCode(g.home || g.homeAbbr || g.homeName);
   
-        const match = apiGames.find((ag: any) => {
-          if (String(ag.game?.id) === String(g.id)) return true;
-          const agAwayCanonical = getCanonicalTeamCode(ag.teams?.away?.code || ag.teams?.away?.name);
-          const agHomeCanonical = getCanonicalTeamCode(ag.teams?.home?.code || ag.teams?.home?.name);
+        // Match ESPN event by canonical team codes
+        const match = espnEvents.find((evt: any) => {
+          const competitors = evt.competitions?.[0]?.competitors || [];
+          const awayComp = competitors.find((c: any) => c.homeAway === 'away');
+          const homeComp = competitors.find((c: any) => c.homeAway === 'home');
+  
+          const agAwayCanonical = getCanonicalTeamCode(awayComp?.team?.abbreviation || awayComp?.team?.displayName);
+          const agHomeCanonical = getCanonicalTeamCode(homeComp?.team?.abbreviation || homeComp?.team?.displayName);
+  
           return (agAwayCanonical === gAwayCanonical && agHomeCanonical === gHomeCanonical);
         });
   
         if (match) {
-          const shortStatus = String(match.game?.status?.short || '').toUpperCase();
-          const isFinal = ['FT', 'AOT', 'POST', 'CANC', 'ABD', 'FINAL', 'FINISHED'].includes(shortStatus);
-          const isLive = ['Q1', 'Q2', 'Q3', 'Q4', 'OT', 'HT', 'LIVE', 'HALFTIME', '1Q', '2Q', '3Q', '4Q', 'IN_PROGRESS'].includes(shortStatus);
-        
-          const homeTotal = match.scores?.home?.total ?? g.homeScore ?? 0;
-          const awayTotal = match.scores?.away?.total ?? g.awayScore ?? 0;
-        
-          // Extract drive & possession information from API-Sports
-          const rawPossession = match.game?.possession || match.game?.teams?.possession || match.possession || null;
-          const yardlineVal = match.game?.yardline || match.game?.field_position || match.yardline || null;
+          const competition = match.competitions?.[0] || {};
+          const statusObj = match.status || {};
+          const statusType = String(statusObj.type?.name || '').toUpperCase();
           
-          // Calculate Red Zone flag (inside opponent's 20-yard line)
-          const numericYardline = parseInt(String(yardlineVal).replace(/[^0-9]/g, ''), 10);
-          const isRedZone = isLive && numericYardline > 0 && numericYardline <= 20;
-        
-          const rawClock = match.game?.status?.timer || match.game?.timer || match.game?.clock || match.clock || null;
-        
+          const isFinal = statusType.includes('FINAL');
+          const isLive = statusObj.type?.state === 'in';
+  
+          const awayComp = competition.competitors?.find((c: any) => c.homeAway === 'away');
+          const homeComp = competition.competitors?.find((c: any) => c.homeAway === 'home');
+  
+          const awayTotal = parseInt(awayComp?.score || '0', 10);
+          const homeTotal = parseInt(homeComp?.score || '0', 10);
+  
+          // 🏈 Live Drive, Possession & Red Zone Data from ESPN
+          const situation = competition.situation || {};
+          const possessionTeamId = situation.possession;
+          const possessionComp = competition.competitors?.find((c: any) => String(c.team?.id) === String(possessionTeamId));
+          const possessionAbbr = possessionComp ? getCanonicalTeamCode(possessionComp.team?.abbreviation) : null;
+  
+          const isRedZone = Boolean(situation.isRedZone);
+          const clockDisplay = statusObj.displayClock || null; // e.g. "12:45"
+          const quarterDisplay = statusObj.period ? `Q${statusObj.period}` : (isLive ? 'LIVE' : null);
+  
+          let winner = g.winner || null;
+          if (isFinal) {
+            if (homeTotal > awayTotal) winner = g.home;
+            else if (awayTotal > homeTotal) winner = g.away;
+            else winner = 'TIE';
+          }
+  
           return {
             ...g,
             status: isFinal ? 'final' : (isLive ? 'in_progress' : 'upcoming'),
-            gameQuarter: isFinal ? 'FINAL' : (isLive ? shortStatus : null),
-            gameClock: isLive ? rawClock : null,
-            possession: isLive ? rawPossession : null,
+            gameQuarter: isFinal ? 'FINAL' : (isLive ? quarterDisplay : null),
+            gameClock: isLive ? clockDisplay : null,
+            possession: isLive ? possessionAbbr : null,
             isRedZone: isLive ? isRedZone : false,
             homeScore: isLive || isFinal ? homeTotal : null,
             awayScore: isLive || isFinal ? awayTotal : null,
-            winner: isFinal ? (homeTotal > awayTotal ? g.home : awayTotal > homeTotal ? g.away : 'TIE') : null
+            winner: isFinal ? winner : null
           };
         }
         return g;
@@ -3648,7 +3656,7 @@ function ensureAutoTiebreaker(gamesList: any[]) {
       });
   
     } catch (e: any) {
-      console.error("Score Sync Error:", e);
+      console.error("ESPN Score Sync Error:", e);
     } finally {
       setIsSyncing(false);
     }
