@@ -2686,16 +2686,14 @@ useEffect(() => {
   const isLiveTab = ['c-tracker', 'k-tracker', 'dashboard'].includes(activeTab);
   if (!isLiveTab) return;
 
-  // Initial fetch when entering tab
   handleSyncScores();
 
-  // Fast 10-second polling for active users
   const timer = setInterval(() => {
     handleSyncScores();
   }, 10000);
 
   return () => clearInterval(timer);
-}, [activeTab, isLoggedIn]);
+}, [activeTab, isLoggedIn, resultsSelectedWeek, liveSeasonWeek]); // Added week dependencies
 
 // Games for Dashboard, Results, & Standings (Locked to current active week)
 const games = useMemo(() => {
@@ -3577,15 +3575,17 @@ function ensureAutoTiebreaker(gamesList: any[]) {
 
   const handleSyncScores = async () => {
     const now = Date.now();
-    // Fast 5-second throttle for active users
     if (now - lastSyncTimeRef.current < 5000) return;
     lastSyncTimeRef.current = now;
   
-    if (!games || games.length === 0) return;
+    // 1. Correctly identify the active target week
+    const targetWeek = selectedWeek || liveSeasonWeek || 1;
+    const targetGames = globalSettings?.games?.[targetWeek] || games || [];
+    if (!targetGames || targetGames.length === 0) return;
   
     setIsSyncing(true);
     try {
-      // 🚀 NO API KEY REQUIRED: Public ESPN scoreboard endpoint
+      // 🚀 Public ESPN NFL Scoreboard Endpoint
       const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`);
       if (!res.ok) {
         setIsSyncing(false);
@@ -3594,13 +3594,11 @@ function ensureAutoTiebreaker(gamesList: any[]) {
   
       const json = await res.json();
       const espnEvents = json.events || [];
-      const targetWeek = selectedWeek || liveSeasonWeek || 1;
   
-      const updatedGames = games.map((g: any) => {
+      const updatedGames = targetGames.map((g: any) => {
         const gAwayCanonical = getCanonicalTeamCode(g.away || g.awayAbbr || g.awayName);
         const gHomeCanonical = getCanonicalTeamCode(g.home || g.homeAbbr || g.homeName);
   
-        // Match ESPN event by canonical team codes
         const match = espnEvents.find((evt: any) => {
           const competitors = evt.competitions?.[0]?.competitors || [];
           const awayComp = competitors.find((c: any) => c.homeAway === 'away');
@@ -3626,14 +3624,13 @@ function ensureAutoTiebreaker(gamesList: any[]) {
           const awayTotal = parseInt(awayComp?.score || '0', 10);
           const homeTotal = parseInt(homeComp?.score || '0', 10);
   
-          // 🏈 Live Drive, Possession & Red Zone Data from ESPN
           const situation = competition.situation || {};
           const possessionTeamId = situation.possession;
           const possessionComp = competition.competitors?.find((c: any) => String(c.team?.id) === String(possessionTeamId));
           const possessionAbbr = possessionComp ? getCanonicalTeamCode(possessionComp.team?.abbreviation) : null;
   
           const isRedZone = Boolean(situation.isRedZone);
-          const clockDisplay = statusObj.displayClock || null; // e.g. "12:45"
+          const clockDisplay = statusObj.displayClock || null;
           const quarterDisplay = statusObj.period ? `Q${statusObj.period}` : (isLive ? 'LIVE' : null);
   
           let winner = g.winner || null;
@@ -3650,8 +3647,8 @@ function ensureAutoTiebreaker(gamesList: any[]) {
             gameClock: isLive ? clockDisplay : null,
             possession: isLive ? possessionAbbr : null,
             isRedZone: isLive ? isRedZone : false,
-            homeScore: isLive || isFinal ? homeTotal : null,
-            awayScore: isLive || isFinal ? awayTotal : null,
+            homeScore: isLive || isFinal ? homeTotal : null,  // FIXED: Home gets homeTotal
+            awayScore: isLive || isFinal ? awayTotal : null,  // FIXED: Away gets awayTotal
             winner: isFinal ? winner : null
           };
         }
@@ -4102,10 +4099,11 @@ const updateGameResult = (gameId: number, resultType: string, teamId: string) =>
         player.calculatedRank = currentRank;
       });
 
-      // B. Fetch Gross Payout Matrix
-      const activeCount = allUsers.filter((u) => u.playsConfidence).length;
-      const matrix = calculateFanaticsPayouts(activeCount);
-      const grossPayouts = globalSettings?.fpPayouts || matrix.weeklyGross;
+// Inside weeklyTrackerData useMemo:
+const activeCount = allUsers.filter((u: any) => u.playsConfidence).length;
+const matrix = calculateFanaticsPayouts(activeCount, maxActiveWeeks);
+const payouts = matrix.weeklyGross; // FORCES dynamic percentages [89, 77, 65, 53, 37, 32, 28, 24] for 58 players
+calculateTiedPayouts(processed, payouts);
 
       // C. Record Net Earnings to Firestore (-$12 for rank 9+, Gross - $12 for top 8)
       sortedTrackerData.forEach((u) => {
