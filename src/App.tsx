@@ -1864,35 +1864,35 @@ function ParticipationAlert({ game }: any) {
   );
 }
 
-// 🏈 DYNAMIC WHOLE-DOLLAR FANATICS PAYOUT ENGINE
+// 🏈 DYNAMIC PERCENTAGE-BASED FANATICS PAYOUT ENGINE
 function calculateFanaticsPayouts(numPlayers: number, totalWeeks = 18, half1Weeks = 9, half2Weeks = 9) {
-  // Percentages for top 8 places: 22%, 19%, 16%, 13%, 9%, 8%, 7%, 6%
+  // Official League Percentage Allocations (Ranks 1 through 8)
   const percentages = [0.22, 0.19, 0.16, 0.13, 0.09, 0.08, 0.07, 0.06];
 
-  // Round whole dollars and balance rounding remainders to match exact pot sum
+  // Helper: Rounds whole dollars and balances any $1 rounding remainder to 1st Place
   const roundAndBalance = (pot: number) => {
     if (pot <= 0) return Array(8).fill(0);
     const raw = percentages.map(p => Math.round(pot * p));
     const currentSum = raw.reduce((sum, v) => sum + v, 0);
     const diff = Math.round(pot) - currentSum;
-    if (diff !== 0) raw[0] += diff; // Adjust $1 rounding variance to 1st place
+    if (diff !== 0) raw[0] += diff; // Balance rounding variance
     return raw;
   };
 
-  // 1. Weekly Pot ($12/player total = $7 Weekly, $1.75 Half 1, $1.75 Half 2, $1.25 Season, $2 Expense)
+  // 1. Weekly Cash Pool ($7.00 per player per week = $406.00 for 58 players)
   const weeklyPot = numPlayers * 7.0;
   const weeklyGross = roundAndBalance(weeklyPot);
-  const weeklyNet = weeklyGross.map(g => g - 12);
+  const weeklyNet = weeklyGross.map(g => g - 12); // Gross award minus $12 weekly dues
 
-  // 2. 1st Half Pot
+  // 2. 1st Half Bonus Pool ($1.75 per player per week over half 1)
   const half1Pot = numPlayers * 1.75 * half1Weeks;
   const half1Payouts = roundAndBalance(half1Pot);
 
-  // 3. 2nd Half Pot
+  // 3. 2nd Half Bonus Pool ($1.75 per player per week over half 2)
   const half2Pot = numPlayers * 1.75 * half2Weeks;
   const half2Payouts = roundAndBalance(half2Pot);
 
-  // 4. Overall Season Pot
+  // 4. Full Season Grand Prize Pool ($1.25 per player per week over 18 weeks)
   const seasonPot = numPlayers * 1.25 * totalWeeks;
   const seasonPayouts = roundAndBalance(seasonPot);
 
@@ -2121,8 +2121,11 @@ function WeeklyRecapModal({ isOpen, onClose, week = 1, games, allUsers, globalSe
     });
 
     const leaderScore = processedUsers[0]?.score || 0;
-    const payouts = globalSettings?.fpPayouts || [77, 67, 56, 46, 31, 28, 25, 20];
 
+// ✅ NEW DYNAMIC LINE:
+const activeCount = allUsers.filter((u: any) => u.playsConfidence).length;
+const matrix = calculateFanaticsPayouts(activeCount);
+const payouts = matrix.weeklyGross;
     // 2. Apply dynamic equal tie-split payout calculation
     calculateTiedPayouts(processedUsers, payouts);
 
@@ -2642,11 +2645,10 @@ if (nextWeekGames && nextWeekGames.length > 0) {
         const data = docSnap.data();
         setGlobalSettings({ 
           ...data, 
-          maxActiveWeeks: data.maxActiveWeeks || 18, 
-          fpPayouts: data.fpPayouts || [100, 80, 70, 60, 50, 40, 30, 20] 
+          maxActiveWeeks: data.maxActiveWeeks || 18
+          // 🔒 Removed fpPayouts hardcoded fallback!
         });
       } else {
-        // 🛡️ SAFE: Never auto-overwrite Firestore settings if missing
         console.warn("Global pool settings document not found in Firestore.");
       }
     });
@@ -2828,8 +2830,11 @@ const isLiveSeasonWeekLocked = isWeekLocked;
       return String(a.lastName).localeCompare(String(b.lastName));
     });
 
-    // 3. Apply Equal Tie-Split Payout Engine
-    const payouts = globalSettings?.fpPayouts || [77, 67, 56, 46, 31, 28, 25, 20];
+
+// ✅ NEW DYNAMIC LINE:
+const activeCount = allUsers.filter((u: any) => u.playsConfidence).length;
+const matrix = calculateFanaticsPayouts(activeCount, maxActiveWeeks);
+const payouts = matrix.weeklyGross; // 👈 Uses dynamic percentages [89, 77, 65, 53, 37, 32, 28, 24] for 58 players
     calculateTiedPayouts(processed, payouts);
 
     // 4. Return finalized user rows
@@ -5184,6 +5189,28 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             {/* 4. FINANCIALS SUB-TAB */}
 {adminTab === 'financials' && (
   <div className="space-y-8 max-w-[1400px] mx-auto">
+    <button
+  onClick={async () => {
+    if (!confirm("Are you sure you want to delete hardcoded payout overrides from Firestore and force dynamic percentage calculations?")) return;
+    setIsSaving(true);
+    try {
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+        fpPayouts: deleteField(),
+        seasonBonuses: deleteField()
+      });
+      alert("✅ Firestore overrides deleted! Page will now refresh using live percentage calculations.");
+      window.location.reload();
+    } catch (e) {
+      console.error("Error deleting overrides:", e);
+      alert("Error deleting overrides from Firestore.");
+    } finally {
+      setIsSaving(false);
+    }
+  }}
+  className="mb-4 px-5 py-3 bg-[#FFB81C] text-slate-900 rounded-xl font-black text-xs uppercase shadow-lg hover:bg-amber-400 transition-all flex items-center gap-2"
+>
+  <RefreshCw className="w-4 h-4" /> Reset Saved Firestore Overrides to Live %
+</button>
     {(() => {
       const fanaticsPlayers = allUsers.filter(u => u.playsConfidence);
       const activeCount = fanaticsPlayers.length;
