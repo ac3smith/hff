@@ -533,6 +533,11 @@ function LiveTrackerCell({ game, pick, rank, isProjection }: any) {
   const isWinner = activeWinner && pick === activeWinner;
   const isLoser = activeWinner && pick !== activeWinner;
   const inProgress = game?.status === 'in_progress';
+  
+  // Check if live game is tied
+  const awayScore = parseInt(String(game?.awayScore ?? 0), 10);
+  const homeScore = parseInt(String(game?.homeScore ?? 0), 10);
+  const isLiveTie = inProgress && awayScore === homeScore;
 
   let bg = 'bg-slate-100 text-slate-900 border-slate-300';
   
@@ -544,6 +549,9 @@ function LiveTrackerCell({ game, pick, rank, isProjection }: any) {
     bg = inProgress && isProjection
       ? 'bg-rose-600 text-white font-black border-rose-500 animate-pulse'
       : 'bg-rose-600 text-white font-black border-rose-500';
+  } else if (isLiveTie && isProjection) {
+    // 🟡 Neutral Amber/Slate Pulsing Style for Live Ties
+    bg = 'bg-amber-500/90 text-slate-900 font-black border-amber-400 animate-pulse ring-2 ring-amber-300/50';
   }
 
   const displayPick = pick === game?.away ? (game?.awayAbbr || pick) : (pick === game?.home ? (game?.homeAbbr || pick) : pick);
@@ -553,7 +561,9 @@ function LiveTrackerCell({ game, pick, rank, isProjection }: any) {
       <span className="text-xs sm:text-sm font-black tracking-tighter">
         {String(displayPick)}
       </span>
-      <span className={`text-[10px] sm:text-xs font-black italic mt-0.5 px-1 rounded ${isWinner ? 'bg-black/30 text-white' : inProgress && isLoser ? 'bg-rose-200 text-rose-900' : 'bg-slate-200 text-slate-900'}`}>
+      <span className={`text-[10px] sm:text-xs font-black italic mt-0.5 px-1 rounded ${
+        isWinner ? 'bg-black/30 text-white' : isLiveTie ? 'bg-black/20 text-slate-900' : inProgress && isLoser ? 'bg-rose-200 text-rose-900' : 'bg-slate-200 text-slate-900'
+      }`}>
         {String(rank)}
       </span>
     </div>
@@ -563,6 +573,34 @@ function LiveTrackerCell({ game, pick, rank, isProjection }: any) {
 
 function LiveScoreTicker({ games }: any) {
   if (!games || games.length === 0) return null;
+
+  // 🏈 SORT GAMES: Live First -> Upcoming Second -> Completed Last
+  const sortedGames = useMemo(() => {
+    const isLive = (g: any) => {
+      const statusUpper = String(g?.status || '').toUpperCase();
+      return ['IN_PROGRESS', 'HALFTIME', '1Q', '2Q', '3Q', '4Q', 'OT', 'HT', 'LIVE', 'Q1', 'Q2', 'Q3', 'Q4'].includes(statusUpper) || 
+             Boolean(g?.gameQuarter && g?.gameQuarter !== 'FINAL' && g?.gameQuarter !== 'final');
+    };
+
+    const isFinal = (g: any) => String(g?.status || '').toLowerCase() === 'final';
+
+    return [...games].sort((a: any, b: any) => {
+      const aLive = isLive(a);
+      const bLive = isLive(b);
+      const aFinal = isFinal(a);
+      const bFinal = isFinal(b);
+
+      if (aLive && !bLive) return -1;
+      if (!aLive && bLive) return 1;
+
+      if (aFinal && !bFinal) return 1;
+      if (!aFinal && bFinal) return -1;
+
+      const timeA = new Date(`${a.apiDate || a.date} ${a.time}`).getTime() || 0;
+      const timeB = new Date(`${b.apiDate || b.date} ${b.time}`).getTime() || 0;
+      return timeA - timeB;
+    });
+  }, [games]);
 
   return (
     <div className="bg-slate-900 rounded-3xl p-4 shadow-xl border-b-4 border-[#FFB81C] mb-6 flex overflow-x-auto gap-4 scrollbar-hide items-center">
@@ -578,7 +616,7 @@ function LiveScoreTicker({ games }: any) {
       </div>
 
       {/* GAME CARDS LOOP */}
-      {games.map((g: any) => {
+      {sortedGames.map((g: any) => {
         const statusUpper = String(g.status || '').toUpperCase();
         const isLive = ['IN_PROGRESS', 'HALFTIME', '1Q', '2Q', '3Q', '4Q', 'OT', 'HT', 'LIVE', 'Q1', 'Q2', 'Q3', 'Q4'].includes(statusUpper) || Boolean(g.gameQuarter && g.gameQuarter !== 'FINAL');
         
@@ -1427,7 +1465,7 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
 
 function StatsView({ allUsers, globalSettings }: any) {
   const fanaticsUsers = useMemo(() => {
-    return (allUsers || []).filter((u: any) => u.playsConfidence);
+    return (allUsers || []).filter((u: any) => Boolean(u.playsConfidence) && String(u.paymentStatus) !== 'disqualified');
   }, [allUsers]);
 
   const fanaticsAnalytics = useMemo(() => {
@@ -2661,17 +2699,31 @@ if (nextWeekGames && nextWeekGames.length > 0) {
 
   useEffect(() => { 
     if (globalSettings && allUsers.length > 0 && !dbReady) { 
-        // Force all views to default to Week 1 on load
-        const defaultWeek = 1;
-        
-        setLiveSeasonWeek(defaultWeek);
-        setPicksSelectedWeek(defaultWeek);
-        setResultsSelectedWeek(defaultWeek);
-        setSelectedWeek(defaultWeek);
-
-        setDbReady(true); 
+      const defaultWeek = 1;
+      setLiveSeasonWeek(defaultWeek);
+      
+      // Auto-advance pick tab if current week is locked/closed
+      const currentWeekState = globalSettings?.weekStates?.[defaultWeek] || 'open';
+      const isLocked = currentWeekState === 'locked' || currentWeekState === 'closed';
+      const nextPickWeek = isLocked ? Math.min(defaultWeek + 1, globalSettings?.maxActiveWeeks || 18) : defaultWeek;
+  
+      setPicksSelectedWeek(nextPickWeek);
+      setResultsSelectedWeek(defaultWeek);
+      setDbReady(true); 
     } 
   }, [globalSettings, allUsers, dbReady]);
+
+  useEffect(() => {
+    if (!globalSettings?.weekStates) return;
+    const currentWeekState = globalSettings.weekStates[liveSeasonWeek] || 'open';
+    if (currentWeekState === 'locked' || currentWeekState === 'closed') {
+      const nextWeek = Math.min(liveSeasonWeek + 1, globalSettings?.maxActiveWeeks || 18);
+      // Only auto-advance if user hasn't manually selected a future week
+      if (picksSelectedWeek <= liveSeasonWeek) {
+        setPicksSelectedWeek(nextWeek);
+      }
+    }
+  }, [globalSettings?.weekStates, liveSeasonWeek]);
 
   useEffect(() => { setAdminForceReveal(false); }, [selectedWeek]);
 
@@ -2765,16 +2817,18 @@ const isLiveSeasonWeekLocked = isWeekLocked;
 
     // Pull schedule explicitly for resultsSelectedWeek
     const targetGames = globalSettings?.games?.[resultsSelectedWeek] || resultsGames || [];
+    if (!targetGames || targetGames.length === 0) return [];
+
     const actualTB = globalSettings?.actualTiebreakers?.[resultsSelectedWeek] ?? 0;
     const standardMaxPossible = targetGames.reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
 
-    // 1. Process picks using flexible string/number ID key matching
+    // 1. Process picks safely using loose boolean coercion and fallback objects
     const processed = allUsers
-      .filter((u: any) => u.playsConfidence)
+      .filter((u: any) => Boolean(u?.playsConfidence) && String(u?.paymentStatus) !== 'disqualified')
       .map((u: any) => {
-        const userPicks = u.picks?.[resultsSelectedWeek] || {};
-        const userRanks = u.ranks?.[resultsSelectedWeek] || {};
-        const userTBStr = String(u.tiebreakers?.[resultsSelectedWeek] || '').trim();
+        const userPicks = (u && u.picks && u.picks[resultsSelectedWeek]) ? u.picks[resultsSelectedWeek] : {};
+        const userRanks = (u && u.ranks && u.ranks[resultsSelectedWeek]) ? u.ranks[resultsSelectedWeek] : {};
+        const userTBStr = String((u && u.tiebreakers && u.tiebreakers[resultsSelectedWeek]) || '').trim();
         const userTB = parseInt(userTBStr || '0', 10);
 
         // Count valid picks made for this week
@@ -2822,21 +2876,22 @@ const isLiveSeasonWeekLocked = isWeekLocked;
       });
 
     // 2. Sort: Points (descending), Tiebreaker Diff (ascending)
-    processed.sort((a, b) => {
+    processed.sort((a: any, b: any) => {
       if (b.score !== a.score) return b.score - a.score;
       if (a.tbDiff !== b.tbDiff) return a.tbDiff - b.tbDiff;
-      return String(a.lastName).localeCompare(String(b.lastName));
+      const nameA = `${a.firstName} ${a.lastName}`.trim();
+      const nameB = `${b.firstName} ${b.lastName}`.trim();
+      return nameA.localeCompare(nameB);
     });
 
-
-// ✅ NEW DYNAMIC LINE:
-const activeCount = allUsers.filter((u: any) => u.playsConfidence).length;
-const matrix = calculateFanaticsPayouts(activeCount, maxActiveWeeks);
-const payouts = matrix.weeklyGross; // 👈 Uses dynamic percentages [89, 77, 65, 53, 37, 32, 28, 24] for 58 players
+    // 3. Apply Equal Tie-Split Payout Engine
+    const activeCount = allUsers.filter((u: any) => Boolean(u?.playsConfidence) && String(u?.paymentStatus) !== 'disqualified').length;
+    const matrix = calculateFanaticsPayouts(activeCount, maxActiveWeeks);
+    const payouts = matrix.weeklyGross;
     calculateTiedPayouts(processed, payouts);
 
     // 4. Return finalized user rows
-    return processed.map((u) => {
+    return processed.map((u: any) => {
       const grossVal = u.grossPayout || 0;
       const calculatedNet = grossVal > 0 ? grossVal - 12 : -12;
       const netVal = u.savedNet !== undefined ? u.savedNet : calculatedNet;
@@ -2845,7 +2900,7 @@ const payouts = matrix.weeklyGross; // 👈 Uses dynamic percentages [89, 77, 65
         ...u,
         weeklyFP: grossVal,
         netEarnings: netVal,
-        weeklyPicks: u.picks?.[resultsSelectedWeek] || {}
+        weeklyPicks: (u && u.picks && u.picks[resultsSelectedWeek]) ? u.picks[resultsSelectedWeek] : {}
       };
     });
   }, [allUsers, globalSettings, resultsSelectedWeek, resultsGames, games]);
@@ -2900,7 +2955,7 @@ const payouts = matrix.weeklyGross; // 👈 Uses dynamic percentages [89, 77, 65
     const activeCpField = seasonView === '1st Half' ? 'cpFirstHalf' : seasonView === '2nd Half' ? 'cpSecondHalf' : 'cpOverall';
     const activeFpField = seasonView === '1st Half' ? 'fpFirstHalf' : seasonView === '2nd Half' ? 'fpSecondHalf' : 'fpOverall';
 
-    const baseStats = allUsers.filter(u => u.playsConfidence).map(user => {
+    const baseStats = allUsers.filter(u => Boolean(u.playsConfidence) && String(u.paymentStatus) !== 'disqualified').map(user => {
       let cp1 = 0, cp2 = 0, cpo = 0;
       let fp1 = 0, fp2 = 0, fpo = 0;
 
