@@ -176,6 +176,62 @@ function getDisplayWeekLabel(weekNum: number): string {
 // --- HELPERS ---
 function formatFullName(user: any) { return !user ? "" : `${user.firstName}${user.nickname ? ` "${user.nickname}"` : ""} ${user.lastName}`; }
 
+// Safe helper to check if a user's knockout pick lost a final game in a given week
+function isUserEliminatedThisWeek(user: any, week: number, gamesList: any[]) {
+  if (!user || !user.playsKnockout) return false;
+  
+  // 1. Check if user is explicitly listed in global eliminated array
+  const userPick = user.knockoutPicks?.[week];
+
+  // If no games list provided, fall back
+  if (!gamesList || !Array.isArray(gamesList) || gamesList.length === 0) return false;
+
+  // 2. If week has games but user made NO pick, and at least one game is final/closed, they missed pick
+  if (!userPick) {
+    const hasStartedOrFinal = gamesList.some((g: any) => 
+      ['final', 'in_progress', 'closed'].includes(String(g?.status || '').toLowerCase())
+    );
+    if (hasStartedOrFinal) return true; // Missed pick = Eliminated
+    return false;
+  }
+
+  const pickCode = typeof getCanonicalTeamCode === 'function' 
+    ? getCanonicalTeamCode(userPick) 
+    : String(userPick).trim().toUpperCase();
+
+  // 3. Find the game matching the user's picked team
+  const pickedGame = gamesList.find((g: any) => {
+    if (!g || !g.away || !g.home) return false;
+    const awayCode = typeof getCanonicalTeamCode === 'function' ? getCanonicalTeamCode(g.away) : String(g.away).trim().toUpperCase();
+    const homeCode = typeof getCanonicalTeamCode === 'function' ? getCanonicalTeamCode(g.home) : String(g.home).trim().toUpperCase();
+    return awayCode === pickCode || homeCode === pickCode;
+  });
+
+  if (pickedGame && String(pickedGame.status || '').toLowerCase() === 'final') {
+    // Determine winner canonical code
+    let winnerCode = '';
+    if (pickedGame.winner) {
+      winnerCode = typeof getCanonicalTeamCode === 'function' ? getCanonicalTeamCode(pickedGame.winner) : String(pickedGame.winner).trim().toUpperCase();
+    } else {
+      // Fallback: derive winner from scores if winner field isn't explicitly set
+      const homeScore = parseInt(String(pickedGame.homeScore || 0), 10);
+      const awayScore = parseInt(String(pickedGame.awayScore || 0), 10);
+      if (homeScore > awayScore) {
+        winnerCode = typeof getCanonicalTeamCode === 'function' ? getCanonicalTeamCode(pickedGame.home) : String(pickedGame.home).trim().toUpperCase();
+      } else if (awayScore > homeScore) {
+        winnerCode = typeof getCanonicalTeamCode === 'function' ? getCanonicalTeamCode(pickedGame.away) : String(pickedGame.away).trim().toUpperCase();
+      }
+    }
+
+    // If game ended in a tie or picked team lost, player is eliminated!
+    if (!winnerCode || pickCode !== winnerCode) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function calculatePoints(picks: any, ranks: any, games: any) {
   if (!picks || !ranks || !games || games.length === 0) return 0;
   const maxPossible = games.reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
@@ -190,20 +246,27 @@ function calculatePoints(picks: any, ranks: any, games: any) {
   return maxPossible - lostPoints;
 }
 
-function wasAlreadyOut(user: any, currentWeek: number, globalSettings: any) {
-  if (!user || user.paymentStatus === 'disqualified') return true;
-  
-  const koStates = globalSettings?.koWeekStates || globalSettings?.weekStates || {};
-  const startWeek = globalSettings?.knockoutStartWeek || 1;
+function wasAlreadyOut(user: any, checkUpToWeek: number, globalSettings: any, allGamesMap?: any) {
+  if (!user || !user.playsKnockout) return false;
 
-  // Only evaluate weeks starting from when the Knockout session was reset
-  for (let wk = startWeek; wk < currentWeek; wk++) {
-    const wkState = koStates[wk];
-    const wkStatus = user?.knockoutStatuses?.[wk];
-    if (wkState === 'closed' && ['Loser', 'Loser (No Pick)', 'Knocked Out', 'No Pick'].includes(wkStatus)) {
-      return true;
+  const startWk = globalSettings?.knockoutStartWeek || 1;
+
+  for (let w = startWk; w <= checkUpToWeek; w++) {
+    // 1. Admin manual elimination checks
+    if (globalSettings?.knockoutEliminations?.[w]?.includes(user.id)) return true;
+    if (user.knockoutEliminatedWeek && user.knockoutEliminatedWeek <= w) return true;
+
+    // 2. Recorded status check
+    const wkStatus = user.knockoutStatuses?.[w];
+    if (['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) return true;
+
+    // 3. Live game results check for week w
+    const weekGames = globalSettings?.games?.[w] || (allGamesMap && allGamesMap[w]) || [];
+    if (weekGames && weekGames.length > 0) {
+      if (isUserEliminatedThisWeek(user, w, weekGames)) return true;
     }
   }
+
   return false;
 }
 
@@ -1175,18 +1238,17 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
       if (!user) return null;
 
       let eliminatedWeek: number | null = null;
-      const statuses = user.knockoutStatuses || {};
 
-      for (let wk = startWk; wk <= maxWeeks; wk++) {
-        const wkStatus = statuses[wk];
-        const wkState = globalSettings?.koWeekStates?.[wk] || globalSettings?.weekStates?.[wk];
+      // 🔒 Evaluate elimination across all weeks from startWeek up to the active week
+      for (let wk = startWk; wk <= week; wk++) {
+        const wkGames = globalSettings?.games?.[wk] || (wk === week ? allGames : []) || [];
+        const isOutThisWk = isUserEliminatedThisWeek(user, wk, wkGames);
+        const isAdminOut = globalSettings?.knockoutEliminations?.[wk]?.includes(user.id);
+        const isProfileOut = user.knockoutEliminatedWeek && user.knockoutEliminatedWeek <= wk;
+        const wkStatus = user.knockoutStatuses?.[wk];
+        const isStatusOut = ['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus);
 
-        if (['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus)) {
-          eliminatedWeek = wk;
-          break;
-        }
-
-        if ((wkState === 'locked' || wkState === 'closed') && wk < week && (wkStatus === 'No Pick' || !user.knockoutPicks?.[wk])) {
+        if (isOutThisWk || isAdminOut || isProfileOut || isStatusOut) {
           eliminatedWeek = wk;
           break;
         }
@@ -1196,9 +1258,11 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
         eliminatedWeek = eliminatedWeek || 1;
       }
 
+      const isAlive = eliminatedWeek === null;
+
       return {
         ...user,
-        isAlive: eliminatedWeek === null,
+        isAlive,
         eliminatedWeek
       };
     }).filter(Boolean).sort((a: any, b: any) => {
@@ -1209,7 +1273,7 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
       }
       return String(a.lastName || '').localeCompare(String(b.lastName || ''));
     });
-  }, [data, maxWeeks, globalSettings?.weekStates, week]);
+  }, [data, maxWeeks, globalSettings, week, allGames]);
 
   return (
     <div className="bg-white rounded-3xl sm:rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden border-t-8 border-red-600 max-w-full mx-auto">
@@ -1287,27 +1351,13 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
                     const rawPick = user.knockoutPicks?.[wk];
                     const wkState = globalSettings?.weekStates?.[wk];
                     const isCurrentWeek = wk === week;
-                    const isFutureWeek = wk > week; // Checks if week is in the future
+                    const isFutureWeek = wk > week;
 
-                    const weekGamesList = globalSettings?.games?.[wk] || [];
+                    const weekGamesList = globalSettings?.games?.[wk] || (wk === week ? allGames : []) || [];
                     const canonicalPick = getCanonicalTeamCode(rawPick);
-                    const game = weekGamesList.find((g: any) => 
-                      getCanonicalTeamCode(g.away) === canonicalPick || 
-                      getCanonicalTeamCode(g.home) === canonicalPick
-                    );
-
-                    let wkStatus = user.knockoutStatuses?.[wk] || 'Pending';
-                    if (game && rawPick && (game.status === 'final' || game.winner)) {
-                      const winnerCanonical = getCanonicalTeamCode(game.winner);
-                      if (winnerCanonical && winnerCanonical === canonicalPick) {
-                        wkStatus = 'Winner';
-                      } else if (winnerCanonical && winnerCanonical !== 'TIE') {
-                        wkStatus = 'Loser';
-                      }
-                    }
-
+                    
+                    const isEliminatedThisCell = isUserEliminatedThisWeek(user, wk, weekGamesList);
                     const wasOutBefore = user.eliminatedWeek !== null && wk > user.eliminatedWeek;
-                    const wasEliminatedThisWeek = user.eliminatedWeek === wk || ['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus);
 
                     const isPastOrLockedWeek = wk < week || wkState === 'locked' || wkState === 'closed' || (wk === week && (isLocked || globalSettings?.isLocked));
                     const canRevealPick = isPastOrLockedWeek || adminForceReveal || isMe;
@@ -1316,16 +1366,13 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
                     const displayPick = canonicalPick || 'NO PICK';
 
                     let cellBg = 'bg-white text-slate-800';
-                    const isWeekClosed = wkState === 'closed' || wk < week;
 
                     if (wasOutBefore) {
                       cellBg = 'bg-slate-100/60 text-slate-300';
-                    } else if (wasEliminatedThisWeek) {
+                    } else if (isEliminatedThisCell) {
                       cellBg = 'bg-rose-600 text-white font-black';
-                    } else if (rawPick && (wkStatus === 'Winner' || isWeekClosed)) {
+                    } else if (rawPick && !isEliminatedThisCell && isPastOrLockedWeek) {
                       cellBg = 'bg-emerald-600 text-white font-black shadow-sm';
-                    } else if (rawPick && isPastOrLockedWeek) {
-                      cellBg = 'bg-amber-500/20 text-slate-900 border-2 border-amber-400 font-black';
                     }
 
                     return (
@@ -1335,7 +1382,6 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
                           isCurrentWeek ? 'border-amber-300 bg-amber-50/30' : ''
                         }`}
                       >
-                        {/* Render a clean dash for eliminated players or future weeks */}
                         {wasOutBefore || isFutureWeek ? (
                           <span className="text-[10px] font-bold text-slate-300 block text-center">
                             —
@@ -2910,39 +2956,34 @@ const isLiveSeasonWeekLocked = isWeekLocked;
     
     const startWeek = globalSettings?.knockoutStartWeek || 1;
 
-    return allUsers.filter(u => u.playsKnockout).map(u => {
-        let status = 'Alive', eliminatedWeek = null;
-        
-        // Start loop strictly from startWeek (pre-reset weeks are ignored)
-        for (let wk = startWeek; wk < liveSeasonWeek; wk++) {
-          const wkState = globalSettings?.koWeekStates?.[wk] || globalSettings?.weekStates?.[wk];
-          const wkStatus = u.knockoutStatuses?.[wk];
+    return allUsers
+      .filter((u: any) => Boolean(u?.playsKnockout) && String(u?.paymentStatus) !== 'disqualified')
+      .map((u: any) => {
+        // 🔒 Check elimination across all past and current live weeks
+        const isOut = wasAlreadyOut(u, liveSeasonWeek, globalSettings, globalSettings?.games);
 
-          if (wkState === 'closed' && ['Loser', 'Loser (No Pick)', 'Knocked Out', 'No Pick', undefined].includes(wkStatus)) { 
-            eliminatedWeek = wk; 
-            break; 
+        let eliminatedWeek = null;
+        if (isOut) {
+          for (let w = startWeek; w <= liveSeasonWeek; w++) {
+            const weekGames = globalSettings?.games?.[w] || (w === liveSeasonWeek ? games : []);
+            if (isUserEliminatedThisWeek(u, w, weekGames) || globalSettings?.knockoutEliminations?.[w]?.includes(u.id)) {
+              eliminatedWeek = w;
+              break;
+            }
           }
         }
 
-        if (u.paymentStatus === 'disqualified') {
-          status = 'Knocked Out';
-        } else if (eliminatedWeek !== null) {
-          status = 'Knocked Out';
-        } else if (!u.knockoutPicks?.[liveSeasonWeek]) {
-          status = globalSettings?.weekStates?.[liveSeasonWeek] === 'closed' ? 'Knocked Out' : 'Alive';
-        } else { 
-          const game = games.find((g: any) => g.away === u.knockoutPicks[liveSeasonWeek] || g.home === u.knockoutPicks[liveSeasonWeek]); 
-          if (globalSettings?.weekStates?.[liveSeasonWeek] === 'closed') {
-            status = u.knockoutStatuses?.[liveSeasonWeek] === 'Winner' ? 'Alive' : 'Knocked Out'; 
-          } else if (game?.status === 'final') {
-            status = (game.winner === 'TIE' || game.winner !== u.knockoutPicks[liveSeasonWeek]) ? 'Knocked Out' : 'Alive'; 
-          } else {
-            status = 'Alive'; 
-          }
-        }
+        const currentStatus = isOut ? 'Knocked Out' : 'Alive';
 
-        return { ...u, currentStatus: status, pick: u.knockoutPicks?.[liveSeasonWeek], eliminatedWeek };
-      }).sort((a, b) => {
+        return { 
+          ...u, 
+          currentStatus, 
+          isKnockedOut: isOut,
+          pick: u.knockoutPicks?.[liveSeasonWeek], 
+          eliminatedWeek 
+        };
+      })
+      .sort((a, b) => {
         const order: any = { 'Alive': 1, 'Knocked Out': 2 };
         if ((order[a.currentStatus] || 99) !== (order[b.currentStatus] || 99)) return (order[a.currentStatus] || 99) - (order[b.currentStatus] || 99);
         return String(a.firstName || '').localeCompare(String(b.firstName || ''));
@@ -4563,9 +4604,14 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             )}
 
             {/* KnockOut Status Card */}
+            {/* KnockOut Status Card */}
             {currentUser?.playsKnockout ? (
               (() => {
-                const userKoOut = wasAlreadyOut(currentUser, liveSeasonWeek, globalSettings);
+                const targetGames = globalSettings?.games?.[liveSeasonWeek] || games || [];
+                const pastEliminated = typeof wasAlreadyOut === 'function' ? wasAlreadyOut(currentUser, liveSeasonWeek, globalSettings) : false;
+                const currentWeekEliminated = isUserEliminatedThisWeek(currentUser, liveSeasonWeek, targetGames);
+                
+                const userKoOut = Boolean(pastEliminated || currentWeekEliminated);
                 const koStatusLabel = userKoOut ? 'Knocked Out' : 'Alive';
 
                 return (
@@ -4638,10 +4684,18 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                           </div>
                         )}
 
+                        
                         {/* KNOCKOUT POOL CHECKLIST CARD */}
-                        {currentUser?.playsKnockout && (
+{/* KNOCKOUT POOL CHECKLIST CARD */}
+{/* KNOCKOUT POOL CHECKLIST CARD */}
+{currentUser?.playsKnockout && (
                           (() => {
-                            const playerKoOut = wasAlreadyOut(currentUser, picksSelectedWeek, globalSettings);
+                            const targetGames = globalSettings?.games?.[picksSelectedWeek] || games || [];
+                            const pastEliminated = typeof wasAlreadyOut === 'function' ? wasAlreadyOut(currentUser, picksSelectedWeek, globalSettings, globalSettings?.games) : false;
+                            const currentWeekEliminated = isUserEliminatedThisWeek(currentUser, picksSelectedWeek, targetGames);
+                            
+                            const playerKoOut = Boolean(pastEliminated || currentWeekEliminated);
+
                             if (playerKoOut) {
                               return (
                                 <div className="p-5 rounded-2xl border-2 flex items-center justify-between transition-all bg-red-50 border-red-200">
@@ -4649,7 +4703,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                                     <Skull className="w-8 h-8 text-red-500 flex-shrink-0" />
                                     <div>
                                       <h4 className="font-black uppercase text-lg text-red-800">Knocked Out</h4>
-                                      <p className="text-sm font-medium text-red-700">You have been eliminated from the KnockOut pool for this session.</p>
+                                      <p className="text-sm font-medium text-red-700">You have been eliminated from the KnockOut pool for this round.</p>
                                     </div>
                                   </div>
                                 </div>
