@@ -3015,14 +3015,24 @@ const isLiveSeasonWeekLocked = isWeekLocked;
     return sorted;
   }, [allUsers, globalSettings, seasonView, seasonSortBy]);
 
-  const fullyPickedCount = currentUser ? games.filter((g: any) => currentUser?.picks?.[selectedWeek]?.[g.id] && currentUser?.ranks?.[selectedWeek]?.[g.id]).length : 0;
-  const totalItemsRequired = totalGames > 0 ? totalGames + 1 : 0;
-  const hasTiebreaker = (currentUser?.tiebreakers?.[selectedWeek] || '').toString().trim() !== '';
-  const totalItemsCompleted = fullyPickedCount + (hasTiebreaker ? 1 : 0);
-  const progressPercentage = totalItemsRequired > 0 ? (totalItemsCompleted / totalItemsRequired) * 100 : 0;
+  const targetPickGamesList = pickGames.length > 0 ? pickGames : games;
+const totalPickGamesCount = targetPickGamesList.length;
 
-  const isCompleteFanatics = fullyPickedCount === totalGames && totalGames > 0 && hasTiebreaker;
-  const isCompleteKnockout = !!currentUser?.knockoutPicks?.[selectedWeek];
+const fullyPickedCount = currentUser
+  ? targetPickGamesList.filter((g: any) => {
+      const p = currentUser?.picks?.[picksSelectedWeek]?.[g.id] || currentUser?.picks?.[picksSelectedWeek]?.[String(g.id)];
+      const r = currentUser?.ranks?.[picksSelectedWeek]?.[g.id] || currentUser?.ranks?.[picksSelectedWeek]?.[String(g.id)];
+      return p && r;
+    }).length
+  : 0;
+
+const hasTiebreaker = (currentUser?.tiebreakers?.[picksSelectedWeek] || '').toString().trim() !== '';
+const totalItemsCompleted = fullyPickedCount + (hasTiebreaker ? 1 : 0);
+const totalItemsRequired = totalPickGamesCount > 0 ? totalPickGamesCount + 1 : 0;
+const progressPercentage = totalItemsRequired > 0 ? (totalItemsCompleted / totalItemsRequired) * 100 : 0;
+
+const isCompleteFanatics = fullyPickedCount === totalPickGamesCount && totalPickGamesCount > 0 && hasTiebreaker;
+const isCompleteKnockout = !!currentUser?.knockoutPicks?.[picksSelectedWeek];
   let isKnockedOut = wasAlreadyOut(currentUser, selectedWeek, globalSettings?.weekStates);
 
   const statusSummary = useMemo(() => {
@@ -4448,88 +4458,232 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 
       <main className="max-w-[1600px] mx-auto px-4 py-6 print:hidden">
       {activeTab === 'dashboard' && (
+        <div className="space-y-6 max-w-5xl mx-auto">
+          {/* WELCOME BANNER */}
+          <div className="bg-slate-900 rounded-3xl p-8 sm:p-12 text-white shadow-2xl border-b-8 border-[#FFB81C] relative overflow-hidden">
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 opacity-20 hidden md:block">
+              {!imgErrors?.logo ? <img src="/hff-logo.png" alt="" className="w-96 h-96 object-contain" onError={() => handleImgError('logo')} /> : <Trophy className="w-96 h-96" />}
+            </div>
+            <div className="relative z-10 flex items-center gap-6 mb-8">
+              {!imgErrors?.logo && <img src="/hff-logo.png" alt="Logo" className="w-24 h-24 object-contain drop-shadow-xl md:hidden" onError={() => handleImgError('logo')} />}
+              <div>
+                <h2 className="text-4xl sm:text-5xl font-black italic uppercase tracking-tighter mb-2">
+                  Welcome back,<br className="sm:hidden" /> <span className="text-[#FFB81C]">{String(currentUser?.firstName || 'Player')}!</span>
+                </h2>
+                <p className="text-slate-400 font-bold text-lg uppercase tracking-widest">Hanover Football Fanatics Portal</p>
+              </div>
+            </div>
             
-            <div className="space-y-6 max-w-5xl mx-auto">
-                <div className="bg-slate-900 rounded-3xl p-8 sm:p-12 text-white shadow-2xl border-b-8 border-[#FFB81C] relative overflow-hidden">
-                    <div className="absolute top-0 right-0 -mt-10 -mr-10 opacity-20 hidden md:block">
-                        {!imgErrors?.logo ? <img src="/hff-logo.png" alt="" className="w-96 h-96 object-contain" onError={() => handleImgError('logo')} /> : <Trophy className="w-96 h-96" />}
-                    </div>
-                    <div className="relative z-10 flex items-center gap-6 mb-8">
-                        {!imgErrors?.logo && <img src="/hff-logo.png" alt="Logo" className="w-24 h-24 object-contain drop-shadow-xl md:hidden" onError={() => handleImgError('logo')} />}
-                        <div>
-                            <h2 className="text-4xl sm:text-5xl font-black italic uppercase tracking-tighter mb-2">Welcome back,<br className="sm:hidden" /> <span className="text-[#FFB81C]">{String(currentUser.firstName)}!</span></h2>
-                            <p className="text-slate-400 font-bold text-lg uppercase tracking-widest">Hanover Football Fanatics Portal</p>
+            {globalSettings?.announcement && (
+              <div className="relative z-10 bg-white/10 border border-white/20 p-5 rounded-2xl max-w-3xl backdrop-blur-sm shadow-xl mb-4">
+                <h4 className="flex items-center gap-2 font-black uppercase text-[#FFB81C] text-sm tracking-widest mb-2">
+                  <Megaphone className="w-5 h-5" /> Admin Announcement
+                </h4>
+                <p className="text-slate-200 font-medium leading-relaxed">{String(globalSettings.announcement || '')}</p>
+              </div>
+            )}
+
+            {(() => {
+              const isLiveNow = (games || []).some((g: any) => g.status === 'in_progress');
+              if (isLiveNow) {
+                return (
+                  <div className="relative z-10 inline-flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-wider shadow-md animate-pulse">
+                    <span className="w-2.5 h-2.5 rounded-full bg-white"></span>
+                    GAMES LIVE NOW
+                  </div>
+                );
+              }
+
+              const upcomingGames = (games || []).filter((g: any) => 
+                g.status !== 'final' && g.status !== 'CLOSED' && g.status !== 'closed'
+              );
+
+              if (upcomingGames.length > 0) {
+                const nextGame = upcomingGames[0];
+                const awayCode = getCanonicalTeamCode(nextGame.away);
+                const homeCode = getCanonicalTeamCode(nextGame.home);
+
+                return (
+                  <div className="relative z-10 inline-flex items-center gap-2.5 bg-slate-800/90 border border-slate-700 text-slate-200 px-4 py-2.5 rounded-2xl font-bold text-xs uppercase tracking-wider backdrop-blur-sm shadow-lg">
+                    <Clock className="w-4 h-4 text-[#FFB81C]" />
+                    <span>Next Kickoff:</span>
+                    <span className="font-black text-[#FFB81C]">{nextGame.date} at {nextGame.time}</span>
+                    <span className="text-slate-400 font-bold">({awayCode} @ {homeCode})</span>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="relative z-10 inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 text-slate-400 px-4 py-2 rounded-2xl font-bold text-xs uppercase tracking-wider">
+                  All Scheduled Games Complete
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* THREE STAT CARDS GRID */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Active Week Card */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
+              <CalendarDays className="w-10 h-10 text-indigo-500 mb-3" />
+              <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Current Active Week</div>
+              <div className="text-4xl font-black italic text-slate-900">
+                Week {liveSeasonWeek}
+              </div>
+            </div>
+
+            {/* Fanatics Overall Rank Card */}
+            {currentUser?.playsConfidence ? (
+              (() => {
+                const userStat = seasonStats.find((u: any) => u.id === currentUser?.id);
+                const firstPlacePts = seasonStats[0]?.cpOverall || 0;
+                const userPts = userStat?.cpOverall || 0;
+                const gap = firstPlacePts - userPts;
+                const userRank = userStat?.displayRank || '-';
+
+                return (
+                  <div 
+                    className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center cursor-pointer hover:border-[#FFB81C] transition-all" 
+                    onClick={() => setActiveTab('standings')}
+                  >
+                    <Trophy className="w-10 h-10 text-[#FFB81C]" />
+                    <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Overall Rank</div>
+                    <div className="text-4xl font-black italic text-slate-900 mb-1">#{String(userRank)}</div>
+                    {gap > 0 && <div className="text-xs font-bold text-slate-500">{String(gap)} pts behind 1st</div>}
+                    {gap === 0 && userPts > 0 && <div className="text-xs font-bold text-green-600">You are in 1st!</div>}
+                  </div>
+                );
+              })()
+            ) : (
+              <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center opacity-50">
+                <Trophy className="w-10 h-10 text-slate-400 mb-3" />
+                <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Pool</div>
+                <div className="text-sm font-bold text-slate-500 uppercase">Not Registered</div>
+              </div>
+            )}
+
+            {/* KnockOut Status Card */}
+            {currentUser?.playsKnockout ? (
+              (() => {
+                const userKoOut = wasAlreadyOut(currentUser, liveSeasonWeek, globalSettings);
+                const koStatusLabel = userKoOut ? 'Knocked Out' : 'Alive';
+
+                return (
+                  <div 
+                    className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center cursor-pointer hover:border-[#FFB81C] transition-all" 
+                    onClick={() => setActiveTab('k-tracker')}
+                  >
+                    <HeartPulse className={`w-10 h-10 mb-3 ${userKoOut ? 'text-red-500' : 'text-green-500'}`} />
+                    <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">KnockOut Status</div>
+                    <div className="text-2xl font-black italic text-slate-900 uppercase">{koStatusLabel}</div>
+                  </div>
+                );
+              })()
+            ) : (
+              <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center opacity-50">
+                <Skull className="w-10 h-10 text-slate-400 mb-3" />
+                <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">KnockOut Pool</div>
+                <div className="text-sm font-bold text-slate-500 uppercase">Not Registered</div>
+              </div>
+            )}
+          </div>
+
+          {/* ACTION REQUIRED CHECKLIST */}
+          <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+                    <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xl font-black italic uppercase text-slate-900">Action Required</h3>
+                          <span className="bg-[#FFB81C] text-slate-900 text-xs font-black uppercase px-2.5 py-1 rounded-full tracking-wider shadow-sm">
+                            Week {picksSelectedWeek}
+                          </span>
                         </div>
+                        <p className="text-sm text-slate-500 font-bold mt-1">
+                          Your active checklist for Week {picksSelectedWeek}
+                        </p>
+                      </div>
+                      {pickLockdownTime && globalSettings?.weekStates?.[picksSelectedWeek] === 'open' && (
+                        <div className="hidden sm:block text-right">
+                          <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Lockdown In</div>
+                          <div className="text-sm font-bold text-slate-800 flex items-center gap-1.5 justify-end">
+                            <Clock className="w-4 h-4 text-orange-500"/>
+                            <CountdownClock targetTime={pickLockdownTime} />
+                          </div>
+                        </div>
+                      )}
                     </div>
                     
-                    {globalSettings?.announcement && (
-                        <div className="relative z-10 bg-white/10 border border-white/20 p-5 rounded-2xl max-w-3xl backdrop-blur-sm shadow-xl mb-4">
-                            <h4 className="flex items-center gap-2 font-black uppercase text-[#FFB81C] text-sm tracking-widest mb-2"><Megaphone className="w-5 h-5" /> Admin Announcement</h4>
-                            <p className="text-slate-200 font-medium leading-relaxed">{String(globalSettings.announcement || '')}</p>
-                        </div>
-                    )}
-
-{/* 📍 MANUAL TIMEZONE-INDEPENDENT DATE & TIME FORMATTER 📍 */}
-{(() => {
-                        const isLiveNow = (games || []).some((g: any) => g.status === 'in_progress');
-                        if (isLiveNow) {
-                            return (
-                                <div className="relative z-10 inline-flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-wider shadow-md animate-pulse">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-white"></span>
-                                    GAMES LIVE NOW
-                                </div>
-                            );
-                        }
-
-                        // Pick first non-final game
-                        const upcomingGames = (games || []).filter((g: any) => 
-                          g.status !== 'final' && g.status !== 'CLOSED' && g.status !== 'closed'
-                        );
-
-                        if (upcomingGames.length > 0) {
-                            const nextGame = upcomingGames[0];
-                            const awayCode = getCanonicalTeamCode(nextGame.away);
-                            const homeCode = getCanonicalTeamCode(nextGame.home);
-
-                            return (
-                                <div className="relative z-10 inline-flex items-center gap-2.5 bg-slate-800/90 border border-slate-700 text-slate-200 px-4 py-2.5 rounded-2xl font-bold text-xs uppercase tracking-wider backdrop-blur-sm shadow-lg">
-                                    <Clock className="w-4 h-4 text-[#FFB81C]" />
-                                    <span>Next Kickoff:</span>
-                                    <span className="font-black text-[#FFB81C]">{nextGame.date} at {nextGame.time}</span>
-                                    <span className="text-slate-400 font-bold">({awayCode} @ {homeCode})</span>
-                                </div>
-                            );
-                        }
-
-                        return (
-                            <div className="relative z-10 inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 text-slate-400 px-4 py-2 rounded-2xl font-bold text-xs uppercase tracking-wider">
-                                All Scheduled Games Complete
-                            </div>
-                        );
-                    })()}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
-  <CalendarDays className="w-10 h-10 text-indigo-500 mb-3" />
-  <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Current Active Week</div>
-  <div className="text-4xl font-black italic text-slate-900">
-  Week {liveSeasonWeek}
-  </div>
-</div>
- {currentUser.playsConfidence ? <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center cursor-pointer hover:border-[#FFB81C] transition-all" onClick={() => setActiveTab('standings')}><Trophy className="w-10 h-10 text-[#FFB81C]" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Rank</div><div className="text-4xl font-black italic text-slate-900 mb-1">#{String(myRank)}</div>{pointsBehind > 0 && <div className="text-xs font-bold text-slate-500">{String(pointsBehind)} pts behind 1st</div>}{pointsBehind === 0 && myPoints > 0 && <div className="text-xs font-bold text-green-600">You are in 1st!</div>}{rankChange > 0 && <div className="text-xs font-bold text-green-500 mt-1 flex items-center justify-center gap-1"><TrendingUp className="w-3 h-3"/> Up {String(rankChange)} spots</div>}{rankChange < 0 && <div className="text-xs font-bold text-red-500 mt-1 flex items-center justify-center gap-1"><TrendingDown className="w-3 h-3"/> Down {String(Math.abs(rankChange))} spots</div>}</div> : <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center opacity-50"><Trophy className="w-10 h-10 text-slate-400 mb-3" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Fanatics Pool</div><div className="text-sm font-bold text-slate-500 uppercase">Not Registered</div></div>}
-                    {currentUser.playsKnockout ? <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center cursor-pointer hover:border-[#FFB81C] transition-all" onClick={() => setActiveTab('k-tracker')}><HeartPulse className={`w-10 h-10 mb-3 ${isKnockedOut ? 'text-red-500' : 'text-green-500'}`} /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">KnockOut Status</div><div className="text-2xl font-black italic text-slate-900 uppercase">{String(displayKnockoutStatus)}</div></div> : <div className="bg-slate-100 rounded-3xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center opacity-50"><Skull className="w-10 h-10 text-slate-400 mb-3" /><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">KnockOut Pool</div><div className="text-sm font-bold text-slate-500 uppercase">Not Registered</div></div>}
-                </div>
-                <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
-                    <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center"><div><h3 className="text-xl font-black italic uppercase text-slate-900">Action Required</h3><p className="text-sm text-slate-500 font-bold mt-1">Your {selectedWeek <= 3 ? `Preseason Week ${selectedWeek}` : `Week ${selectedWeek - 3}`} checklist</p></div>{lockdownTime && globalSettings?.weekStates?.[selectedWeek] === 'open' && <div className="hidden sm:block text-right"><div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Lockdown In</div><div className="text-sm font-bold text-slate-800 flex items-center gap-1.5 justify-end"><Clock className="w-4 h-4 text-orange-500"/><CountdownClock targetTime={lockdownTime} /></div></div>}</div>
                     <div className="p-6 space-y-4">
-                        {currentUser.playsConfidence && <div className={`p-5 rounded-2xl border-2 flex items-center justify-between transition-all ${isCompleteFanatics ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}><div className="flex items-center gap-4">{isCompleteFanatics ? <CheckCircle className="w-8 h-8 text-green-500 flex-shrink-0" /> : <AlertCircle className="w-8 h-8 text-orange-500 flex-shrink-0" />}<div><h4 className={`font-black uppercase text-lg ${isCompleteFanatics ? 'text-green-800' : 'text-orange-800'}`}>{isCompleteFanatics ? 'Fanatics Picks Complete' : 'Fanatics Picks Missing'}</h4><p className={`text-sm font-medium ${isCompleteFanatics ? 'text-green-700' : 'text-orange-700'}`}>{isCompleteFanatics ? 'You have ranked all games and set a tiebreaker.' : `You have ranked ${String(fullyPickedCount)} of ${String(totalGames)} games${hasTiebreaker ? '.' : ' and need a tiebreaker.'}`}</p></div></div>{!isCompleteFanatics && globalSettings?.weekStates?.[selectedWeek] === 'open' && <button onClick={() => setActiveTab('confidence')} className="px-5 py-2.5 bg-orange-500 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-md hover:bg-orange-600 transition-colors flex items-center gap-2">Finish <ArrowRight className="w-4 h-4"/></button>}</div>}
-                        {currentUser.playsKnockout && !isKnockedOut && <div className={`p-5 rounded-2xl border-2 flex items-center justify-between transition-all ${isCompleteKnockout ? 'bg-green-50 border-green-200' : 'bg-indigo-50 border-indigo-200'}`}><div className="flex items-center gap-4">{isCompleteKnockout ? <CheckCircle className="w-8 h-8 text-green-500 flex-shrink-0" /> : <AlertCircle className="w-8 h-8 text-indigo-500 flex-shrink-0" />}<div><h4 className={`font-black uppercase text-lg ${isCompleteKnockout ? 'text-green-800' : 'text-indigo-800'}`}>{isCompleteKnockout ? 'KnockOut Pick Locked In' : 'KnockOut Pick Needed'}</h4><p className={`text-sm font-medium ${isCompleteKnockout ? 'text-green-700' : 'text-indigo-700'}`}>{isCompleteKnockout ? `You have selected ${String(currentUser.knockoutPicks?.[selectedWeek] || 'a team')} for Week ${String(selectedWeek)}.` : 'You still need to choose your knockout team for this week.'}</p></div></div>{!isCompleteKnockout && globalSettings?.weekStates?.[selectedWeek] === 'open' && <button onClick={() => setActiveTab('knockout')} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-md hover:bg-indigo-700 transition-colors flex items-center gap-2">Pick <ArrowRight className="w-4 h-4"/></button>}</div>}
-                        {currentUser.playsKnockout && isKnockedOut && <div className={`p-5 rounded-2xl border-2 flex items-center justify-between transition-all bg-red-50 border-red-200`}><div className="flex items-center gap-4"><Skull className="w-8 h-8 text-red-500 flex-shrink-0" /><div><h4 className="font-black uppercase text-lg text-red-800">Knocked Out</h4><p className="text-sm font-medium text-red-700">You have been eliminated from the KnockOut pool for this session.</p></div></div></div>}
+                        {/* FANATICS POOL CHECKLIST CARD */}
+                        {currentUser?.playsConfidence && (
+                          <div className={`p-5 rounded-2xl border-2 flex items-center justify-between transition-all ${isCompleteFanatics ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+                            <div className="flex items-center gap-4">
+                              {isCompleteFanatics ? <CheckCircle className="w-8 h-8 text-green-500 flex-shrink-0" /> : <AlertCircle className="w-8 h-8 text-orange-500 flex-shrink-0" />}
+                              <div>
+                                <h4 className={`font-black uppercase text-lg ${isCompleteFanatics ? 'text-green-800' : 'text-orange-800'}`}>
+                                  {isCompleteFanatics ? `Week ${picksSelectedWeek} Fanatics Picks Complete` : `Week ${picksSelectedWeek} Fanatics Picks Missing`}
+                                </h4>
+                                <p className={`text-sm font-medium ${isCompleteFanatics ? 'text-green-700' : 'text-orange-700'}`}>
+                                  {isCompleteFanatics 
+                                    ? `You have ranked all games for Week ${picksSelectedWeek} and set a tiebreaker.` 
+                                    : `You have ranked ${String(fullyPickedCount)} of ${String(totalPickGamesCount)} games for Week ${picksSelectedWeek}${hasTiebreaker ? '.' : ' and need a tiebreaker.'}`}
+                                </p>
+                              </div>
+                            </div>
+                            {!isCompleteFanatics && globalSettings?.weekStates?.[picksSelectedWeek] === 'open' && (
+                              <button onClick={() => setActiveTab('confidence')} className="px-6 py-2.5 bg-orange-500 text-white hover:bg-orange-600 rounded-xl font-black uppercase text-xs tracking-widest shadow-md transition-all flex items-center gap-2 shrink-0">
+                                Pick <ArrowRight className="w-4 h-4"/>
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* KNOCKOUT POOL CHECKLIST CARD */}
+                        {currentUser?.playsKnockout && (
+                          (() => {
+                            const playerKoOut = wasAlreadyOut(currentUser, picksSelectedWeek, globalSettings);
+                            if (playerKoOut) {
+                              return (
+                                <div className="p-5 rounded-2xl border-2 flex items-center justify-between transition-all bg-red-50 border-red-200">
+                                  <div className="flex items-center gap-4">
+                                    <Skull className="w-8 h-8 text-red-500 flex-shrink-0" />
+                                    <div>
+                                      <h4 className="font-black uppercase text-lg text-red-800">Knocked Out</h4>
+                                      <p className="text-sm font-medium text-red-700">You have been eliminated from the KnockOut pool for this session.</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div className={`p-5 rounded-2xl border-2 flex items-center justify-between transition-all ${isCompleteKnockout ? 'bg-green-50 border-green-200' : 'bg-indigo-50 border-indigo-200'}`}>
+                                <div className="flex items-center gap-4">
+                                  {isCompleteKnockout ? <CheckCircle className="w-8 h-8 text-green-500 flex-shrink-0" /> : <AlertCircle className="w-8 h-8 text-indigo-500 flex-shrink-0" />}
+                                  <div>
+                                    <h4 className={`font-black uppercase text-lg ${isCompleteKnockout ? 'text-green-800' : 'text-indigo-800'}`}>
+                                      {isCompleteKnockout ? `Week ${picksSelectedWeek} KnockOut Pick Locked In` : `Week ${picksSelectedWeek} KnockOut Pick Needed`}
+                                    </h4>
+                                    <p className={`text-sm font-medium ${isCompleteKnockout ? 'text-green-700' : 'text-indigo-700'}`}>
+                                      {isCompleteKnockout 
+                                        ? `You have selected ${String(currentUser?.knockoutPicks?.[picksSelectedWeek] || 'a team')} for Week ${String(picksSelectedWeek)}.` 
+                                        : `You still need to choose your knockout team for Week ${String(picksSelectedWeek)}.`}
+                                    </p>
+                                  </div>
+                                </div>
+                                {!isCompleteKnockout && globalSettings?.weekStates?.[picksSelectedWeek] === 'open' && (
+                                  <button onClick={() => setActiveTab('knockout')} className="px-6 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl font-black uppercase text-xs tracking-widest shadow-md transition-all flex items-center gap-2 shrink-0">
+                                    Pick <ArrowRight className="w-4 h-4"/>
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()
+                        )}
                     </div>
                 </div>
-            </div>
-        )}
+        </div>
+      )}
 
 {activeTab === 'confidence' && (
   <div className="space-y-6 max-w-[1200px] mx-auto">
@@ -4601,9 +4755,9 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 
     {/* AVAILABLE RANK POINTS TRACKER BAR */}
     <AvailableRanksBar 
-      totalGames={pickGames.length} 
-      usedRanks={Object.values(currentUser?.ranks?.[picksSelectedWeek] || {}).map(v => parseInt(String(v), 10))} 
-    />
+  totalGames={pickGames.length > 0 ? pickGames.length : totalGames} 
+  usedRanks={Object.values(currentUser?.ranks?.[picksSelectedWeek] || {}).map(v => parseInt(String(v), 10))} 
+/>
     <div className={`flex flex-col gap-3 ${!currentUser.playsConfidence ? 'opacity-25 grayscale pointer-events-none' : ''}`}>
       {pickGames.map((game: any) => (
         <GameCard 
