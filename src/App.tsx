@@ -2752,16 +2752,18 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
 
   useEffect(() => { 
     if (globalSettings && allUsers.length > 0 && !dbReady) { 
-      const defaultWeek = 1;
-      setLiveSeasonWeek(defaultWeek);
-      
-      // Auto-advance pick tab if current week is locked/closed
-      const currentWeekState = globalSettings?.weekStates?.[defaultWeek] || 'open';
-      const isLocked = currentWeekState === 'locked' || currentWeekState === 'closed';
-      const nextPickWeek = isLocked ? Math.min(defaultWeek + 1, globalSettings?.maxActiveWeeks || 18) : defaultWeek;
-  
-      setPicksSelectedWeek(nextPickWeek);
-      setResultsSelectedWeek(defaultWeek);
+      // 🔒 Find the highest closed week to initialize live season week dynamically
+      const weekStates = globalSettings?.weekStates || {};
+      const closedWeeks = Object.keys(weekStates)
+        .map(Number)
+        .filter(w => weekStates[w] === 'closed')
+        .sort((a, b) => b - a);
+
+      const activeWk = closedWeeks.length > 0 ? Math.min(closedWeeks[0] + 1, globalSettings?.maxActiveWeeks || 18) : 1;
+
+      setLiveSeasonWeek(activeWk);
+      setPicksSelectedWeek(activeWk);
+      setResultsSelectedWeek(activeWk);
       setDbReady(true); 
     } 
   }, [globalSettings, allUsers, dbReady]);
@@ -4255,7 +4257,24 @@ const handleCloseWeek = async () => {
     setIsSaving(false);
   }
 };
-  const handleOpenWeek = () => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { [`weekStates.${selectedWeek}`]: 'open' }));
+const handleOpenWeek = async () => {
+  setIsSaving(true);
+  try {
+    const targetWk = selectedWeek || liveSeasonWeek || 1;
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+      [`weekStates.${targetWk}`]: 'open',
+      [`koWeekStates.${targetWk}`]: 'open'
+    });
+    setHasSaved(true);
+    setTimeout(() => setHasSaved(false), 2000);
+    alert(`Week ${targetWk} re-opened! Players can now submit/edit picks.`);
+  } catch (e) {
+    console.error("Error re-opening week:", e);
+    alert("Failed to re-open week.");
+  } finally {
+    setIsSaving(false);
+  }
+};
   const updateFpPayouts = (index: number, val: number) => { const newPayouts = [...globalSettings.fpPayouts]; newPayouts[index] = val; trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { fpPayouts: newPayouts })); };
   const updateSeasonBonuses = (key: string, index: number, val: number) => { const newBonuses = { ...globalSettings.seasonBonuses }; newBonuses[key] = [...newBonuses[key]]; newBonuses[key][index] = val; trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { seasonBonuses: newBonuses })); };
 
@@ -4989,8 +5008,14 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             {adminTab === 'status' && (
               <div className="space-y-10 bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b-2 border-slate-100 pb-6">
-                  <WeekSelector week={selectedWeek} setWeek={setSelectedWeek} maxActiveWeeks={maxActiveWeeks} />
-                  
+                <WeekSelector 
+  week={selectedWeek} 
+  setWeek={(wk: number) => {
+    setSelectedWeek(wk);
+    setPicksSelectedWeek(wk);
+  }} 
+  maxActiveWeeks={maxActiveWeeks} 
+/>
                   <div className="flex flex-wrap gap-2">
   {/* Copy ALL Fanatics Roster */}
   <button 
@@ -5292,16 +5317,24 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             {adminTab === 'games' && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  <AdminLifecycleCard 
-                    week={selectedWeek} 
-                    status={currentWeekState} 
-                    onLock={handleLockWeek} 
-                    onClose={handleCloseWeek} 
-                    onOpen={handleOpenWeek}
-                    onPreviewClose={() => setIsPreviewOpen(true)}
-                  />
-                  <AdminWeekCard week={selectedWeek} onChange={(e: any) => setSelectedWeek(Number(e.target.value))} maxActiveWeeks={maxActiveWeeks} />
-                </div>
+  <AdminLifecycleCard 
+    week={selectedWeek} 
+    status={globalSettings?.weekStates?.[selectedWeek] || 'open'} 
+    onLock={handleLockWeek} 
+    onClose={handleCloseWeek} 
+    onOpen={handleOpenWeek}
+    onPreviewClose={() => setIsPreviewOpen(true)}
+  />
+  <AdminWeekCard 
+    week={selectedWeek} 
+    onChange={(e: any) => {
+      const wk = Number(e.target.value);
+      setSelectedWeek(wk);
+      setPicksSelectedWeek(wk);
+    }} 
+    maxActiveWeeks={maxActiveWeeks} 
+  />
+</div>
 
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
                   <div>
