@@ -2625,18 +2625,19 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
 
     await batch.commit();
 
-    // Automatically advance to the next week
+    // 🔒 SAFE WEEK ADVANCE: Advance active week views
     const nextWeek = Math.min(week + 1, maxActiveWeeks);
-    const nextWeekGames = globalSettings?.games?.[nextWeek] || [];
 
-    if (nextWeekGames && nextWeekGames.length > 0) {
-      setSelectedWeek(nextWeek);
-      setLiveSeasonWeek(nextWeek);
-    } else {
-      setSelectedWeek(week);
-    }
+    // Ensure next week's state remains open in settings if uninitialized
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+      [`weekStates.${nextWeek}`]: globalSettings?.weekStates?.[nextWeek] || 'open'
+    });
 
-    alert(`Week ${week} finalized! All player scores and payouts matched the Financials page.`);
+    setLiveSeasonWeek(nextWeek);
+    setPicksSelectedWeek(nextWeek);
+    setResultsSelectedWeek(week); // Keep settled view anchored to closed week
+
+    alert(`Week ${week} finalized! App view has advanced to Week ${nextWeek}.`);
   } catch (e) {
     console.error("Error finalizing week:", e);
     alert("Failed to finalize week. Check console logs.");
@@ -4837,38 +4838,44 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 {activeTab === 'knockout' && (
   <div className="space-y-6 max-w-[1200px] mx-auto">
     {!currentUser?.playsKnockout && <ParticipationAlert game="KnockOut" />}
-    
+    {isPickWeekLocked && <LockBanner week={picksSelectedWeek} />}
+
     {/* HEADER BANNER */}
     <div className="bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden border-b-8 border-[#FFB81C] shadow-2xl">
       <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-2">
             <Skull className="w-10 h-10 text-[#FFB81C]" />
-            <h2 className="text-4xl font-black italic uppercase tracking-tighter">
-            KnockOut <span className="text-[#FFB81C]">Week {liveSeasonWeek}</span>
-</h2>
+            <h2 className="text-3xl sm:text-4xl font-black italic uppercase tracking-tighter">
+              KnockOut <span className="text-[#FFB81C]">Week {picksSelectedWeek}</span>
+            </h2>
           </div>
-          <p className="text-slate-400 font-bold max-w-lg">One winner per week. Stay alive. No team reused.</p>
+          <p className="text-slate-400 font-bold max-w-lg text-xs sm:text-sm">
+            One selection per week. Stay alive. No team can be reused.
+          </p>
         </div>
       </div>
     </div>
 
     {/* GAME CARDS LOOP */}
-    {wasAlreadyOut(currentUser, liveSeasonWeek, globalSettings) ? (
+    {wasAlreadyOut(currentUser, picksSelectedWeek, globalSettings, globalSettings?.games) ? (
       <div className={`border-4 rounded-3xl p-12 text-center ${userPaymentStatus === 'disqualified' ? 'bg-red-600 border-red-800' : 'bg-red-50 border-red-500'}`}>
         <Skull className={`w-20 h-24 mx-auto mb-4 ${userPaymentStatus === 'disqualified' ? 'text-red-900' : 'text-red-500'}`} />
         <h3 className={`text-4xl font-black italic uppercase tracking-tighter ${userPaymentStatus === 'disqualified' ? 'text-white' : 'text-red-900'}`}>
           {userPaymentStatus === 'disqualified' ? 'DISQUALIFIED (UNPAID)' : 'Knocked Out'}
         </h3>
+        <p className="text-slate-600 font-bold mt-2">
+          You have been eliminated from the KnockOut pool for this session.
+        </p>
       </div>
     ) : (
       <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 ${!currentUser?.playsKnockout ? 'opacity-25 grayscale pointer-events-none' : ''}`}>
-        {(games || []).map((game: any) => {
+        {(pickGames.length > 0 ? pickGames : games).map((game: any) => {
           if (!game) return null;
 
           const picksMap = currentUser?.knockoutPicks || {};
           const priorTeamsUsed = Object.keys(picksMap)
-            .filter((wkKey) => parseInt(String(wkKey || 0), 10) < Number(liveSeasonWeek))
+            .filter((wkKey) => parseInt(String(wkKey || 0), 10) < Number(picksSelectedWeek))
             .map((wkKey) => picksMap[wkKey])
             .filter(Boolean);
 
@@ -4876,10 +4883,10 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             <KnockoutGameCard 
               key={game.id} 
               game={game} 
-              selectedTeam={picksMap[liveSeasonWeek] || ''} 
+              selectedTeam={picksMap[picksSelectedWeek] || ''} 
               usedTeams={priorTeamsUsed} 
-              onPick={(team: string) => updateKnockoutPick(currentUser?.id, liveSeasonWeek, team)} 
-              isLocked={isWeekLocked} 
+              onPick={(team: string) => updateKnockoutPick(currentUser?.id, picksSelectedWeek, team)} 
+              isLocked={isPickWeekLocked} 
             />
           );
         })}
