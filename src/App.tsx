@@ -2206,7 +2206,7 @@ function WeeklyRecapModal({ isOpen, onClose, week = 1, games, allUsers, globalSe
 
     const leaderScore = processedUsers[0]?.score || 0;
 
-// ✅ NEW DYNAMIC LINE:
+// ✅ NEW UPDATED LINES:
 const activeCount = allUsers.filter((u: any) => u.playsConfidence).length;
 const matrix = calculateFanaticsPayouts(activeCount);
 const payouts = matrix.weeklyGross;
@@ -2214,7 +2214,9 @@ const payouts = matrix.weeklyGross;
     calculateTiedPayouts(processedUsers, payouts);
 
     processedUsers.forEach((u) => {
-      u.moneyWon = u.grossPayout || 0;
+      // Subtract $12 weekly dues to show Adjusted (Net) Winnings
+      const gross = u.grossPayout || 0;
+      u.moneyWon = gross > 0 ? gross - 12 : -12;
       u.behind = leaderScore - u.score;
     });
 
@@ -2394,8 +2396,8 @@ const payouts = matrix.weeklyGross;
                       <th style={{ padding: '8px', textAlign: 'center' }}>Behind</th>
                       <th style={{ padding: '8px', textAlign: 'center' }}>Final Pick</th>
                       <th style={{ padding: '8px', textAlign: 'center' }}>TB</th>
-                      <th style={{ padding: '8px', textAlign: 'right' }}>Payout</th>
-                    </tr>
+                      <th style={{ padding: '8px', textAlign: 'right' }}>Net Winnings</th>
+                       </tr>
                   </thead>
                   <tbody>
                     {recapData.great8.map((u: any) => (
@@ -2410,9 +2412,9 @@ const payouts = matrix.weeklyGross;
                         <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '11px' }}>
                           {u.userTB} <span style={{ color: '#94a3b8' }}>({u.tbDiff > 0 ? `-${u.tbDiff}` : 'Exact!'})</span>
                         </td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '900', fontStyle: 'italic', color: '#16a34a' }}>
-                          +${u.moneyWon}
-                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '900', fontStyle: 'italic', color: u.moneyWon >= 0 ? '#16a34a' : '#dc2626' }}>
+  {u.moneyWon >= 0 ? `+$${u.moneyWon}` : `-$${Math.abs(u.moneyWon)}`}
+</td>
                       </tr>
                     ))}
                   </tbody>
