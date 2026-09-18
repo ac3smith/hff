@@ -176,30 +176,25 @@ function getDisplayWeekLabel(weekNum: number): string {
 // --- HELPERS ---
 function formatFullName(user: any) { return !user ? "" : `${user.firstName}${user.nickname ? ` "${user.nickname}"` : ""} ${user.lastName}`; }
 
-// Safe helper to check if a user's knockout pick lost a final game in a given week
 function isUserEliminatedThisWeek(user: any, week: number, gamesList: any[]) {
   if (!user || !user.playsKnockout) return false;
   
-  // 1. Check if user is explicitly listed in global eliminated array
   const userPick = user.knockoutPicks?.[week];
-
-  // If no games list provided, fall back
   if (!gamesList || !Array.isArray(gamesList) || gamesList.length === 0) return false;
 
-  // 2. If week has games but user made NO pick, and at least one game is final/closed, they missed pick
+  // If week has started/final games but user made NO pick = Eliminated
   if (!userPick) {
     const hasStartedOrFinal = gamesList.some((g: any) => 
       ['final', 'in_progress', 'closed'].includes(String(g?.status || '').toLowerCase())
     );
-    if (hasStartedOrFinal) return true; // Missed pick = Eliminated
-    return false;
+    return hasStartedOrFinal;
   }
 
   const pickCode = typeof getCanonicalTeamCode === 'function' 
     ? getCanonicalTeamCode(userPick) 
     : String(userPick).trim().toUpperCase();
 
-  // 3. Find the game matching the user's picked team
+  // Find the game matching the user's picked team
   const pickedGame = gamesList.find((g: any) => {
     if (!g || !g.away || !g.home) return false;
     const awayCode = typeof getCanonicalTeamCode === 'function' ? getCanonicalTeamCode(g.away) : String(g.away).trim().toUpperCase();
@@ -207,28 +202,36 @@ function isUserEliminatedThisWeek(user: any, week: number, gamesList: any[]) {
     return awayCode === pickCode || homeCode === pickCode;
   });
 
-  if (pickedGame && String(pickedGame.status || '').toLowerCase() === 'final') {
-    // Determine winner canonical code
-    let winnerCode = '';
-    if (pickedGame.winner) {
-      winnerCode = typeof getCanonicalTeamCode === 'function' ? getCanonicalTeamCode(pickedGame.winner) : String(pickedGame.winner).trim().toUpperCase();
-    } else {
-      // Fallback: derive winner from scores if winner field isn't explicitly set
-      const homeScore = parseInt(String(pickedGame.homeScore || 0), 10);
-      const awayScore = parseInt(String(pickedGame.awayScore || 0), 10);
-      if (homeScore > awayScore) {
-        winnerCode = typeof getCanonicalTeamCode === 'function' ? getCanonicalTeamCode(pickedGame.home) : String(pickedGame.home).trim().toUpperCase();
-      } else if (awayScore > homeScore) {
-        winnerCode = typeof getCanonicalTeamCode === 'function' ? getCanonicalTeamCode(pickedGame.away) : String(pickedGame.away).trim().toUpperCase();
-      }
-    }
+  // ONLY evaluate loss if the game is officially FINAL
+  // 1. If game doesn't exist or hasn't finished, player is NOT eliminated
+  if (!pickedGame) return false;
+  const gameStatus = String(pickedGame.status || '').toLowerCase();
+  if (gameStatus === 'upcoming' || gameStatus === 'in_progress' || gameStatus !== 'final') {
+    return false;
+  }
 
-    // If game ended in a tie or picked team lost, player is eliminated!
-    if (!winnerCode || pickCode !== winnerCode) {
-      return true;
+  // 2. ONLY evaluate loss if the game is officially FINAL
+  let winnerCode = '';
+  if (pickedGame.winner) {
+    winnerCode = typeof getCanonicalTeamCode === 'function' ? getCanonicalTeamCode(pickedGame.winner) : String(pickedGame.winner).trim().toUpperCase();
+  } else {
+    const homeScore = parseInt(String(pickedGame.homeScore || 0), 10);
+    const awayScore = parseInt(String(pickedGame.awayScore || 0), 10);
+    if (homeScore > awayScore) {
+      winnerCode = typeof getCanonicalTeamCode === 'function' ? getCanonicalTeamCode(pickedGame.home) : String(pickedGame.home).trim().toUpperCase();
+    } else if (awayScore > homeScore) {
+      winnerCode = typeof getCanonicalTeamCode === 'function' ? getCanonicalTeamCode(pickedGame.away) : String(pickedGame.away).trim().toUpperCase();
     }
   }
 
+  // Eliminate only if the picked game ended in a tie OR the picked team lost
+  if (!winnerCode || pickCode !== winnerCode) {
+    return true;
+  }
+
+  return false;
+
+  // If game is upcoming or in progress, player remains ALIVE
   return false;
 }
 
@@ -312,22 +315,69 @@ function getLockdownTime(gamesList: any[]) {
 
 const fieldBackgroundStyle = { backgroundColor: '#285233', backgroundImage: `repeating-linear-gradient(to bottom, transparent, transparent 80px, rgba(0, 0, 0, 0.1) 80px, rgba(0, 0, 0, 0.1) 160px), repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.4) 0px, rgba(255, 255, 255, 0.4) 3px, transparent 3px, transparent 160px)`, backgroundAttachment: 'fixed' as const };
 
-// --- REUSABLE COMPONENTS ---
-function CountdownClock({ targetTime }: { targetTime: number | null }) {
-    const [timeLeft, setTimeLeft] = useState('');
-    useEffect(() => {
-        if (!targetTime) return;
-        const timer = setInterval(() => {
-            const diff = targetTime - Date.now();
-            if (diff <= 0) { setTimeLeft('LOCKED'); clearInterval(timer); } 
-            else {
-                const d = Math.floor(diff / 86400000), h = Math.floor((diff % 86400000) / 3600000), m = Math.floor((diff % 3600000) / 60000), s = Math.floor((diff % 60000) / 1000);
-                setTimeLeft(`${d > 0 ? d+'d ' : ''}${h}h ${m}m ${s}s`);
-            }
-        }, 1000);
-        return () => clearInterval(timer);
-    }, [targetTime]);
-    return <span>{timeLeft || 'Calculating...'}</span>;
+function CountdownClock({ targetTime }: { targetTime: any }) {
+  const [timeLeft, setTimeLeft] = useState('');
+  const [diffMs, setDiffMs] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!targetTime) {
+      setDiffMs(null);
+      setTimeLeft('');
+      return;
+    }
+
+    // Safely parse timestamp whether passed as number, string date, or Date object
+    let numericTime: number;
+    if (typeof targetTime === 'number') {
+      numericTime = targetTime;
+    } else {
+      numericTime = new Date(targetTime).getTime();
+    }
+
+    if (isNaN(numericTime)) {
+      setDiffMs(null);
+      setTimeLeft('');
+      return;
+    }
+
+    const timer = setInterval(() => {
+      const diff = numericTime - Date.now();
+      setDiffMs(diff);
+
+      if (diff <= 0) { 
+        setTimeLeft('LOCKED'); 
+        clearInterval(timer); 
+      } else {
+        const d = Math.floor(diff / 86400000);
+        const h = Math.floor((diff % 86400000) / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+        setTimeLeft(`${d > 0 ? d + 'd ' : ''}${h}h ${m}m ${s}s`);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [targetTime]);
+
+  if (!targetTime || diffMs === null) {
+    return <span className="text-slate-400 font-mono text-xs">--:--:--</span>;
+  }
+
+  // Dynamic color coding based on remaining time
+  let colorClass = 'bg-emerald-950/80 text-emerald-400 border-emerald-500/40';
+  if (diffMs <= 0) {
+    colorClass = 'bg-red-950/90 text-red-500 border-red-800';
+  } else if (diffMs <= 12 * 3600 * 1000) { // <= 12 Hours (Pulsing Red)
+    colorClass = 'bg-red-950/90 text-red-400 border-red-500/50 animate-pulse';
+  } else if (diffMs <= 24 * 3600 * 1000) { // <= 24 Hours (Yellow / Amber)
+    colorClass = 'bg-amber-950/90 text-amber-400 border-amber-500/50';
+  }
+
+  return (
+    <span className={`px-3.5 py-1.5 rounded-xl font-mono text-base sm:text-lg font-black border shadow-sm ${colorClass}`}>
+      {timeLeft || 'LOCKED'}
+    </span>
+  );
 }
 
 function LoginView({ users, onLogin, imgError, handleImgError, onChangePassword }: any) {
@@ -1365,14 +1415,25 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
 
                     const displayPick = canonicalPick || 'NO PICK';
 
-                    let cellBg = 'bg-white text-slate-800';
+                    let cellBg = 'bg-slate-100 text-slate-700 font-bold';
+
+                    // Check if the picked game is actually final
+                    const targetGame = weekGamesList.find((g: any) => {
+                      const awayCode = getCanonicalTeamCode(g.away);
+                      const homeCode = getCanonicalTeamCode(g.home);
+                      return awayCode === canonicalPick || homeCode === canonicalPick;
+                    });
+                    const isGameFinal = String(targetGame?.status || '').toLowerCase() === 'final';
 
                     if (wasOutBefore) {
                       cellBg = 'bg-slate-100/60 text-slate-300';
                     } else if (isEliminatedThisCell) {
                       cellBg = 'bg-rose-600 text-white font-black';
-                    } else if (rawPick && !isEliminatedThisCell && isPastOrLockedWeek) {
+                    } else if (rawPick && isGameFinal && !isEliminatedThisCell) {
                       cellBg = 'bg-emerald-600 text-white font-black shadow-sm';
+                    } else if (rawPick) {
+                      // Upcoming / In-Progress Pick
+                      cellBg = 'bg-amber-500/10 text-amber-900 border border-amber-300 font-black';
                     }
 
                     return (
@@ -2709,7 +2770,10 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
     setSettlementPreview(null);
   };
 
-  
+  const sessionUser = allUsers.find(u => u.id === currentUserId);
+  const currentUser = overrideUserId ? (allUsers.find(u => u.id === overrideUserId) || sessionUser) : sessionUser;
+  const isAdmin = sessionUser?.role === 'admin';
+
 
   useEffect(() => {
     const initAuth = async () => { try { if (typeof (window as any).__initial_auth_token !== 'undefined' && (window as any).__initial_auth_token) { await signInWithCustomToken(auth, (window as any).__initial_auth_token); } else { await signInAnonymously(auth); } } catch (err) { console.error(err); } };
@@ -2770,6 +2834,35 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
     } 
   }, [globalSettings, allUsers, dbReady]);
 
+  // 🔒 Auto-lock current week 1 hour before first game kickoff if not locked yet
+useEffect(() => {
+  if (!globalSettings?.games?.[picksSelectedWeek] || isAdmin) return;
+
+  const weekGamesList = globalSettings.games[picksSelectedWeek] || [];
+  if (weekGamesList.length === 0) return;
+
+  const lockTime = getLockdownTime(weekGamesList);
+  if (!lockTime) return;
+
+  const checkAutoLock = async () => {
+    const currentState = globalSettings?.weekStates?.[picksSelectedWeek] || 'open';
+    if (Date.now() >= lockTime && currentState === 'open') {
+      try {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+          [`weekStates.${picksSelectedWeek}`]: 'locked',
+          [`koWeekStates.${picksSelectedWeek}`]: 'locked'
+        });
+      } catch (err) {
+        console.error("Auto-lock failed:", err);
+      }
+    }
+  };
+
+  checkAutoLock();
+  const interval = setInterval(checkAutoLock, 30000);
+  return () => clearInterval(interval);
+}, [picksSelectedWeek, globalSettings, isAdmin]);
+
   useEffect(() => {
     if (!globalSettings?.weekStates) return;
     const currentWeekState = globalSettings.weekStates[liveSeasonWeek] || 'open';
@@ -2784,9 +2877,6 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
 
   useEffect(() => { setAdminForceReveal(false); }, [selectedWeek]);
 
-  const sessionUser = allUsers.find(u => u.id === currentUserId);
-  const currentUser = overrideUserId ? (allUsers.find(u => u.id === overrideUserId) || sessionUser) : sessionUser;
-  const isAdmin = sessionUser?.role === 'admin';
 
 // ⏱️ Auto-sync ESPN live scores every 10 seconds on active live tabs
 useEffect(() => {
@@ -2845,7 +2935,10 @@ const resultsGames = useMemo(() => {
 
 const pickWeekState = globalSettings?.weekStates?.[picksSelectedWeek] || 'open';
 const pickLockdownTime = getLockdownTime(pickGames);
-const isPickWeekLocked = pickWeekState === 'locked' || pickWeekState === 'closed' || (pickWeekState === 'open' && pickLockdownTime && Date.now() >= pickLockdownTime);
+const isTimeUp = pickLockdownTime ? Date.now() >= pickLockdownTime : false;
+
+// Regular users lock when week is locked/closed OR time is up. Admins NEVER lock out.
+const isPickWeekLocked = !isAdmin && (pickWeekState === 'locked' || pickWeekState === 'closed' || isTimeUp);
   
 const liveWeekState = globalSettings?.weekStates?.[liveSeasonWeek] || 'open';
 const currentWeekState = liveWeekState; // 👈 PASTE THIS SAFETY ALIAS LINE
@@ -4097,21 +4190,39 @@ const updateGameResult = (gameId: number, resultType: string, teamId: string) =>
 
     // 1. Process Confidence deadbeats
     allUsers.forEach((u) => {
-      if (!u.playsConfidence) return;
-      const fullyPicked =
-        games.filter((g: any) => (u.picks?.[selectedWeek] || {})[g.id] && (u.ranks?.[selectedWeek] || {})[g.id]).length === totalGames &&
-        String(u.tiebreakers?.[selectedWeek] || '').trim() !== '';
-
-      if (!fullyPicked) {
-        const dp: any = {}, dr: any = {};
-        games.forEach((g: any) => {
-          dp[g.id] = g.home;
-          dr[g.id] = 5;
-        });
+      if (u.playsKnockout) {
+        const pick = u.knockoutPicks?.[selectedWeek];
+        let status = 'Undecided';
+    
+        if (!pick) {
+          status = 'No Pick';
+        } else {
+          const game = games.find((g: any) => {
+            const awayCode = getCanonicalTeamCode(g.away);
+            const homeCode = getCanonicalTeamCode(g.home);
+            const pickCode = getCanonicalTeamCode(pick);
+            return awayCode === pickCode || homeCode === pickCode;
+          });
+    
+          const isGameFinal = String(game?.status || '').toLowerCase() === 'final';
+    
+          if (game && isGameFinal) {
+            const winnerCode = getCanonicalTeamCode(game.winner);
+            const pickCode = getCanonicalTeamCode(pick);
+    
+            if (winnerCode === 'TIE' || winnerCode !== pickCode) {
+              status = 'Loser';
+            } else {
+              status = 'Winner';
+            }
+          } else {
+            // Game has not finished yet = Undecided (Player stays Alive)
+            status = 'Undecided';
+          }
+        }
+    
         batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), {
-          [`picks.${selectedWeek}`]: dp,
-          [`ranks.${selectedWeek}`]: dr,
-          [`tiebreakers.${selectedWeek}`]: '0'
+          [`knockoutStatuses.${selectedWeek}`]: status
         });
       }
     });
@@ -4230,15 +4341,35 @@ const handleCloseWeek = async () => {
     allUsers.forEach((u) => {
       if (u.playsKnockout) {
         const pick = u.knockoutPicks?.[selectedWeek];
-        let status = 'No Pick';
-        if (pick) {
-          const game = games.find((g: any) => g.away === pick || g.home === pick);
-          if (game && game.status === 'final') {
-            status = game.winner === 'TIE' ? 'Loser' : (game.winner === pick ? 'Winner' : 'Loser');
+        let status = 'Undecided';
+    
+        if (!pick) {
+          status = 'No Pick';
+        } else {
+          const game = games.find((g: any) => {
+            const awayCode = getCanonicalTeamCode(g.away);
+            const homeCode = getCanonicalTeamCode(g.home);
+            const pickCode = getCanonicalTeamCode(pick);
+            return awayCode === pickCode || homeCode === pickCode;
+          });
+    
+          const isGameFinal = String(game?.status || '').toLowerCase() === 'final';
+    
+          if (game && isGameFinal) {
+            const winnerCode = getCanonicalTeamCode(game.winner);
+            const pickCode = getCanonicalTeamCode(pick);
+    
+            if (winnerCode === 'TIE' || winnerCode !== pickCode) {
+              status = 'Loser';
+            } else {
+              status = 'Winner';
+            }
           } else {
+            // Game has not finished yet = Undecided (Player stays Alive)
             status = 'Undecided';
           }
         }
+    
         batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), {
           [`knockoutStatuses.${selectedWeek}`]: status
         });
@@ -4522,6 +4653,8 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
         <div className="space-y-6 max-w-5xl mx-auto">
           {/* WELCOME BANNER */}
           <div className="bg-slate-900 rounded-3xl p-8 sm:p-12 text-white shadow-2xl border-b-8 border-[#FFB81C] relative overflow-hidden">
+            {/* PROMINENT HOME PAGE LOCK WARNING */}
+
             <div className="absolute top-0 right-0 -mt-10 -mr-10 opacity-20 hidden md:block">
               {!imgErrors?.logo ? <img src="/hff-logo.png" alt="" className="w-96 h-96 object-contain" onError={() => handleImgError('logo')} /> : <Trophy className="w-96 h-96" />}
             </div>
@@ -4654,30 +4787,32 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             )}
           </div>
 
-          {/* ACTION REQUIRED CHECKLIST */}
-          <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
-                    <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-xl font-black italic uppercase text-slate-900">Action Required</h3>
-                          <span className="bg-[#FFB81C] text-slate-900 text-xs font-black uppercase px-2.5 py-1 rounded-full tracking-wider shadow-sm">
-                            Week {picksSelectedWeek}
-                          </span>
-                        </div>
-                        <p className="text-sm text-slate-500 font-bold mt-1">
-                          Your active checklist for Week {picksSelectedWeek}
-                        </p>
-                      </div>
-                      {pickLockdownTime && globalSettings?.weekStates?.[picksSelectedWeek] === 'open' && (
-                        <div className="hidden sm:block text-right">
-                          <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Lockdown In</div>
-                          <div className="text-sm font-bold text-slate-800 flex items-center gap-1.5 justify-end">
-                            <Clock className="w-4 h-4 text-orange-500"/>
-                            <CountdownClock targetTime={pickLockdownTime} />
-                          </div>
-                        </div>
-                      )}
-                    </div>
+{/* ACTION REQUIRED CHECKLIST */}
+<div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+<div className="p-5 sm:p-6 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+  {/* LEFT SIDE: TITLE & WEEK BADGE (LOCKED TOGETHER) */}
+  <div className="flex items-center gap-2.5 flex-nowrap shrink-0">
+    <h3 className="text-xl sm:text-2xl font-black italic uppercase text-slate-900 tracking-tight leading-none whitespace-nowrap">
+      Action Required
+    </h3>
+    <span className="bg-[#FFB81C] text-slate-900 text-xs font-black uppercase px-3 py-1 rounded-full tracking-wider shadow-sm whitespace-nowrap">
+      Week {picksSelectedWeek}
+    </span>
+  </div>
+
+  {/* RIGHT SIDE: UNIFIED LOCKOUT & COUNTDOWN CONTAINER */}
+  {pickLockdownTime && globalSettings?.weekStates?.[picksSelectedWeek] === 'open' && (
+    <div className="flex items-center bg-slate-900 px-4 py-2 rounded-2xl border border-slate-800 shadow-xl shrink-0 gap-2.5">
+      <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFB81C] shrink-0 animate-pulse" />
+      
+      <span className="text-xs sm:text-sm font-black uppercase text-rose-500 tracking-wider flex items-center gap-1 whitespace-nowrap">
+        <span>⚠️</span> Picks lock 1 hr before game!
+      </span>
+
+      <CountdownClock targetTime={pickLockdownTime} />
+    </div>
+  )}
+</div>
                     
                     <div className="p-6 space-y-4">
                         {/* FANATICS POOL CHECKLIST CARD */}
@@ -4803,27 +4938,24 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 
   </div>
 
-  {/* REASSURANCE BANNER & COUNTDOWN TIMER */}
-  <div className={`mt-4 pt-3.5 border-t flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs font-bold ${
-    isCompleteFanatics ? 'border-emerald-100 text-emerald-900' : 'border-slate-100 text-slate-500'
-  }`}>
-    <div className="flex items-center gap-2">
-      <span className="text-base">{isCompleteFanatics ? '✅' : '🔒'}</span>
-      <span>
-        {isCompleteFanatics 
-          ? "Your picks are saved! You can make changes anytime until the lockdown timer runs out." 
-          : "Make your selections and assign confidence points to all games below."}
-      </span>
+  {/* REASSURANCE BANNER & ENHANCED COUNTDOWN TIMER */}
+  <div className="mt-4 pt-4 border-t border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
+    <div className="flex items-center gap-3">
+      <div className="p-2.5 bg-amber-500/10 rounded-2xl text-amber-600 border border-amber-500/20 shrink-0">
+        <Clock className="w-6 h-6" />
+      </div>
+      <div>
+        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Picks Deadline</span>
+        <p className="text-xs sm:text-sm font-black text-rose-600 uppercase tracking-wide flex items-center gap-1">
+          ⚠️ Picks lock 1 hour before the first game!
+        </p>
+      </div>
     </div>
 
-    {/* COUNTDOWN TIMER */}
-    {pickLockdownTime && !isPickWeekLocked && (
-      <div className="flex items-center gap-1.5 bg-slate-900 text-[#FFB81C] px-3.5 py-1.5 rounded-xl font-mono text-xs font-black shadow-sm shrink-0">
-        <Clock className="w-3.5 h-3.5 text-[#FFB81C]" />
-        <span>Lockdown In:</span>
-        <CountdownClock targetTime={pickLockdownTime} />
-      </div>
-    )}
+    <div className="flex items-center gap-2 shrink-0">
+      <span className="text-xs font-black text-slate-500 uppercase tracking-wider hidden sm:inline">Lockdown In:</span>
+      <CountdownClock targetTime={pickLockdownTime} />
+    </div>
   </div>
 </div>
 
