@@ -4806,7 +4806,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
       <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFB81C] shrink-0 animate-pulse" />
       
       <span className="text-xs sm:text-sm font-black uppercase text-rose-500 tracking-wider flex items-center gap-1 whitespace-nowrap">
-        <span>⚠️</span> Picks lock 1 hr before game!
+        <span>⚠️</span> Picks lock 1 hr before 1st game!
       </span>
 
       <CountdownClock targetTime={pickLockdownTime} />
