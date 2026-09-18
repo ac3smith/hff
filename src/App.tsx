@@ -274,43 +274,90 @@ function wasAlreadyOut(user: any, checkUpToWeek: number, globalSettings: any, al
 }
 
 function getLockdownTime(gamesList: any[]) {
-  if (!gamesList || gamesList.length === 0) return null;
-  
-  const now = new Date().getTime();
-  let earliest = Infinity;
+  if (!gamesList || !Array.isArray(gamesList) || gamesList.length === 0) return null;
 
-  gamesList.forEach(g => {
+  const MONTH_MAP: Record<string, number> = {
+    JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+    JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11
+  };
+
+  let earliestKickoff = Infinity;
+
+  gamesList.forEach((g: any) => {
     if (!g) return;
 
-    // 1. Try apiDate first (e.g., "2026-08-20"), then fallback to g.date
-    let dateStr = g.apiDate || g.date || '';
-    if (dateStr.includes(',')) {
-      dateStr = dateStr.split(', ')[1]; // Extract "Aug 20" from "Thu, Aug 20"
+    let kickoffMs = NaN;
+
+    // 1. Direct ISO String parsing if available (e.g., "2026-09-24T20:20:00Z")
+    if (g.apiDate && String(g.apiDate).includes('T')) {
+      kickoffMs = new Date(g.apiDate).getTime();
     }
 
-    let timeStr = (g.time || '20:15').trim();
+    // 2. Parse ISO Date string "2026-09-24"
+    if (isNaN(kickoffMs) && g.apiDate) {
+      const dateParts = String(g.apiDate).split('T')[0].split('-');
+      if (dateParts.length === 3) {
+        const year = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const day = parseInt(dateParts[2], 10);
 
-    // 2. Convert 12-hour AM/PM to 24-hour time string
-    if (timeStr.toLowerCase().includes('pm') || timeStr.toLowerCase().includes('am')) {
-      const isPM = timeStr.toLowerCase().includes('pm');
-      let [hours, minutes] = timeStr.replace(/(am|pm)/i, '').trim().split(':');
-      let h = parseInt(hours, 10);
-      if (isPM && h < 12) h += 12;
-      if (!isPM && h === 12) h = 0;
-      timeStr = `${String(h).padStart(2, '0')}:${minutes || '00'}`;
+        // Parse time like "8:20 PM"
+        let hours = 13; // default 1:00 PM
+        let minutes = 0;
+        if (g.time) {
+          const match = String(g.time).match(/(\d+):(\d+)\s*(AM|PM)/i);
+          if (match) {
+            hours = parseInt(match[1], 10);
+            minutes = parseInt(match[2], 10);
+            const ampm = match[3].toUpperCase();
+            if (ampm === 'PM' && hours < 12) hours += 12;
+            if (ampm === 'AM' && hours === 12) hours = 0;
+          }
+        }
+        kickoffMs = new Date(year, month, day, hours, minutes, 0).getTime();
+      }
     }
 
-    // 3. Parse date safely
-    const gameMs = new Date(`${dateStr} ${new Date().getFullYear()} ${timeStr}`).getTime() 
-      || new Date(`${dateStr}T${timeStr}:00`).getTime();
+    // 3. Parse formatted text date "Thu, Sep 24" or "Sep 24"
+    if (isNaN(kickoffMs) && g.date) {
+      let cleanDate = String(g.date);
+      if (cleanDate.includes(',')) cleanDate = cleanDate.split(',')[1].trim();
 
-    // 4. Only consider future kickoffs
-    if (!isNaN(gameMs) && gameMs > now) {
-      earliest = Math.min(earliest, gameMs);
+      const parts = cleanDate.split(/\s+/);
+      if (parts.length >= 2) {
+        const monthStr = parts[0].substring(0, 3).toUpperCase();
+        const month = MONTH_MAP[monthStr];
+        const day = parseInt(parts[1], 10);
+        const year = 2026;
+
+        let hours = 13;
+        let minutes = 0;
+        if (g.time) {
+          const match = String(g.time).match(/(\d+):(\d+)\s*(AM|PM)/i);
+          if (match) {
+            hours = parseInt(match[1], 10);
+            minutes = parseInt(match[2], 10);
+            const ampm = match[3].toUpperCase();
+            if (ampm === 'PM' && hours < 12) hours += 12;
+            if (ampm === 'AM' && hours === 12) hours = 0;
+          }
+        }
+
+        if (month !== undefined && !isNaN(day)) {
+          kickoffMs = new Date(year, month, day, hours, minutes, 0).getTime();
+        }
+      }
+    }
+
+    if (!isNaN(kickoffMs) && kickoffMs > 0) {
+      earliestKickoff = Math.min(earliestKickoff, kickoffMs);
     }
   });
 
-  return earliest === Infinity ? null : earliest - (60 * 60 * 1000);
+  if (earliestKickoff === Infinity) return null;
+
+  // Lock exactly 1 hour before earliest kickoff
+  return earliestKickoff - (60 * 60 * 1000);
 }
 
 const fieldBackgroundStyle = { backgroundColor: '#285233', backgroundImage: `repeating-linear-gradient(to bottom, transparent, transparent 80px, rgba(0, 0, 0, 0.1) 80px, rgba(0, 0, 0, 0.1) 160px), repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.4) 0px, rgba(255, 255, 255, 0.4) 3px, transparent 3px, transparent 160px)`, backgroundAttachment: 'fixed' as const };
@@ -3160,7 +3207,10 @@ const isLiveSeasonWeekLocked = isWeekLocked;
     return sorted;
   }, [allUsers, globalSettings, seasonView, seasonSortBy]);
 
-  const targetPickGamesList = pickGames.length > 0 ? pickGames : games;
+  // ✅ NEW (guarantees games are fetched for picksSelectedWeek):
+const targetPickGamesList = (pickGames && pickGames.length > 0)
+? pickGames 
+: (globalSettings?.games?.[picksSelectedWeek] || []);
 const totalPickGamesCount = targetPickGamesList.length;
 
 const fullyPickedCount = currentUser
