@@ -276,77 +276,23 @@ function wasAlreadyOut(user: any, checkUpToWeek: number, globalSettings: any, al
 function getLockdownTime(gamesList: any[]) {
   if (!gamesList || !Array.isArray(gamesList) || gamesList.length === 0) return null;
 
-  const MONTH_MAP: Record<string, number> = {
-    JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
-    JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11
-  };
-
   let earliestKickoff = Infinity;
 
   gamesList.forEach((g: any) => {
     if (!g) return;
 
+    // Use full apiDate if available, or fall back to date + time
     let kickoffMs = NaN;
 
-    // 1. Direct ISO String parsing if available (e.g., "2026-09-24T20:20:00Z")
-    if (g.apiDate && String(g.apiDate).includes('T')) {
+    if (g.apiDate) {
+      // If apiDate contains ISO or date string
       kickoffMs = new Date(g.apiDate).getTime();
     }
 
-    // 2. Parse ISO Date string "2026-09-24"
-    if (isNaN(kickoffMs) && g.apiDate) {
-      const dateParts = String(g.apiDate).split('T')[0].split('-');
-      if (dateParts.length === 3) {
-        const year = parseInt(dateParts[0], 10);
-        const month = parseInt(dateParts[1], 10) - 1;
-        const day = parseInt(dateParts[2], 10);
-
-        // Parse time like "8:20 PM"
-        let hours = 13; // default 1:00 PM
-        let minutes = 0;
-        if (g.time) {
-          const match = String(g.time).match(/(\d+):(\d+)\s*(AM|PM)/i);
-          if (match) {
-            hours = parseInt(match[1], 10);
-            minutes = parseInt(match[2], 10);
-            const ampm = match[3].toUpperCase();
-            if (ampm === 'PM' && hours < 12) hours += 12;
-            if (ampm === 'AM' && hours === 12) hours = 0;
-          }
-        }
-        kickoffMs = new Date(year, month, day, hours, minutes, 0).getTime();
-      }
-    }
-
-    // 3. Parse formatted text date "Thu, Sep 24" or "Sep 24"
-    if (isNaN(kickoffMs) && g.date) {
-      let cleanDate = String(g.date);
-      if (cleanDate.includes(',')) cleanDate = cleanDate.split(',')[1].trim();
-
-      const parts = cleanDate.split(/\s+/);
-      if (parts.length >= 2) {
-        const monthStr = parts[0].substring(0, 3).toUpperCase();
-        const month = MONTH_MAP[monthStr];
-        const day = parseInt(parts[1], 10);
-        const year = 2026;
-
-        let hours = 13;
-        let minutes = 0;
-        if (g.time) {
-          const match = String(g.time).match(/(\d+):(\d+)\s*(AM|PM)/i);
-          if (match) {
-            hours = parseInt(match[1], 10);
-            minutes = parseInt(match[2], 10);
-            const ampm = match[3].toUpperCase();
-            if (ampm === 'PM' && hours < 12) hours += 12;
-            if (ampm === 'AM' && hours === 12) hours = 0;
-          }
-        }
-
-        if (month !== undefined && !isNaN(day)) {
-          kickoffMs = new Date(year, month, day, hours, minutes, 0).getTime();
-        }
-      }
+    if (isNaN(kickoffMs) && (g.date || g.time)) {
+      const dStr = g.date || '2026-09-24';
+      const tStr = g.time || '8:15 PM';
+      kickoffMs = new Date(`${dStr} ${tStr}`).getTime();
     }
 
     if (!isNaN(kickoffMs) && kickoffMs > 0) {
@@ -356,73 +302,43 @@ function getLockdownTime(gamesList: any[]) {
 
   if (earliestKickoff === Infinity) return null;
 
-  // Lock exactly 1 hour before earliest kickoff
+  // 🔒 Lock 1 hour (3,600,000 ms) before kickoff
   return earliestKickoff - (60 * 60 * 1000);
 }
 
 const fieldBackgroundStyle = { backgroundColor: '#285233', backgroundImage: `repeating-linear-gradient(to bottom, transparent, transparent 80px, rgba(0, 0, 0, 0.1) 80px, rgba(0, 0, 0, 0.1) 160px), repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.4) 0px, rgba(255, 255, 255, 0.4) 3px, transparent 3px, transparent 160px)`, backgroundAttachment: 'fixed' as const };
 
-function CountdownClock({ targetTime }: { targetTime: any }) {
-  const [timeLeft, setTimeLeft] = useState('');
-  const [diffMs, setDiffMs] = useState<number | null>(null);
+function CountdownClock({ targetTime }: { targetTime: number | string | null | undefined }) {
+  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    if (!targetTime) {
-      setDiffMs(null);
-      setTimeLeft('');
-      return;
-    }
-
-    // Safely parse timestamp whether passed as number, string date, or Date object
-    let numericTime: number;
-    if (typeof targetTime === 'number') {
-      numericTime = targetTime;
-    } else {
-      numericTime = new Date(targetTime).getTime();
-    }
-
-    if (isNaN(numericTime)) {
-      setDiffMs(null);
-      setTimeLeft('');
-      return;
-    }
-
-    const timer = setInterval(() => {
-      const diff = numericTime - Date.now();
-      setDiffMs(diff);
-
-      if (diff <= 0) { 
-        setTimeLeft('LOCKED'); 
-        clearInterval(timer); 
-      } else {
-        const d = Math.floor(diff / 86400000);
-        const h = Math.floor((diff % 86400000) / 3600000);
-        const m = Math.floor((diff % 3600000) / 60000);
-        const s = Math.floor((diff % 60000) / 1000);
-        setTimeLeft(`${d > 0 ? d + 'd ' : ''}${h}h ${m}m ${s}s`);
-      }
-    }, 1000);
-
+    const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [targetTime]);
+  }, []);
 
-  if (!targetTime || diffMs === null) {
-    return <span className="text-slate-400 font-mono text-xs">--:--:--</span>;
+  if (!targetTime) return <span className="text-slate-400 font-bold">--:--</span>;
+
+  let targetMs = 0;
+  if (typeof targetTime === 'number') {
+    targetMs = targetTime;
+  } else {
+    targetMs = new Date(String(targetTime)).getTime();
   }
 
-  // Dynamic color coding based on remaining time
-  let colorClass = 'bg-emerald-950/80 text-emerald-400 border-emerald-500/40';
-  if (diffMs <= 0) {
-    colorClass = 'bg-red-950/90 text-red-500 border-red-800';
-  } else if (diffMs <= 12 * 3600 * 1000) { // <= 12 Hours (Pulsing Red)
-    colorClass = 'bg-red-950/90 text-red-400 border-red-500/50 animate-pulse';
-  } else if (diffMs <= 24 * 3600 * 1000) { // <= 24 Hours (Yellow / Amber)
-    colorClass = 'bg-amber-950/90 text-amber-400 border-amber-500/50';
+  const diff = targetMs - now;
+
+  if (isNaN(targetMs) || diff <= 0) {
+    return <span className="text-red-500 font-black uppercase tracking-wider">Locked</span>;
   }
+
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+  const minutes = Math.floor((diff / (1000 * 60)) % 60);
+  const seconds = Math.floor((diff / 1000) % 60);
 
   return (
-    <span className={`px-3.5 py-1.5 rounded-xl font-mono text-base sm:text-lg font-black border shadow-sm ${colorClass}`}>
-      {timeLeft || 'LOCKED'}
+    <span className="font-mono font-black text-[#FFB81C] tracking-wide">
+      {days > 0 ? `${days}d ` : ''}{hours}h {minutes}m {seconds}s
     </span>
   );
 }
@@ -1111,7 +1027,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                   viewMode === 'cards' ? 'bg-slate-900 text-[#FFB81C] shadow-md' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Cards
+                My Games
               </button>
             </div>
           </div>
@@ -1257,63 +1173,15 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
               </tbody>
             </table>
           </div>
-        ) : (
-          /* PLAYER CARDS VIEW */
-          <div className="p-3 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {processedData.map((user: any) => {
-              const isMe = currentUser && user.id === currentUser.id;
-              const activeScore = user.activeScore ?? 0;
-              const activeRank = user.displayRank ?? 1;
-
-              return (
-                <div
-                  key={user.id}
-                  className={`rounded-xl sm:rounded-2xl p-3 sm:p-4 border-2 transition-all ${
-                    isMe ? 'bg-[#FFB81C]/20 border-[#FFB81C] ring-2 sm:ring-4 ring-[#FFB81C]/30 shadow-lg relative z-10' : 'bg-slate-50 border-slate-200'
-                  }`}
-                >
-                  <div className="flex justify-between items-center mb-2.5 border-b border-slate-200 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl sm:text-2xl font-black italic text-[#FFB81C]">#{activeRank}</span>
-                      <div>
-                        <h3 className="font-black uppercase text-sm sm:text-base text-slate-900 leading-tight">
-                          {formatFullName(user)}
-                        </h3>
-                        <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest">
-                          TB: {user.tiebreakers?.[week] || '-'} PTS
-                        </p>
-                      </div>
-                    </div>
-                    <div className="bg-slate-900 text-[#FFB81C] px-2.5 sm:px-3.5 py-1 rounded-lg sm:rounded-xl font-black italic text-base sm:text-xl shadow-md">
-                      {activeScore} <span className="text-[10px] sm:text-xs font-normal">PTS</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
-                    {(games || []).map((g: any) => {
-                      const pick = user.picks?.[week]?.[g.id];
-                      const rank = user.ranks?.[week]?.[g.id];
-                      const isHidden = !isWeekLocked && !adminForceReveal && !isMe;
-
-                      return (
-                        <div key={g.id} className="bg-white p-1 rounded-lg border border-slate-200 text-center shadow-sm flex flex-col items-center">
-                          <div className="text-[9px] font-black uppercase text-slate-400 mb-0.5 truncate w-full">
-                            {g.awayAbbr}@{g.homeAbbr}
-                          </div>
-                          {isHidden ? (
-                            <span className="text-[9px] font-black uppercase text-slate-300 py-0.5">LOCK</span>
-                          ) : (
-                            <LiveTrackerCell game={g} pick={pick} rank={rank} isProjection={isProjection} />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+       ) : (
+        /* PERSONAL MATCHUPS COMMAND CENTER */
+        <MyMatchupsView
+          games={games}
+          currentUser={currentUser}
+          week={week}
+          isProjection={isProjection}
+        />
+      )}
       </div>
     </div>
   );
@@ -2616,6 +2484,239 @@ const payouts = matrix.weeklyGross;
   );
 }
 
+function MyMatchupsView({ games, currentUser, week, isProjection }: any) {
+  if (!currentUser) return null;
+
+  const userPicks = currentUser.picks?.[week] || {};
+  const userRanks = currentUser.ranks?.[week] || {};
+  const userTiebreaker = currentUser.tiebreakers?.[week] ?? null;
+
+  // Helper to convert date + time strings into a comparable timestamp
+  const getGameTimestamp = (g: any) => {
+    try {
+      const dateStr = g.apiDate || g.date || '';
+      const timeStr = g.time || '12:00 PM';
+      return new Date(`${dateStr} ${timeStr}`).getTime() || 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  // 🏈 SORTING LOGIC:
+  // 1. Live Games (Group 1) -> Upcoming Games (Group 2) -> Final Games (Group 3)
+  // 2. Within each group, sort chronologically by Kickoff Date/Time (sooner games first)
+  const myGames = (games || [])
+    .map((g: any) => {
+      const pick = userPicks[g.id];
+      const rank = parseInt(userRanks[g.id] || '0', 10);
+      const projWinner = getProjectedWinner(g);
+      const activeWinner = isProjection ? projWinner : (g.status === 'final' ? g.winner : null);
+
+      const isWinning = activeWinner && pick === activeWinner;
+      const isLosing = activeWinner && pick !== activeWinner;
+
+      const statusGroup = g.status === 'in_progress' ? 1 : g.status === 'upcoming' ? 2 : 3;
+      const kickoffTime = getGameTimestamp(g);
+
+      return {
+        ...g,
+        myPick: pick,
+        myRank: rank,
+        isWinning,
+        isLosing,
+        statusGroup,
+        kickoffTime
+      };
+    })
+    .sort((a: any, b: any) => {
+      // Primary Sort: Status Group (Live -> Upcoming -> Final)
+      if (a.statusGroup !== b.statusGroup) return a.statusGroup - b.statusGroup;
+      // Secondary Sort: Chronological Kickoff Time (Sooner first)
+      return a.kickoffTime - b.kickoffTime;
+    });
+
+  return (
+    <div className="space-y-3 p-2 sm:p-4 max-w-4xl mx-auto">
+      {/* SINGLE-COLUMN CHRONOLOGICAL GAME FEED */}
+      {myGames.map((g: any) => {
+        const isAwayPicked = g.myPick === g.away;
+        const isHomePicked = g.myPick === g.home;
+        const isLive = g.status === 'in_progress';
+        const isFinal = g.status === 'final';
+
+        // Possession Team Matching
+        const awayCanonical = getCanonicalTeamCode(g.away);
+        const homeCanonical = getCanonicalTeamCode(g.home);
+        const possessionCanonical = g.possession ? getCanonicalTeamCode(g.possession) : '';
+
+        const hasPossessionAway = isLive && (possessionCanonical === awayCanonical || g.possession === 'away');
+        const hasPossessionHome = isLive && (possessionCanonical === homeCanonical || g.possession === 'home');
+
+        return (
+          <div
+            key={g.id}
+            className={`bg-slate-900 text-white rounded-2xl p-4 sm:p-5 border-2 shadow-lg transition-all ${
+              g.isRedZone
+                ? 'border-rose-500 ring-2 ring-rose-500/40 bg-slate-900/95'
+                : isFinal
+                ? 'border-slate-800 opacity-75 grayscale-[15%]'
+                : 'border-slate-800'
+            }`}
+          >
+            {/* HEADER BAR: POINTS BADGE + LIVE CLOCK & STATUS */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="bg-[#FFB81C] text-slate-900 font-black italic text-xs px-3 py-1 rounded-xl shadow-sm">
+                  +{g.myRank || 0} PTS
+                </span>
+
+                {g.isTiebreaker && (
+                  <span className="bg-amber-500/20 text-[#FFB81C] border border-amber-500/30 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
+                    * Tiebreaker Game
+                  </span>
+                )}
+              </div>
+
+              {/* LIVE GAME CLOCK & QUARTER OR STATUS */}
+              <div className="flex items-center gap-2">
+                {g.isRedZone && (
+                  <span className="bg-rose-600 text-white font-black text-[9px] px-2 py-0.5 rounded animate-pulse tracking-tighter">
+                    🚨 RED ZONE
+                  </span>
+                )}
+
+                {isFinal ? (
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg ${
+                    g.isWinning ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                  }`}>
+                    {g.isWinning ? '✓ Final Win' : '✗ Final Loss'}
+                  </span>
+                ) : isLive ? (
+                  <div className="flex items-center gap-1.5 bg-emerald-950 text-emerald-400 border border-emerald-500/40 px-3 py-1 rounded-xl text-xs font-mono font-black">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>{g.gameQuarter || 'LIVE'}</span>
+                    {g.gameClock && <span className="text-emerald-300">({g.gameClock})</span>}
+                  </div>
+                ) : (
+                  <span className="text-xs font-bold text-slate-400 bg-slate-800 px-3 py-1 rounded-xl border border-slate-700">
+                    {g.date} • {g.time}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* SINGLE ROW MATCHUP DISPLAY (AWAY @ HOME) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 my-2">
+              {/* AWAY TEAM */}
+              <div className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                isAwayPicked
+                  ? 'bg-slate-800 border-[#FFB81C] text-white shadow-md'
+                  : 'bg-slate-950/60 border-slate-800 text-slate-400'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center font-black text-xs text-white shadow shrink-0"
+                    style={{ backgroundColor: NFL_COLORS[g.away] || '#334155' }}
+                  >
+                    {g.awayAbbr || g.away}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black italic uppercase text-sm sm:text-base leading-tight">
+                      {g.awayName || g.away}
+                    </span>
+                    {hasPossessionAway && (
+                      <span className="text-sm animate-bounce" title="In Possession">
+                        🏈
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className="font-mono font-black text-xl text-white ml-2">
+                  {g.awayScore !== null && g.awayScore !== undefined ? g.awayScore : '-'}
+                </span>
+              </div>
+
+              {/* HOME TEAM */}
+              <div className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                isHomePicked
+                  ? 'bg-slate-800 border-[#FFB81C] text-white shadow-md'
+                  : 'bg-slate-950/60 border-slate-800 text-slate-400'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center font-black text-xs text-white shadow shrink-0"
+                    style={{ backgroundColor: NFL_COLORS[g.home] || '#334155' }}
+                  >
+                    {g.homeAbbr || g.home}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black italic uppercase text-sm sm:text-base leading-tight">
+                      {g.homeName || g.home}
+                    </span>
+                    {hasPossessionHome && (
+                      <span className="text-sm animate-bounce" title="In Possession">
+                        🏈
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className="font-mono font-black text-xl text-white ml-2">
+                  {g.homeScore !== null && g.homeScore !== undefined ? g.homeScore : '-'}
+                </span>
+              </div>
+            </div>
+
+            {/* CARD FOOTER: MATCHUP STATUS & TIEBREAKER PREDICTION */}
+            <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 text-[10px] uppercase font-black tracking-widest">
+                  Matchup Status:
+                </span>
+                {g.myPick ? (
+                  <span className={`font-black italic text-xs px-2.5 py-0.5 rounded-lg ${
+                    isFinal
+                      ? g.isWinning
+                        ? 'text-emerald-400 bg-emerald-950/80 border border-emerald-500/30'
+                        : 'text-rose-400 bg-rose-950/80 border border-rose-500/30'
+                      : isLive
+                      ? g.isWinning
+                        ? 'text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 animate-pulse'
+                        : 'text-rose-400 bg-rose-950/80 border border-rose-500/30 animate-pulse'
+                      : 'text-slate-300 bg-slate-800'
+                  }`}>
+                    {isFinal
+                      ? g.isWinning
+                        ? `✓ Won (+${g.myRank} PTS)`
+                        : `✗ Lost (-${g.myRank} PTS)`
+                      : isLive
+                      ? g.isWinning
+                        ? `▲ Currently Winning (+${g.myRank} PTS)`
+                        : `▼ Currently Trailing (-${g.myRank} PTS)`
+                      : 'Scheduled'}
+                  </span>
+                ) : (
+                  <span className="text-rose-400 text-[10px] font-black uppercase">No Pick Submitted</span>
+                )}
+              </div>
+
+              {/* TIEBREAKER PREDICTION DISPLAY (IF APPLICABLE) */}
+              {g.isTiebreaker && (
+                <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 px-3 py-1 rounded-xl">
+                  <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">
+                    Your Tiebreaker Total:
+                  </span>
+                  <span className="font-mono font-black text-xs text-[#FFB81C]">
+                    {userTiebreaker !== null ? `${userTiebreaker} PTS` : 'Not Set'}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 // --- MAIN APP COMPONENT ---
 function MainApp() {
   const [user, setUser] = useState<any>(null), [dbReady, setDbReady] = useState(false), [authLoaded, setAuthLoaded] = useState(false), [sessionLoaded, setSessionLoaded] = useState(false), [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -2981,7 +3082,14 @@ const resultsGames = useMemo(() => {
 }, [globalSettings?.games, resultsSelectedWeek]);
 
 const pickWeekState = globalSettings?.weekStates?.[picksSelectedWeek] || 'open';
-const pickLockdownTime = getLockdownTime(pickGames);
+
+
+// ✅ NEW SAFE LINE:
+const targetPickGames = (pickGames && pickGames.length > 0) 
+  ? pickGames 
+  : (globalSettings?.games?.[picksSelectedWeek] || games || []);
+
+const pickLockdownTime = getLockdownTime(targetPickGames);
 const isTimeUp = pickLockdownTime ? Date.now() >= pickLockdownTime : false;
 
 // Regular users lock when week is locked/closed OR time is up. Admins NEVER lock out.
@@ -4852,16 +4960,18 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 
   {/* RIGHT SIDE: UNIFIED LOCKOUT & COUNTDOWN CONTAINER */}
   {pickLockdownTime && globalSettings?.weekStates?.[picksSelectedWeek] === 'open' && (
-    <div className="flex items-center bg-slate-900 px-4 py-2 rounded-2xl border border-slate-800 shadow-xl shrink-0 gap-2.5">
-      <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFB81C] shrink-0 animate-pulse" />
-      
-      <span className="text-xs sm:text-sm font-black uppercase text-rose-500 tracking-wider flex items-center gap-1 whitespace-nowrap">
-        <span>⚠️</span> Picks lock 1 hr before 1st game!
+  <div className="flex items-center gap-3 bg-slate-900 px-4 py-2.5 rounded-2xl border border-slate-800 shrink-0 shadow-sm">
+    <Clock className="w-5 h-5 text-[#FFB81C] shrink-0" />
+    <div className="text-right">
+      <span className="text-[14px] font-black uppercase tracking-widest text-slate-400 block">
+        Picks Lock 1 HR before 1st Game.  Countdown:
       </span>
-
-      <CountdownClock targetTime={pickLockdownTime} />
+      <div className="text-sm font-black text-[#FFB81C]">
+        <CountdownClock targetTime={pickLockdownTime} />
+      </div>
     </div>
-  )}
+  </div>
+)}
 </div>
                     
                     <div className="p-6 space-y-4">
