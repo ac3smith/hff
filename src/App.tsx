@@ -2951,10 +2951,22 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
         setGlobalSettings({ 
           ...data, 
           maxActiveWeeks: data.maxActiveWeeks || 18
-          // 🔒 Removed fpPayouts hardcoded fallback!
         });
-      } else {
-        console.warn("Global pool settings document not found in Firestore.");
+    
+        // 🔒 Compute current active open week dynamically on every Firestore load
+        const weekStates = data.weekStates || {};
+        const closedWeeks = Object.keys(weekStates)
+          .map(Number)
+          .filter(w => weekStates[w] === 'closed')
+          .sort((a, b) => b - a);
+    
+        const activeWk = closedWeeks.length > 0 
+          ? Math.min(closedWeeks[0] + 1, data.maxActiveWeeks || 18) 
+          : 1;
+    
+        setLiveSeasonWeek(activeWk);
+        setPicksSelectedWeek(activeWk);
+        setResultsSelectedWeek(activeWk > 1 ? activeWk - 1 : 1);
       }
     });
     const unsubPlayers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'players'), async (snapshot) => {
@@ -2965,22 +2977,28 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
   }, [user]);
 
   useEffect(() => { 
-    if (globalSettings && allUsers.length > 0 && !dbReady) { 
-      // 🔒 Find the highest closed week to initialize live season week dynamically
+    if (globalSettings && allUsers.length > 0) { 
       const weekStates = globalSettings?.weekStates || {};
       const closedWeeks = Object.keys(weekStates)
         .map(Number)
         .filter(w => weekStates[w] === 'closed')
         .sort((a, b) => b - a);
 
-      const activeWk = closedWeeks.length > 0 ? Math.min(closedWeeks[0] + 1, globalSettings?.maxActiveWeeks || 18) : 1;
+      // 1. Calculate active week (highest closed week + 1)
+      const activeWk = closedWeeks.length > 0 
+        ? Math.min(closedWeeks[0] + 1, globalSettings?.maxActiveWeeks || 18) 
+        : 1;
 
+      // 2. Always sync liveSeasonWeek and picksSelectedWeek on initial data load
       setLiveSeasonWeek(activeWk);
-      setPicksSelectedWeek(activeWk);
-      setResultsSelectedWeek(activeWk);
-      setDbReady(true); 
+
+      if (!dbReady) {
+        setPicksSelectedWeek(activeWk);
+        setResultsSelectedWeek(activeWk > 1 ? activeWk - 1 : 1);
+        setDbReady(true); 
+      }
     } 
-  }, [globalSettings, allUsers, dbReady]);
+  }, [globalSettings, allUsers]);
 
   // 🔒 Auto-lock current week 1 hour before first game kickoff if not locked yet
 useEffect(() => {
@@ -3055,18 +3073,23 @@ const games = useMemo(() => {
   return sorted.map((g: any) => ({ ...g, isTiebreaker: g.id === lastGameId }));
 }, [globalSettings?.games, currentActiveWeek]);
 
-// Games for Fanatics & KnockOut Pick Screens (Allows viewing/picking future weeks)
+// 🏈 Explicitly force game retrieval from globalSettings whenever picksSelectedWeek or globalSettings changes
 const pickGames = useMemo(() => {
-  const rawGames = globalSettings?.games?.[picksSelectedWeek] || [];
-  if (rawGames.length === 0) return [];
+  if (!globalSettings?.games) return [];
+  
+  // Directly pull the games for the selected pick week
+  const rawGames = globalSettings.games[picksSelectedWeek] || globalSettings.games[String(picksSelectedWeek)] || [];
+  if (!Array.isArray(rawGames) || rawGames.length === 0) return [];
+
   const sorted = [...rawGames].sort((a: any, b: any) => {
     const timeA = new Date(`${a.apiDate || a.date} ${a.time}`).getTime() || 0;
     const timeB = new Date(`${b.apiDate || b.date} ${b.time}`).getTime() || 0;
     return timeA - timeB;
   });
+  
   const lastGameId = sorted[sorted.length - 1]?.id;
   return sorted.map((g: any) => ({ ...g, isTiebreaker: g.id === lastGameId }));
-}, [globalSettings?.games, picksSelectedWeek]);
+}, [globalSettings, picksSelectedWeek]);
 
 // Games for F-Results & KO-Results Tabs (Pulls schedule for resultsSelectedWeek)
 const resultsGames = useMemo(() => {
@@ -4808,7 +4831,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 
       <main className="max-w-[1600px] mx-auto px-4 py-6 print:hidden">
       {activeTab === 'dashboard' && (
-        <div className="space-y-6 max-w-5xl mx-auto">
+  <div key={`dashboard-week-${picksSelectedWeek}`} className="space-y-6 max-w-5xl mx-auto">
           {/* WELCOME BANNER */}
           <div className="bg-slate-900 rounded-3xl p-8 sm:p-12 text-white shadow-2xl border-b-8 border-[#FFB81C] relative overflow-hidden">
             {/* PROMINENT HOME PAGE LOCK WARNING */}
@@ -5055,7 +5078,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
       )}
 
 {activeTab === 'confidence' && (
-  <div className="space-y-6 max-w-[1200px] mx-auto">
+  <div key={`fanatics-week-${picksSelectedWeek}`} className="space-y-6 max-w-[1200px] mx-auto">
     {!currentUser.playsConfidence && <ParticipationAlert game="Fanatics" />}
     {isPickWeekLocked && <LockBanner week={picksSelectedWeek} />}
     
@@ -5149,7 +5172,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 )}
 
 {activeTab === 'knockout' && (
-  <div className="space-y-6 max-w-[1200px] mx-auto">
+  <div key={`knockout-week-${picksSelectedWeek}`} className="space-y-6 max-w-[1200px] mx-auto">
     {!currentUser?.playsKnockout && <ParticipationAlert game="KnockOut" />}
     {isPickWeekLocked && <LockBanner week={picksSelectedWeek} />}
 
@@ -5183,26 +5206,26 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
       </div>
     ) : (
       <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 ${!currentUser?.playsKnockout ? 'opacity-25 grayscale pointer-events-none' : ''}`}>
-        {(pickGames.length > 0 ? pickGames : games).map((game: any) => {
-          if (!game) return null;
+        {(globalSettings?.games?.[picksSelectedWeek] || pickGames).map((game: any) => {
+  if (!game) return null;
 
-          const picksMap = currentUser?.knockoutPicks || {};
-          const priorTeamsUsed = Object.keys(picksMap)
-            .filter((wkKey) => parseInt(String(wkKey || 0), 10) < Number(picksSelectedWeek))
-            .map((wkKey) => picksMap[wkKey])
-            .filter(Boolean);
+  const picksMap = currentUser?.knockoutPicks || {};
+  const priorTeamsUsed = Object.keys(picksMap)
+    .filter((wkKey) => parseInt(String(wkKey || 0), 10) < Number(picksSelectedWeek))
+    .map((wkKey) => picksMap[wkKey])
+    .filter(Boolean);
 
-          return (
-            <KnockoutGameCard 
-              key={game.id} 
-              game={game} 
-              selectedTeam={picksMap[picksSelectedWeek] || ''} 
-              usedTeams={priorTeamsUsed} 
-              onPick={(team: string) => updateKnockoutPick(currentUser?.id, picksSelectedWeek, team)} 
-              isLocked={isPickWeekLocked} 
-            />
-          );
-        })}
+  return (
+    <KnockoutGameCard 
+      key={game.id} 
+      game={game} 
+      selectedTeam={picksMap[picksSelectedWeek] || ''} 
+      usedTeams={priorTeamsUsed} 
+      onPick={(team: string) => updateKnockoutPick(currentUser?.id, picksSelectedWeek, team)} 
+      isLocked={isPickWeekLocked} 
+    />
+  );
+})}
       </div>
     )}
   </div>
