@@ -281,18 +281,21 @@ function getLockdownTime(gamesList: any[]) {
   gamesList.forEach((g: any) => {
     if (!g) return;
 
-    // Use full apiDate if available, or fall back to date + time
     let kickoffMs = NaN;
 
+    // 1. Try parsing full ISO date if stored in apiDate
     if (g.apiDate) {
-      // If apiDate contains ISO or date string
-      kickoffMs = new Date(g.apiDate).getTime();
+      const datePart = String(g.apiDate).split('T')[0];
+      const timeStr = g.time || '8:15 PM';
+      kickoffMs = new Date(`${datePart} ${timeStr}`).getTime();
     }
 
-    if (isNaN(kickoffMs) && (g.date || g.time)) {
-      const dStr = g.date || '2026-09-24';
-      const tStr = g.time || '8:15 PM';
-      kickoffMs = new Date(`${dStr} ${tStr}`).getTime();
+    // 2. Fallback for date strings like "Thu, Sep 24"
+    if (isNaN(kickoffMs) && g.date) {
+      const year = new Date().getFullYear();
+      let cleanDate = String(g.date);
+      if (cleanDate.includes(',')) cleanDate = cleanDate.split(',')[1].trim();
+      kickoffMs = new Date(`${cleanDate} ${year} ${g.time || '8:15 PM'}`).getTime();
     }
 
     if (!isNaN(kickoffMs) && kickoffMs > 0) {
@@ -302,7 +305,7 @@ function getLockdownTime(gamesList: any[]) {
 
   if (earliestKickoff === Infinity) return null;
 
-  // 🔒 Lock 1 hour (3,600,000 ms) before kickoff
+  // Locks EXACTLY 1 hour (3,600,000 ms = 60 mins) before earliest game kickoff
   return earliestKickoff - (60 * 60 * 1000);
 }
 
@@ -857,15 +860,46 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
     });
 
     // 3. Sort by Points descending
-    calculated.sort((a: any, b: any) => {
-      if (b.activeScore !== a.activeScore) return b.activeScore - a.activeScore;
+    // ✅ NEW MULTI-LAYER SORTING (Score -> Highest Won Rank -> Alphabetical)
+calculated.sort((a: any, b: any) => {
+  // 1. Primary Sort: Total Active/Captured Score (Highest First)
+  if (b.activeScore !== a.activeScore) {
+    return b.activeScore - a.activeScore;
+  }
 
-      if (isWeekComplete && !isProjection && a.tbDiff !== undefined && b.tbDiff !== undefined && a.tbDiff !== b.tbDiff) {
-        return a.tbDiff - b.tbDiff;
+  // 2. Secondary Sort (In-Progress Weeks): Rank Value Captured on Completed Wins
+  // If tied on points, player who won higher confidence points ranks higher
+  const getWonRankSum = (user: any) => {
+    const userPicks = user.picks?.[week] || {};
+    const userRanks = user.ranks?.[week] || {};
+    
+    return (games || []).reduce((sum: number, g: any) => {
+      const pick = userPicks[g.id];
+      const rank = parseInt(userRanks[g.id] || '0', 10);
+      const isFinal = String(g.status || '').toLowerCase() === 'final';
+      
+      if (isFinal && g.winner && pick === g.winner) {
+        return sum + rank;
       }
+      return sum;
+    }, 0);
+  };
 
-      return String(a.lastName || '').localeCompare(String(b.lastName || ''));
-    });
+  const wonRankA = getWonRankSum(a);
+  const wonRankB = getWonRankSum(b);
+
+  if (wonRankB !== wonRankA) {
+    return wonRankB - wonRankA; // Higher confidence points won sits on top
+  }
+
+  // 3. Final Tiebreaker (Closed Weeks Only): Final Game Tiebreaker Difference
+  if (isWeekComplete && !isProjection && a.tbDiff !== undefined && b.tbDiff !== undefined && a.tbDiff !== b.tbDiff) {
+    return a.tbDiff - b.tbDiff;
+  }
+
+  // 4. Fallback: Alphabetical by Last Name
+  return String(a.lastName || '').localeCompare(String(b.lastName || ''));
+});
 
     // 4. Assign Rankings
     let currentRank = 1;
