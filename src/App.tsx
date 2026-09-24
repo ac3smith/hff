@@ -1206,16 +1206,25 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
 
       // 🔒 Evaluate elimination across all weeks from startWeek up to the active week
       for (let wk = startWk; wk <= week; wk++) {
-        const wkGames = globalSettings?.games?.[wk] || (wk === week ? allGames : []) || [];
-        const isOutThisWk = isUserEliminatedThisWeek(user, wk, wkGames);
+        // 1. First check static saved history in Firestore (immutable historical record)
+        const savedStatus = user.knockoutStatuses?.[wk];
+        const isRecordedOut = ['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(savedStatus);
         const isAdminOut = globalSettings?.knockoutEliminations?.[wk]?.includes(user.id);
         const isProfileOut = user.knockoutEliminatedWeek && user.knockoutEliminatedWeek <= wk;
-        const wkStatus = user.knockoutStatuses?.[wk];
-        const isStatusOut = ['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(wkStatus);
-
-        if (isOutThisWk || isAdminOut || isProfileOut || isStatusOut) {
+      
+        if (isRecordedOut || isAdminOut || isProfileOut) {
           eliminatedWeek = wk;
           break;
+        }
+      
+        // 2. Only run live game elimination for unclosed/active weeks if no saved record exists
+        const isClosedWk = globalSettings?.weekStates?.[wk] === 'closed';
+        if (!isClosedWk) {
+          const wkGames = globalSettings?.games?.[wk] || (wk === week ? allGames : []) || [];
+          if (wkGames && wkGames.length > 0 && isUserEliminatedThisWeek(user, wk, wkGames)) {
+            eliminatedWeek = wk;
+            break;
+          }
         }
       }
 
@@ -1321,35 +1330,40 @@ function KnockoutTrackerBoard({ data, week, allGames, isLocked, adminForceReveal
                     const weekGamesList = globalSettings?.games?.[wk] || (wk === week ? allGames : []) || [];
                     const canonicalPick = getCanonicalTeamCode(rawPick);
                     
-                    const isEliminatedThisCell = isUserEliminatedThisWeek(user, wk, weekGamesList);
-                    const wasOutBefore = user.eliminatedWeek !== null && wk > user.eliminatedWeek;
+                    // ✅ NEW UPDATED BLOCK:
+const savedWkStatus = user.knockoutStatuses?.[wk];
+const isEliminatedThisCell = ['Loser', 'Loser (No Pick)', 'Knocked Out'].includes(savedWkStatus) || 
+(globalSettings?.weekStates?.[wk] !== 'closed' && isUserEliminatedThisWeek(user, wk, weekGamesList));
+const wasOutBefore = user.eliminatedWeek !== null && wk > user.eliminatedWeek;
 
-                    const isPastOrLockedWeek = wk < week || wkState === 'locked' || wkState === 'closed' || (wk === week && (isLocked || globalSettings?.isLocked));
-                    const canRevealPick = isPastOrLockedWeek || adminForceReveal || isMe;
-                    const isHidden = !canRevealPick;
+const isPastOrLockedWeek = wk < week || wkState === 'locked' || wkState === 'closed' || (wk === week && (isLocked || globalSettings?.isLocked));
+const canRevealPick = isPastOrLockedWeek || adminForceReveal || isMe;
+const isHidden = !canRevealPick;
 
-                    const displayPick = canonicalPick || 'NO PICK';
+const displayPick = canonicalPick || 'NO PICK';
 
-                    let cellBg = 'bg-slate-100 text-slate-700 font-bold';
+let cellBg = 'bg-slate-100 text-slate-700 font-bold';
 
-                    // Check if the picked game is actually final
-                    const targetGame = weekGamesList.find((g: any) => {
-                      const awayCode = getCanonicalTeamCode(g.away);
-                      const homeCode = getCanonicalTeamCode(g.home);
-                      return awayCode === canonicalPick || homeCode === canonicalPick;
-                    });
-                    const isGameFinal = String(targetGame?.status || '').toLowerCase() === 'final';
+// Check if the picked game is final or if the week is already closed
+const targetGame = weekGamesList.find((g: any) => {
+  const awayCode = getCanonicalTeamCode(g.away);
+  const homeCode = getCanonicalTeamCode(g.home);
+  return awayCode === canonicalPick || homeCode === canonicalPick;
+});
+const isGameFinal = String(targetGame?.status || '').toLowerCase() === 'final';
+const isClosedWeek = wkState === 'closed' || wkState === 'locked';
+const isSavedWinner = savedWkStatus === 'Winner';
 
-                    if (wasOutBefore) {
-                      cellBg = 'bg-slate-100/60 text-slate-300';
-                    } else if (isEliminatedThisCell) {
-                      cellBg = 'bg-rose-600 text-white font-black';
-                    } else if (rawPick && isGameFinal && !isEliminatedThisCell) {
-                      cellBg = 'bg-emerald-600 text-white font-black shadow-sm';
-                    } else if (rawPick) {
-                      // Upcoming / In-Progress Pick
-                      cellBg = 'bg-amber-500/10 text-amber-900 border border-amber-300 font-black';
-                    }
+if (wasOutBefore) {
+  cellBg = 'bg-slate-100/60 text-slate-300';
+} else if (isEliminatedThisCell) {
+  cellBg = 'bg-rose-600 text-white font-black'; // ❌ RED OUT
+} else if (isSavedWinner || (rawPick && (isGameFinal || isClosedWeek) && !isEliminatedThisCell)) {
+  cellBg = 'bg-emerald-600 text-white font-black shadow-sm'; // ✅ GREEN WINNER
+} else if (rawPick) {
+  // Upcoming / In-Progress Pick
+  cellBg = 'bg-amber-500/10 text-amber-900 border border-amber-300 font-black'; // ⏳ PENDING
+}
 
                     return (
                       <td 
@@ -2948,25 +2962,22 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
     const unsubSettings = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setGlobalSettings({ 
-          ...data, 
-          maxActiveWeeks: data.maxActiveWeeks || 18
-        });
+        setGlobalSettings({ ...data, maxActiveWeeks: data.maxActiveWeeks || 18 });
     
-        // 🔒 Compute current active open week dynamically on every Firestore load
         const weekStates = data.weekStates || {};
-        const closedWeeks = Object.keys(weekStates)
-          .map(Number)
-          .filter(w => weekStates[w] === 'closed')
-          .sort((a, b) => b - a);
+        const closedWeeks = Object.keys(weekStates).map(Number).filter(w => weekStates[w] === 'closed').sort((a, b) => b - a);
+        const activeWk = closedWeeks.length > 0 ? Math.min(closedWeeks[0] + 1, data.maxActiveWeeks || 18) : 1;
     
-        const activeWk = closedWeeks.length > 0 
-          ? Math.min(closedWeeks[0] + 1, data.maxActiveWeeks || 18) 
-          : 1;
-    
-        setLiveSeasonWeek(activeWk);
-        setPicksSelectedWeek(activeWk);
-        setResultsSelectedWeek(activeWk > 1 ? activeWk - 1 : 1);
+        // 🔒 Set liveSeasonWeek, but ONLY initialize selected week dropdowns on cold start!
+        // ✅ NEW UPDATED BLOCK
+setLiveSeasonWeek(activeWk);
+
+if (!dbReady) {
+  setPicksSelectedWeek(activeWk);
+  setResultsSelectedWeek(activeWk > 1 ? activeWk - 1 : 1);
+  setSelectedWeek(activeWk);
+  setDbReady(true); // Lock initial load flag
+}
       }
     });
     const unsubPlayers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'players'), async (snapshot) => {
@@ -4447,6 +4458,7 @@ const updateGameResult = (gameId: number, resultType: string, teamId: string) =>
     setTimeout(() => setHasSaved(false), 2000);
     setDeadbeatsToConfirm(null);
   };
+
 
   // 📍 2. DIRECT CLOSE WEEK (ADMIN ACTION) 📍
 const handleCloseWeek = async () => {
