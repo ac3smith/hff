@@ -281,21 +281,18 @@ function getLockdownTime(gamesList: any[]) {
   gamesList.forEach((g: any) => {
     if (!g) return;
 
+    // Use full apiDate if available, or fall back to date + time
     let kickoffMs = NaN;
 
-    // 1. Try parsing full ISO date if stored in apiDate
     if (g.apiDate) {
-      const datePart = String(g.apiDate).split('T')[0];
-      const timeStr = g.time || '8:15 PM';
-      kickoffMs = new Date(`${datePart} ${timeStr}`).getTime();
+      // If apiDate contains ISO or date string
+      kickoffMs = new Date(g.apiDate).getTime();
     }
 
-    // 2. Fallback for date strings like "Thu, Sep 24"
-    if (isNaN(kickoffMs) && g.date) {
-      const year = new Date().getFullYear();
-      let cleanDate = String(g.date);
-      if (cleanDate.includes(',')) cleanDate = cleanDate.split(',')[1].trim();
-      kickoffMs = new Date(`${cleanDate} ${year} ${g.time || '8:15 PM'}`).getTime();
+    if (isNaN(kickoffMs) && (g.date || g.time)) {
+      const dStr = g.date || '2026-09-24';
+      const tStr = g.time || '8:15 PM';
+      kickoffMs = new Date(`${dStr} ${tStr}`).getTime();
     }
 
     if (!isNaN(kickoffMs) && kickoffMs > 0) {
@@ -305,7 +302,7 @@ function getLockdownTime(gamesList: any[]) {
 
   if (earliestKickoff === Infinity) return null;
 
-  // Locks EXACTLY 1 hour (3,600,000 ms = 60 mins) before earliest game kickoff
+  // 🔒 Lock 1 hour (3,600,000 ms) before kickoff
   return earliestKickoff - (60 * 60 * 1000);
 }
 
