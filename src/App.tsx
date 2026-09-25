@@ -273,9 +273,43 @@ function wasAlreadyOut(user: any, checkUpToWeek: number, globalSettings: any, al
   return false;
 }
 
+// ✅ RESTORED & ACCURATE:
 function getLockdownTime(gamesList: any[]) {
-  // Thursday, September 24, 2026 at 7:15:00 PM EDT
-  return 1790291700000;
+  if (!gamesList || !Array.isArray(gamesList) || gamesList.length === 0) return null;
+
+  let earliestKickoff = Infinity;
+
+  gamesList.forEach((g: any) => {
+    if (!g) return;
+
+    let kickoffMs = NaN;
+
+    // 1. Try ISO date if stored in apiDate
+    if (g.apiDate) {
+      const datePart = String(g.apiDate).split('T')[0];
+      const timeStr = g.time || '8:15 PM';
+      // Normalize hyphens to slashes to prevent JS from parsing as UTC midnight
+      const localDateStr = datePart.replace(/-/g, '/');
+      kickoffMs = new Date(`${localDateStr} ${timeStr}`).getTime();
+    }
+
+    // 2. Fallback for date strings like "Thu, Sep 24"
+    if (isNaN(kickoffMs) && g.date) {
+      const year = new Date().getFullYear();
+      let cleanDate = String(g.date);
+      if (cleanDate.includes(',')) cleanDate = cleanDate.split(',')[1].trim();
+      kickoffMs = new Date(`${cleanDate}, ${year} ${g.time || '8:15 PM'}`).getTime();
+    }
+
+    if (!isNaN(kickoffMs) && kickoffMs > 0) {
+      earliestKickoff = Math.min(earliestKickoff, kickoffMs);
+    }
+  });
+
+  if (earliestKickoff === Infinity) return null;
+
+  // Locks EXACTLY 1 hour (3,600,000 ms = 60 mins) before kickoff
+  return earliestKickoff - (60 * 60 * 1000);
 }
   
   
@@ -1094,23 +1128,26 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
 </td>
 
                       {/* Game Cells */}
-                      {(games || []).map((g: any) => {
-                        const pick = user.picks?.[week]?.[g.id];
-                        const rank = user.ranks?.[week]?.[g.id];
-                        const isHidden = !isWeekLocked && !adminForceReveal && !isMe;
+                      {/* Game Cells */}
+{(games || []).map((g: any) => {
+  const isWeekStateLocked = globalSettings?.weekStates?.[week] === 'locked' || globalSettings?.weekStates?.[week] === 'closed';
+  const shouldHide = !isWeekStateLocked && !adminForceReveal && !isMe;
 
-                        return (
-                          <td key={g.id} className={`p-0.5 border-r border-slate-100 text-center ${isMe ? 'bg-[#FFB81C]/10' : isProjection ? 'bg-amber-50/50' : 'bg-white'}`}>
-                            {isHidden ? (
-                              <div className="text-center text-[8px] font-black italic text-slate-300 bg-slate-50 py-1 rounded uppercase border border-slate-100">
-                                Lock
-                              </div>
-                            ) : (
-                              <LiveTrackerCell game={g} pick={pick} rank={rank} isProjection={isProjection} />
-                            )}
-                          </td>
-                        );
-                      })}
+  const pick = shouldHide ? null : user.picks?.[week]?.[g.id];
+  const rank = shouldHide ? null : user.ranks?.[week]?.[g.id];
+
+  return (
+    <td key={g.id} className={`p-0.5 border-r border-slate-100 text-center ${isMe ? 'bg-[#FFB81C]/10' : isProjection ? 'bg-amber-50/50' : 'bg-white'}`}>
+      {shouldHide ? (
+        <div className="text-center text-[10px] font-black italic text-slate-400 bg-slate-100 py-1 rounded uppercase border border-slate-200">
+          LOCK
+        </div>
+      ) : (
+        <LiveTrackerCell game={g} pick={pick} rank={rank} isProjection={isProjection} />
+      )}
+    </td>
+  );
+})}
 
                       {/* Score & Standings Columns */}
                       <td className={`p-1 text-center font-black tabular-nums text-xs sm:text-base border-l-2 border-r border-slate-100 text-slate-900 ${isMe ? 'bg-[#FFB81C]/20' : isProjection ? 'bg-amber-50' : 'bg-white'}`}>
@@ -1310,8 +1347,11 @@ const isEliminatedThisCell = ['Loser', 'Loser (No Pick)', 'Knocked Out'].include
 (globalSettings?.weekStates?.[wk] !== 'closed' && isUserEliminatedThisWeek(user, wk, weekGamesList));
 const wasOutBefore = user.eliminatedWeek !== null && wk > user.eliminatedWeek;
 
-const isPastOrLockedWeek = wk < week || wkState === 'locked' || wkState === 'closed' || (wk === week && (isLocked || globalSettings?.isLocked));
-const canRevealPick = isPastOrLockedWeek || adminForceReveal || isMe;
+// 🟢 NEW (Only reveals Knockout picks when week is explicitly locked or closed by admin)
+// Force Knockout picks to remain hidden under LOCK unless the week state is 'locked' or 'closed'
+const isCurrentWeekStateLocked = wkState === 'locked' || wkState === 'closed';
+const isPastWeek = wk < week;
+const canRevealPick = isPastWeek || isCurrentWeekStateLocked || adminForceReveal || isMe;
 const isHidden = !canRevealPick;
 
 const displayPick = canonicalPick || 'NO PICK';
@@ -2986,7 +3026,7 @@ if (!dbReady) {
   }, [globalSettings, allUsers]);
 
   // 🔒 Auto-lock current week 1 hour before first game kickoff if not locked yet
-useEffect(() => {
+/*useEffect(() => {
   if (!globalSettings?.games?.[picksSelectedWeek] || isAdmin) return;
 
   const weekGamesList = globalSettings.games[picksSelectedWeek] || [];
@@ -3025,7 +3065,7 @@ useEffect(() => {
       }
     }
   }, [globalSettings?.weekStates, liveSeasonWeek]);
-
+*/
   useEffect(() => { setAdminForceReveal(false); }, [selectedWeek]);
 
 
@@ -3089,27 +3129,25 @@ const resultsGames = useMemo(() => {
   return sorted.map((g: any) => ({ ...g, isTiebreaker: g.id === lastGameId }));
 }, [globalSettings?.games, resultsSelectedWeek]);
 
+// ✅ RESTORED UNIFIED LOCK & DEADLINE CALCULATIONS:
 const pickWeekState = globalSettings?.weekStates?.[picksSelectedWeek] || 'open';
-
-
-// ✅ NEW SAFE LINE:
-const targetPickGames = (pickGames && pickGames.length > 0) 
+const targetPickGamesList = (pickGames && pickGames.length > 0) 
   ? pickGames 
-  : (globalSettings?.games?.[picksSelectedWeek] || games || []);
+  : (globalSettings?.games?.[picksSelectedWeek] || []);
 
-const pickLockdownTime = getLockdownTime(targetPickGames);
-const isTimeUp = pickLockdownTime ? Date.now() >= pickLockdownTime : false;
+const pickLockdownTime = getLockdownTime(targetPickGamesList);
 
-// Regular users lock when week is locked/closed OR time is up. Admins NEVER lock out.
-const isPickWeekLocked = !isAdmin && (pickWeekState === 'locked' || pickWeekState === 'closed' || isTimeUp);
-  
+// PURE MANUAL CONTROL BASED SOLELY ON FIRESTORE STATE
+const isPickWeekLocked = !isAdmin && (pickWeekState === 'locked' || pickWeekState === 'closed');
+
 const liveWeekState = globalSettings?.weekStates?.[liveSeasonWeek] || 'open';
-const currentWeekState = liveWeekState; // 👈 PASTE THIS SAFETY ALIAS LINE
+const currentWeekState = liveWeekState;
 const lockdownTime = getLockdownTime(games);
-const isPastLockdown = lockdownTime && Date.now() >= lockdownTime;
-const isWeekLocked = liveWeekState === 'locked' || liveWeekState === 'closed' || (liveWeekState === 'open' && isPastLockdown);
+
+// 🔒 REMOVED 'isPastLockdown' FROM OVERRIDING THE OPEN STATE:
+const isWeekLocked = liveWeekState === 'locked' || liveWeekState === 'closed';
 const isLiveSeasonWeekLocked = isWeekLocked;
-  const isWeekClosed = currentWeekState === 'closed';
+const isWeekClosed = currentWeekState === 'closed';
 
   useEffect(() => {
     if (dbReady && currentUser && activeTab !== 'dashboard') {
@@ -3324,9 +3362,7 @@ const isLiveSeasonWeekLocked = isWeekLocked;
   }, [allUsers, globalSettings, seasonView, seasonSortBy]);
 
   // ✅ NEW (guarantees games are fetched for picksSelectedWeek):
-const targetPickGamesList = (pickGames && pickGames.length > 0)
-? pickGames 
-: (globalSettings?.games?.[picksSelectedWeek] || []);
+// ✅ NEW (REUSES THE EXISTING DECLARATION):
 const totalPickGamesCount = targetPickGamesList.length;
 
 const fullyPickedCount = currentUser
@@ -4031,9 +4067,10 @@ function ensureAutoTiebreaker(gamesList: any[]) {
         return g;
       });
   
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-        [`games.${targetWeek}`]: updatedGames
-      });
+      // ✅ SCORE SYNC ONLY UPDATES GAME SCORES — NEVER LOCK STATES
+await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+  [`games.${targetWeek}`]: updatedGames
+});
   
     } catch (e: any) {
       console.error("ESPN Score Sync Error:", e);
@@ -4350,7 +4387,45 @@ const handleResetFanatics = async () => {
   }
 };  
 const updateGameResult = (gameId: number, resultType: string, teamId: string) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { [`games.${selectedWeek}`]: games.map((g: any) => g.id !== gameId ? g : (resultType === 'upcoming' ? { ...g, status: 'upcoming', winner: null } : { ...g, status: 'final', winner: resultType === 'TIE' ? 'TIE' : teamId })) }));
-  const handleLockWeek = () => { const deadbeats: any[] = []; allUsers.forEach(u => { if (u.playsConfidence && (games.filter((g: any) => (u.picks?.[selectedWeek] || {})[g.id] && (u.ranks?.[selectedWeek] || {})[g.id]).length !== totalGames || String(u.tiebreakers?.[selectedWeek] || '').trim() === '')) deadbeats.push({ name: formatFullName(u), type: 'Fanatics' }); }); if (deadbeats.length > 0) setDeadbeatsToConfirm(deadbeats); else executeLockWeek(); };
+const handleLockWeek = async () => {
+  try {
+    setIsSaving(true);
+    // 🔒 Target selectedWeek explicitly
+    const targetWeek = selectedWeek || resultsSelectedWeek || liveSeasonWeek || 1;
+    
+    const targetGames = globalSettings?.games?.[targetWeek] || [];
+    const updates: any = {};
+
+    allUsers.forEach((u: any) => {
+      const userPicks = u.picks?.[targetWeek] || {};
+      const userRanks = u.ranks?.[targetWeek] || {};
+      const hasTiebreaker = String(u.tiebreakers?.[targetWeek] || '').trim() !== '';
+
+      const isMissingPicks = targetGames.some((g: any) => !userPicks[g.id] || !userRanks[g.id]) || !hasTiebreaker;
+
+      if (isMissingPicks) {
+        const deadbeatRanks: any = {};
+        targetGames.forEach((g: any) => {
+          deadbeatRanks[g.id] = 5;
+        });
+
+        updates[`players/${u.id}/ranks.${targetWeek}`] = deadbeatRanks;
+        updates[`players/${u.id}/tiebreakers.${targetWeek}`] = '0';
+      }
+    });
+
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+      [`weekStates.${targetWeek}`]: 'locked',
+      [`koWeekStates.${targetWeek}`]: 'locked'
+    });
+
+    setIsSaving(false);
+    alert(`Week ${targetWeek} locked!`);
+  } catch (err) {
+    console.error("Lock week failed:", err);
+    setIsSaving(false);
+  }
+};
   const executeLockWeek = async () => {
     const batch = writeBatch(db);
 
@@ -4560,11 +4635,18 @@ const handleCloseWeek = async () => {
 const handleOpenWeek = async () => {
   setIsSaving(true);
   try {
-    const targetWk = selectedWeek || liveSeasonWeek || 1;
+    // 🔒 Target selectedWeek (the week currently picked in the Admin dropdown)
+    const targetWk = selectedWeek || resultsSelectedWeek || liveSeasonWeek || 1;
+    
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
       [`weekStates.${targetWk}`]: 'open',
       [`koWeekStates.${targetWk}`]: 'open'
     });
+
+    // Sync local state variables so UI doesn't jump weeks
+    setPicksSelectedWeek(targetWk);
+    setResultsSelectedWeek(targetWk);
+
     setHasSaved(true);
     setTimeout(() => setHasSaved(false), 2000);
     alert(`Week ${targetWk} re-opened! Players can now submit/edit picks.`);
