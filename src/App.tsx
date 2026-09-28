@@ -2973,59 +2973,83 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
 
   useEffect(() => {
     if (!user) return;
+
     const unsubSettings = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setGlobalSettings({ ...data, maxActiveWeeks: data.maxActiveWeeks || 18 });
     
         const weekStates = data.weekStates || {};
-        const closedWeeks = Object.keys(weekStates).map(Number).filter(w => weekStates[w] === 'closed').sort((a, b) => b - a);
-        const activeWk = closedWeeks.length > 0 ? Math.min(closedWeeks[0] + 1, data.maxActiveWeeks || 18) : 1;
-    
-        // 🔒 Set liveSeasonWeek, but ONLY initialize selected week dropdowns on cold start!
-        // ✅ NEW UPDATED BLOCK
-setLiveSeasonWeek(activeWk);
 
-if (!dbReady) {
-  setPicksSelectedWeek(activeWk);
-  setResultsSelectedWeek(activeWk > 1 ? activeWk - 1 : 1);
-  setSelectedWeek(activeWk);
-  setDbReady(true); // Lock initial load flag
-}
+        // 🔒 Check if explicit activeWeek is set in settings, otherwise check weekStates
+        let activeWk = data.activeWeek;
+
+        if (!activeWk) {
+          // If Week 3 is NOT closed (i.e. 'open' or 'locked'), active week IS Week 3
+          if (weekStates[3] !== 'closed') {
+            activeWk = 3;
+          } else {
+            // Find highest closed week
+            const closedWeeks = Object.keys(weekStates)
+              .map(Number)
+              .filter(w => weekStates[w] === 'closed')
+              .sort((a, b) => b - a);
+
+            activeWk = closedWeeks.length > 0 ? Math.min(closedWeeks[0] + 1, data.maxActiveWeeks || 18) : 3;
+          }
+        }
+
+        setLiveSeasonWeek(activeWk);
+
+        if (!dbReady) {
+          setPicksSelectedWeek(activeWk);
+          setResultsSelectedWeek(3); // Anchors results to Week 3
+          setSelectedWeek(activeWk);
+          setDbReady(true);
+        }
       }
     });
+
     const unsubPlayers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'players'), async (snapshot) => {
-      if (snapshot.empty) { const batch = writeBatch(db); INITIAL_USERS.forEach(u => { batch.set(doc(collection(db, 'artifacts', appId, 'public', 'data', 'players'), u.id), u); }); await batch.commit(); } 
-      else { const loadedUsers: any[] = []; snapshot.forEach(d => loadedUsers.push(d.data())); setAllUsers(loadedUsers); }
-    });
-    return () => { unsubSettings(); unsubPlayers(); };
-  }, [user]);
-
-  useEffect(() => { 
-    if (globalSettings) { 
-      const weekStates = globalSettings?.weekStates || {};
-      
-      // Find all weeks that are locked or closed by the Admin
-      const lockedOrClosedWeeks = Object.keys(weekStates)
-        .map(Number)
-        .filter(w => weekStates[w] === 'locked' || weekStates[w] === 'closed')
-        .sort((a, b) => b - a);
-  
-      // Active picking week is highest locked/closed week + 1
-      const nextActiveWk = lockedOrClosedWeeks.length > 0 
-        ? Math.min(lockedOrClosedWeeks[0] + 1, globalSettings?.maxActiveWeeks || 18) 
-        : 1;
-  
-      setLiveSeasonWeek(nextActiveWk);
-  
-      // Automatically advance pick views when the current week gets locked/closed
-      if (!dbReady || picksSelectedWeek < nextActiveWk) {
-        setPicksSelectedWeek(nextActiveWk);
-        setResultsSelectedWeek(lockedOrClosedWeeks[0] || 1);
-        setDbReady(true); 
+      if (snapshot.empty) { 
+        const batch = writeBatch(db); 
+        INITIAL_USERS.forEach(u => { batch.set(doc(collection(db, 'artifacts', appId, 'public', 'data', 'players'), u.id), u); }); 
+        await batch.commit(); 
+      } else { 
+        const loadedUsers: any[] = []; 
+        snapshot.forEach(d => loadedUsers.push(d.data())); 
+        setAllUsers(loadedUsers); 
       }
-    } 
-  }, [globalSettings?.weekStates]);
+    });
+
+    return () => { unsubSettings(); unsubPlayers(); };
+  }, [user, dbReady]);
+
+// ✅ NEW (FIXED: Respects manual re-opens without overriding your state):
+useEffect(() => { 
+  if (globalSettings?.weekStates) { 
+    const weekStates = globalSettings.weekStates;
+    
+    // Find the highest week that is explicitly marked 'closed'
+    const closedWeeks = Object.keys(weekStates)
+      .map(Number)
+      .filter(w => weekStates[w] === 'closed')
+      .sort((a, b) => b - a);
+
+    // If Week 3 is open or locked (not closed), active week is 3
+    const activeWk = closedWeeks.length > 0 
+      ? Math.min(closedWeeks[0] + 1, globalSettings?.maxActiveWeeks || 18) 
+      : 3;
+
+    // Only set initial active week once on startup
+    if (!dbReady) {
+      setLiveSeasonWeek(activeWk);
+      setPicksSelectedWeek(activeWk);
+      setResultsSelectedWeek(closedWeeks[0] || 1);
+      setDbReady(true); 
+    }
+  } 
+}, [globalSettings?.weekStates, dbReady]);
 
   // 🔒 Auto-lock current week 1 hour before first game kickoff if not locked yet
 /*useEffect(() => {
@@ -4641,24 +4665,27 @@ const handleCloseWeek = async () => {
 const handleOpenWeek = async () => {
   setIsSaving(true);
   try {
-    // 🔒 Target selectedWeek (the week currently picked in the Admin dropdown)
-    const targetWk = selectedWeek || resultsSelectedWeek || liveSeasonWeek || 1;
-    
+    // 🔒 Force target explicitly to Week 3 (or the week selected in Admin)
+    const targetWk = selectedWeek || 3;
+
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
       [`weekStates.${targetWk}`]: 'open',
-      [`koWeekStates.${targetWk}`]: 'open'
+      [`weekStates.${String(targetWk)}`]: 'open',
+      [`koWeekStates.${targetWk}`]: 'open',
+      [`koWeekStates.${String(targetWk)}`]: 'open'
     });
 
-    // Sync local state variables so UI doesn't jump weeks
+    // 🟢 Pull all active view states back to Week 3
+    setLiveSeasonWeek(targetWk);
     setPicksSelectedWeek(targetWk);
     setResultsSelectedWeek(targetWk);
 
     setHasSaved(true);
     setTimeout(() => setHasSaved(false), 2000);
-    alert(`Week ${targetWk} re-opened! Players can now submit/edit picks.`);
-  } catch (e) {
+    alert(`Week ${targetWk} re-opened! Active week is now Week ${targetWk}.`);
+  } catch (e: any) {
     console.error("Error re-opening week:", e);
-    alert("Failed to re-open week.");
+    alert("Failed to re-open week: " + (e?.message || e));
   } finally {
     setIsSaving(false);
   }
