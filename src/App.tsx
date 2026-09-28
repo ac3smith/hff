@@ -3132,21 +3132,25 @@ const resultsGames = useMemo(() => {
 }, [globalSettings?.games, resultsSelectedWeek]);
 
 // ✅ RESTORED UNIFIED LOCK & DEADLINE CALCULATIONS:
+// -------------------------------------------------------------
+// 🏈 100% MANUAL ADMIN LOCK CONTROL
+// Timer is purely decorative; lock states depend ONLY on Firestore strings.
+// -------------------------------------------------------------
+
 const pickWeekState = globalSettings?.weekStates?.[picksSelectedWeek] || 'open';
+
+// 1. Picks lock ONLY when Firestore explicitly says 'locked' or 'closed' (Admins bypass)
+const isPickWeekLocked = !isAdmin && (pickWeekState === 'locked' || pickWeekState === 'closed');
+
+// 2. Purely visual countdown clock (never alters locking or pick submission)
 const targetPickGamesList = (pickGames && pickGames.length > 0) 
   ? pickGames 
   : (globalSettings?.games?.[picksSelectedWeek] || []);
-
 const pickLockdownTime = getLockdownTime(targetPickGamesList);
 
-// PURE MANUAL CONTROL BASED SOLELY ON FIRESTORE STATE
-const isPickWeekLocked = !isAdmin && (pickWeekState === 'locked' || pickWeekState === 'closed');
-
+// 3. Results/Board lock ONLY when Firestore explicitly says 'locked' or 'closed'
 const liveWeekState = globalSettings?.weekStates?.[liveSeasonWeek] || 'open';
 const currentWeekState = liveWeekState;
-const lockdownTime = getLockdownTime(games);
-
-// 🔒 REMOVED 'isPastLockdown' FROM OVERRIDING THE OPEN STATE:
 const isWeekLocked = liveWeekState === 'locked' || liveWeekState === 'closed';
 const isLiveSeasonWeekLocked = isWeekLocked;
 const isWeekClosed = currentWeekState === 'closed';
