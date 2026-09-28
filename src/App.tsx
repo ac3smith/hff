@@ -3002,28 +3002,30 @@ if (!dbReady) {
   }, [user]);
 
   useEffect(() => { 
-    if (globalSettings && allUsers.length > 0) { 
+    if (globalSettings) { 
       const weekStates = globalSettings?.weekStates || {};
-      const closedWeeks = Object.keys(weekStates)
+      
+      // Find all weeks that are locked or closed by the Admin
+      const lockedOrClosedWeeks = Object.keys(weekStates)
         .map(Number)
-        .filter(w => weekStates[w] === 'closed')
+        .filter(w => weekStates[w] === 'locked' || weekStates[w] === 'closed')
         .sort((a, b) => b - a);
-
-      // 1. Calculate active week (highest closed week + 1)
-      const activeWk = closedWeeks.length > 0 
-        ? Math.min(closedWeeks[0] + 1, globalSettings?.maxActiveWeeks || 18) 
+  
+      // Active picking week is highest locked/closed week + 1
+      const nextActiveWk = lockedOrClosedWeeks.length > 0 
+        ? Math.min(lockedOrClosedWeeks[0] + 1, globalSettings?.maxActiveWeeks || 18) 
         : 1;
-
-      // 2. Always sync liveSeasonWeek and picksSelectedWeek on initial data load
-      setLiveSeasonWeek(activeWk);
-
-      if (!dbReady) {
-        setPicksSelectedWeek(activeWk);
-        setResultsSelectedWeek(activeWk > 1 ? activeWk - 1 : 1);
+  
+      setLiveSeasonWeek(nextActiveWk);
+  
+      // Automatically advance pick views when the current week gets locked/closed
+      if (!dbReady || picksSelectedWeek < nextActiveWk) {
+        setPicksSelectedWeek(nextActiveWk);
+        setResultsSelectedWeek(lockedOrClosedWeeks[0] || 1);
         setDbReady(true); 
       }
     } 
-  }, [globalSettings, allUsers]);
+  }, [globalSettings?.weekStates]);
 
   // 🔒 Auto-lock current week 1 hour before first game kickoff if not locked yet
 /*useEffect(() => {
