@@ -14,11 +14,9 @@ function getProjectedWinner(game: any) {
   return null;
 }
 
-// Exact Live Scores Ticker component logic from App.tsx
 function LiveScoreTicker({ games }: any) {
   if (!games || games.length === 0) return null;
 
-  // Finished games sorted to the end of the scroll container
   const sortedGames = useMemo(() => {
     return [...games].sort((a: any, b: any) => {
       const getOrder = (status: string) => {
@@ -128,23 +126,31 @@ function LiveTrackerCell({ game, pick, rank, isProjection }: any) {
   );
 }
 
-export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser, isWeekLocked, adminForceReveal, globalSettings, getCanonicalTeamCode }: any) {
+export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser, isWeekLocked, adminForceReveal, globalSettings }: any) {
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [isProjection, setIsProjection] = useState<boolean>(false);
 
   const processedData = useMemo(() => {
     if (!data || !Array.isArray(data)) return [];
 
-    const actualTB = globalSettings?.actualTiebreakers?.[week] ?? 0;
+    const actualTB = globalSettings?.actualTiebreakers?.[week] ?? globalSettings?.actualTiebreakers?.[String(week)] ?? 0;
     const targetGames = games || [];
     const standardMaxPossible = targetGames.reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
 
     const processed = data
       .filter((u: any) => Boolean(u?.playsConfidence) && String(u?.paymentStatus) !== 'disqualified')
       .map((u: any) => {
-        let userPicks = (u && u.picks && u.picks[week]) ? { ...u.picks[week] } : {};
-        let userRanks = (u && u.ranks && u.ranks[week]) ? { ...u.ranks[week] } : {};
-        const userTBStr = String((u && u.tiebreakers && u.tiebreakers[week]) || '').trim();
+        const userPicksRaw = u?.picks?.[week] ?? u?.picks?.[String(week)] ?? u?.picks?.[Number(week)] ?? {};
+        const userRanksRaw = u?.ranks?.[week] ?? u?.ranks?.[String(week)] ?? u?.ranks?.[Number(week)] ?? {};
+
+        let userPicks = { ...userPicksRaw };
+        let userRanks = { ...userRanksRaw };
+
+        const userTBStr = String(
+          u?.tiebreakers?.[week] ?? 
+          u?.tiebreakers?.[String(week)] ?? 
+          u?.tiebreakers?.[Number(week)] ?? ''
+        ).trim();
         const userTB = parseInt(userTBStr || '0', 10);
 
         const isDeadbeat =
@@ -192,13 +198,16 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
           projectedScore: activeScore,
           tbDiff,
           userPicks,
-          userRanks
+          userRanks,
+          userTB
         };
       });
 
     processed.sort((a: any, b: any) => {
       if (b.activeScore !== a.activeScore) return b.activeScore - a.activeScore;
-      if (isWeekComplete && !isProjection && a.tbDiff !== b.tbDiff) return a.tbDiff - b.tbDiff;
+      if (actualTB > 0 && a.tbDiff !== b.tbDiff) {
+        return a.tbDiff - b.tbDiff;
+      }
       const nameA = `${a.firstName} ${a.lastName}`.trim();
       const nameB = `${b.firstName} ${b.lastName}`.trim();
       return nameA.localeCompare(nameB);
@@ -209,10 +218,11 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
       const activeScore = u.activeScore;
       const prevScore = i > 0 ? processed[i - 1].activeScore : null;
 
-      if (i > 0 && activeScore < prevScore) {
-        currentRank = i + 1;
-      } else if (isWeekComplete && !isProjection && i > 0 && activeScore === prevScore && u.tbDiff !== processed[i - 1].tbDiff) {
-        currentRank = i + 1;
+      if (i > 0) {
+        const prevUser = processed[i - 1];
+        if (activeScore < prevScore || (actualTB > 0 && u.tbDiff > prevUser.tbDiff)) {
+          currentRank = i + 1;
+        }
       }
 
       u.projectedRank = currentRank;
@@ -225,8 +235,8 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
   const highStakesGames = useMemo(() => {
     if (!currentUser || !games) return [];
     
-    const myPicks = currentUser.picks?.[week] || {};
-    const myRanks = currentUser.ranks?.[week] || {};
+    const myPicks = currentUser.picks?.[week] || currentUser.picks?.[String(week)] || {};
+    const myRanks = currentUser.ranks?.[week] || currentUser.ranks?.[String(week)] || {};
 
     return games
       .filter((g: any) => g.status === 'in_progress' || g.status === 'scheduled')
@@ -240,8 +250,13 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
       .slice(0, 3);
   }, [currentUser, games, week]);
 
-  const actualTB = globalSettings?.actualTiebreakers?.[week] ?? undefined;
-  const isWeekStateLocked = globalSettings?.weekStates?.[week] === 'locked' || globalSettings?.weekStates?.[week] === 'closed';
+  const actualTB = globalSettings?.actualTiebreakers?.[week] ?? globalSettings?.actualTiebreakers?.[String(week)] ?? undefined;
+  const isWeekStateLocked = globalSettings?.weekStates?.[week] === 'locked' || 
+                            globalSettings?.weekStates?.[week] === 'closed' ||
+                            globalSettings?.weekStates?.[String(week)] === 'locked' ||
+                            globalSettings?.weekStates?.[String(week)] === 'closed';
+
+  const tbGame = (games || []).find((g: any) => g.isTiebreaker) || (games || [])[(games || []).length - 1];
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -365,31 +380,25 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
           </div>
         </div>
 
-        {(() => {
-          const tbGame = (games || []).find((g: any) => g.isTiebreaker) || games?.[games.length - 1];
-
-          return (
-            <div className="bg-slate-900 text-white p-3 sm:p-4 border-b-2 border-[#FFB81C] flex items-center justify-between px-4 sm:px-6">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <Target className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFB81C]" />
-                <div>
-                  <h4 className="font-black uppercase italic text-xs sm:text-sm text-[#FFB81C] flex items-center gap-1.5">
-                    Official Tiebreaker
-                  </h4>
-                  <p className="text-[10px] sm:text-xs text-slate-400 font-bold truncate max-w-[180px] sm:max-w-none">
-                    {tbGame ? `${tbGame.awayName || tbGame.away} @ ${tbGame.homeName || tbGame.home}` : 'Last Game'}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <span className="text-[9px] sm:text-[10px] font-black uppercase text-slate-400 block">Total</span>
-                <span className="text-sm sm:text-lg font-black italic text-[#FFB81C] font-mono">
-                  {actualTB !== undefined && actualTB !== null && actualTB > 0 ? `${actualTB} PTS` : 'Pending'}
-                </span>
-              </div>
+        <div className="bg-slate-900 text-white p-3 sm:p-4 border-b-2 border-[#FFB81C] flex items-center justify-between px-4 sm:px-6">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Target className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFB81C]" />
+            <div>
+              <h4 className="font-black uppercase italic text-xs sm:text-sm text-[#FFB81C] flex items-center gap-1.5">
+                Official Tiebreaker
+              </h4>
+              <p className="text-[10px] sm:text-xs text-slate-400 font-bold truncate max-w-[180px] sm:max-w-none">
+                {tbGame ? `${tbGame.awayName || tbGame.away} @ ${tbGame.homeName || tbGame.home}` : 'Last Game'}
+              </p>
             </div>
-          );
-        })()}
+          </div>
+          <div className="text-right">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase text-slate-400 block">Total</span>
+            <span className="text-sm sm:text-lg font-black italic text-[#FFB81C] font-mono">
+              {actualTB !== undefined && actualTB !== null && actualTB > 0 ? `${actualTB} PTS` : 'Pending'}
+            </span>
+          </div>
+        </div>
 
         {viewMode === 'table' ? (
           <div className="overflow-x-auto scrollbar-hide relative z-0 overscroll-x-contain" style={{ touchAction: 'pan-x pan-y', WebkitOverflowScrolling: 'touch' }}>
@@ -486,7 +495,7 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
                       </td>
                       <td className={`p-1 text-center text-[10px] sm:text-xs font-bold text-slate-700 italic border-r border-slate-100 ${isMe ? 'bg-[#FFB81C]/20' : isProjection ? 'bg-amber-50' : 'bg-white'}`}>
                         <span className="text-slate-600 font-mono">
-                          {String(user.tiebreakers?.[week] || user.userTB || '—')}
+                          {String(user.userTB || user.tiebreakers?.[week] || '—')}
                         </span>
                       </td>
                     </tr>
@@ -496,11 +505,10 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
             </table>
           </div>
         ) : (
-          /* MY GAMES CARD VIEW */
           <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {(() => {
-              const myPicks = currentUser?.picks?.[week] || {};
-              const myRanks = currentUser?.ranks?.[week] || {};
+              const myPicks = currentUser?.picks?.[week] || currentUser?.picks?.[String(week)] || {};
+              const myRanks = currentUser?.ranks?.[week] || currentUser?.ranks?.[String(week)] || {};
 
               if (!games || games.length === 0) {
                 return (

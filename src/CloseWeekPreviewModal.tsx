@@ -159,7 +159,7 @@ export function CloseWeekPreviewModal({
       calculatedPayout: u.grossPayout || 0,
       isTied: Boolean(u.isTied),
       tiedCount: u.isTied ? processed.filter(x => x.score === u.score && x.tbDiff === u.tbDiff).length : 1
-    })).slice(0, 8);
+    })).filter((u: any) => (u.grossPayout || 0) > 0 || u.rank <= 8);
 
   }, [allUsers, games, selectedWeek, overrideTBScore, globalSettings]);
 

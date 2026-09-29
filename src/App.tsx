@@ -2779,46 +2779,31 @@ function MainApp() {
 const handleFinalizeCloseWeek = async (finalData: any) => {
   setIsSaving(true);
   try {
-    const { week, finalTiebreakerScore, winners } = finalData;
+    const { week, finalTiebreakerScore } = finalData;
     const batch = writeBatch(db);
 
-    // 🔒 DYNAMIC PAYOUT CALCULATION MATCHING FINANCIALS PAGE
+    // A. Filter active confidence users
     const activeConfidenceUsers = allUsers.filter((u: any) => 
       Boolean(u?.playsConfidence) && String(u?.paymentStatus) !== 'disqualified'
     );
     const activeCount = activeConfidenceUsers.length;
+
+    // B. Calculate dynamic gross weekly payout matrix
     const matrix = calculateFanaticsPayouts(activeCount, maxActiveWeeks);
     const dynamicWeeklyPayouts = matrix.weeklyGross;
 
-    // A. Lock/Close week state & save official tiebreaker
-    batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-      [`weekStates.${week}`]: 'closed',
-      [`actualTiebreakers.${week}`]: finalTiebreakerScore,
-      [`weeklyWinners.${week}`]: winners
-    });
-
-    // B. Map top 8 calculated gross payouts for quick lookup by user ID
-    const payoutMap: { [userId: string]: number } = {};
-    (winners || []).forEach((w: any) => {
-      payoutMap[w.id] = w.calculatedPayout || 0;
-    });
-
-    // C. Compute points & record exact NET EARNINGS (-$12 for non-winners, Gross - $12 for winners)
     const standardMaxPossible = (games || []).reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
 
-    allUsers.forEach((u: any) => {
-      if (!u.playsConfidence) return;
-
+    // C. Process scores and tiebreakers for all active users
+    const processed = activeConfidenceUsers.map((u: any) => {
       const userPicks = u.picks?.[week] || {};
       const userRanks = u.ranks?.[week] || {};
 
-      // Deadbeat check
       const isDeadbeat = u.tiebreakers?.[week] === '0' || 
         ((games || []).length > 0 && (games || []).every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
 
       const userMaxPossible = isDeadbeat ? (games || []).length * 5 : standardMaxPossible;
 
-      // Calculate points lost on incorrect picks
       const pointsLost = (games || []).reduce((lost: number, g: any) => {
         const pick = userPicks[g.id];
         const rank = parseInt(userRanks[g.id] || 0, 10);
@@ -2831,19 +2816,46 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
       }, 0);
 
       const earnedPoints = userMaxPossible - pointsLost;
-      const grossPrize = payoutMap[u.id] || 0;
-      
-      // 🔒 NET CALCULATION: Gross Award minus $12 weekly dues
+      const tbGuess = parseInt(u.tiebreakers?.[week] || '0', 10);
+      const tbDiff = Math.abs(tbGuess - finalTiebreakerScore);
+
+      return {
+        ...u,
+        score: earnedPoints,
+        tbDiff
+      };
+    });
+
+    // D. Sort: Score Descending -> TB Diff Ascending -> Alphabetical
+    processed.sort((a: any, b: any) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.tbDiff !== b.tbDiff) return a.tbDiff - b.tbDiff;
+      return String(a.lastName || '').localeCompare(String(b.lastName || ''));
+    });
+
+    // E. Run tied payout engine directly on processed array
+    calculateTiedPayouts(processed, dynamicWeeklyPayouts);
+
+    // F. Lock/Close week state & save official tiebreaker
+    batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
+      [`weekStates.${week}`]: 'closed',
+      [`actualTiebreakers.${week}`]: finalTiebreakerScore,
+      [`weeklyWinners.${week}`]: processed.filter((u: any) => u.grossPayout > 0)
+    });
+
+    // G. Write calculated NET EARNINGS to Firestore for EVERY player
+    processed.forEach((u: any) => {
+      const grossPrize = u.grossPayout || 0;
       const netFantasyEarnings = grossPrize > 0 ? grossPrize - 12 : -12;
 
       const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id);
       batch.update(userRef, {
-        [`weeklyConfidenceHistory.${week}`]: earnedPoints,
+        [`weeklyConfidenceHistory.${week}`]: u.score,
         [`weeklyFantasyHistory.${week}`]: netFantasyEarnings
       });
     });
 
-    // D. Process Knockout Pool Statuses
+    // H. Process Knockout Pool Statuses
     allUsers.forEach((u: any) => {
       if (u.playsKnockout) {
         const pick = u.knockoutPicks?.[week];
@@ -2864,17 +2876,14 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
 
     await batch.commit();
 
-    // 🔒 SAFE WEEK ADVANCE: Advance active week views
     const nextWeek = Math.min(week + 1, maxActiveWeeks);
-
-    // Ensure next week's state remains open in settings if uninitialized
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
       [`weekStates.${nextWeek}`]: globalSettings?.weekStates?.[nextWeek] || 'open'
     });
 
     setLiveSeasonWeek(nextWeek);
     setPicksSelectedWeek(nextWeek);
-    setResultsSelectedWeek(week); // Keep settled view anchored to closed week
+    setResultsSelectedWeek(week);
 
     alert(`Week ${week} finalized! App view has advanced to Week ${nextWeek}.`);
   } catch (e) {
@@ -2982,31 +2991,29 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
         const weekStates = data.weekStates || {};
 
         // 🔒 Check if explicit activeWeek is set in settings, otherwise check weekStates
-        let activeWk = data.activeWeek;
+        // ✅ FULLY DYNAMIC ACTIVE WEEK RESOLUTION:
+const closedWeeks = Object.keys(weekStates)
+.map(Number)
+.filter(w => weekStates[w] === 'closed')
+.sort((a, b) => b - a);
 
-        if (!activeWk) {
-          // If Week 3 is NOT closed (i.e. 'open' or 'locked'), active week IS Week 3
-          if (weekStates[3] !== 'closed') {
-            activeWk = 3;
-          } else {
-            // Find highest closed week
-            const closedWeeks = Object.keys(weekStates)
-              .map(Number)
-              .filter(w => weekStates[w] === 'closed')
-              .sort((a, b) => b - a);
+let activeWk = data.activeWeek;
+if (!activeWk) {
+// Automatically advance active week to (Highest Closed Week + 1)
+activeWk = closedWeeks.length > 0 
+  ? Math.min(closedWeeks[0] + 1, data.maxActiveWeeks || 18) 
+  : 1;
+}
 
-            activeWk = closedWeeks.length > 0 ? Math.min(closedWeeks[0] + 1, data.maxActiveWeeks || 18) : 3;
-          }
-        }
+setLiveSeasonWeek(activeWk);
 
-        setLiveSeasonWeek(activeWk);
-
-        if (!dbReady) {
-          setPicksSelectedWeek(activeWk);
-          setResultsSelectedWeek(3); // Anchors results to Week 3
-          setSelectedWeek(activeWk);
-          setDbReady(true);
-        }
+if (!dbReady) {
+setPicksSelectedWeek(activeWk);
+// Default F-Results view to the most recently closed week (or active week if Week 1)
+setResultsSelectedWeek(closedWeeks[0] || activeWk);
+setSelectedWeek(activeWk);
+setDbReady(true);
+}
       }
     });
 
@@ -3026,26 +3033,24 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
   }, [user, dbReady]);
 
 // ✅ NEW (FIXED: Respects manual re-opens without overriding your state):
+// ✅ CLEAN DYNAMIC SYNC EFFECT:
 useEffect(() => { 
   if (globalSettings?.weekStates) { 
     const weekStates = globalSettings.weekStates;
     
-    // Find the highest week that is explicitly marked 'closed'
     const closedWeeks = Object.keys(weekStates)
       .map(Number)
       .filter(w => weekStates[w] === 'closed')
       .sort((a, b) => b - a);
 
-    // If Week 3 is open or locked (not closed), active week is 3
     const activeWk = closedWeeks.length > 0 
       ? Math.min(closedWeeks[0] + 1, globalSettings?.maxActiveWeeks || 18) 
-      : 3;
+      : 1;
 
-    // Only set initial active week once on startup
     if (!dbReady) {
       setLiveSeasonWeek(activeWk);
       setPicksSelectedWeek(activeWk);
-      setResultsSelectedWeek(closedWeeks[0] || 1);
+      setResultsSelectedWeek(closedWeeks[0] || activeWk);
       setDbReady(true); 
     }
   } 
@@ -3079,19 +3084,22 @@ useEffect(() => {
   const interval = setInterval(checkAutoLock, 30000);
   return () => clearInterval(interval);
 }, [picksSelectedWeek, globalSettings, isAdmin]);
-
-  useEffect(() => {
-    if (!globalSettings?.weekStates) return;
-    const currentWeekState = globalSettings.weekStates[liveSeasonWeek] || 'open';
-    if (currentWeekState === 'locked' || currentWeekState === 'closed') {
-      const nextWeek = Math.min(liveSeasonWeek + 1, globalSettings?.maxActiveWeeks || 18);
-      // Only auto-advance if user hasn't manually selected a future week
-      if (picksSelectedWeek <= liveSeasonWeek) {
-        setPicksSelectedWeek(nextWeek);
-      }
-    }
-  }, [globalSettings?.weekStates, liveSeasonWeek]);
 */
+  // ✅ AUTO-ADVANCE DASHBOARD TARGET WHEN WEEK IS LOCKED/CLOSED:
+useEffect(() => {
+  if (!globalSettings?.weekStates) return;
+
+  const currentWeekState = globalSettings.weekStates[liveSeasonWeek] || 'open';
+  
+  if (currentWeekState === 'locked' || currentWeekState === 'closed') {
+    const nextWeek = Math.min(liveSeasonWeek + 1, globalSettings?.maxActiveWeeks || 18);
+    // If the user hasn't explicitly selected an advance week, auto-advance their target
+    if (picksSelectedWeek <= liveSeasonWeek) {
+      setPicksSelectedWeek(nextWeek);
+    }
+  }
+}, [globalSettings?.weekStates, liveSeasonWeek, picksSelectedWeek]);
+
   useEffect(() => { setAdminForceReveal(false); }, [selectedWeek]);
 
 
@@ -3128,8 +3136,9 @@ const games = useMemo(() => {
 const pickGames = useMemo(() => {
   if (!globalSettings?.games) return [];
   
-  // Directly pull the games for the selected pick week
-  const rawGames = globalSettings.games[picksSelectedWeek] || globalSettings.games[String(picksSelectedWeek)] || [];
+  // Check both number key and string key
+  const rawGames = globalSettings.games[picksSelectedWeek] || 
+                   globalSettings.games[String(picksSelectedWeek)] || [];
   if (!Array.isArray(rawGames) || rawGames.length === 0) return [];
 
   const sorted = [...rawGames].sort((a: any, b: any) => {
@@ -3144,13 +3153,17 @@ const pickGames = useMemo(() => {
 
 // Games for F-Results & KO-Results Tabs (Pulls schedule for resultsSelectedWeek)
 const resultsGames = useMemo(() => {
-  const rawGames = globalSettings?.games?.[resultsSelectedWeek] || [];
+  // Check both number key (2) and string key ("2")
+  const rawGames = globalSettings?.games?.[resultsSelectedWeek] || 
+                   globalSettings?.games?.[String(resultsSelectedWeek)] || [];
   if (rawGames.length === 0) return [];
+
   const sorted = [...rawGames].sort((a: any, b: any) => {
     const timeA = new Date(`${a.apiDate || a.date} ${a.time}`).getTime() || 0;
     const timeB = new Date(`${b.apiDate || b.date} ${b.time}`).getTime() || 0;
     return timeA - timeB;
   });
+
   const lastGameId = sorted[sorted.length - 1]?.id;
   return sorted.map((g: any) => ({ ...g, isTiebreaker: g.id === lastGameId }));
 }, [globalSettings?.games, resultsSelectedWeek]);
@@ -3340,9 +3353,15 @@ const isWeekClosed = currentWeekState === 'closed';
       const midPoint = Math.ceil(maxWeeks / 2); // Split 1st half and 2nd half dynamically
 
       for (let wk = 1; wk <= maxWeeks; wk++) {
-        if (globalSettings.weekStates?.[wk] === 'closed') {
-          const cp = parseFloat(user.weeklyConfidenceHistory?.[wk]) || 0;
-          const fp = parseFloat(user.weeklyFantasyHistory?.[wk]) || -12;
+        const wkState = globalSettings?.weekStates?.[wk] || globalSettings?.weekStates?.[String(wk)];
+
+        if (wkState === 'closed') {
+          const cpVal = user.weeklyConfidenceHistory?.[wk] ?? user.weeklyConfidenceHistory?.[String(wk)];
+          const fpVal = user.weeklyFantasyHistory?.[wk] ?? user.weeklyFantasyHistory?.[String(wk)];
+
+          const cp = cpVal !== undefined && cpVal !== null ? parseFloat(cpVal) : 0;
+          // Use nullish coalescing (??) so an explicit 0 is preserved instead of falling back to -12
+          const fp = fpVal !== undefined && fpVal !== null ? parseFloat(fpVal) : -12;
 
           if (wk <= midPoint) {
             cp1 += cp;
@@ -4416,7 +4435,29 @@ const handleResetFanatics = async () => {
     setShowFanaticsResetConfirm(false);
   }
 };  
-const updateGameResult = (gameId: number, resultType: string, teamId: string) => trackSaving(updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { [`games.${selectedWeek}`]: games.map((g: any) => g.id !== gameId ? g : (resultType === 'upcoming' ? { ...g, status: 'upcoming', winner: null } : { ...g, status: 'final', winner: resultType === 'TIE' ? 'TIE' : teamId })) }));
+const updateGameResult = (gameId: number, resultType: string, teamId: string) => {
+  // Explicitly target the week currently selected in the admin dropdown
+  const targetWk = resultsSelectedWeek || selectedWeek || liveSeasonWeek;
+  const currentWeekGames = globalSettings?.games?.[targetWk] || resultsGames || games || [];
+
+  const updatedGames = currentWeekGames.map((g: any) => {
+    if (g.id !== gameId) return g;
+    if (resultType === 'upcoming') {
+      return { ...g, status: 'upcoming', winner: null, homeScore: null, awayScore: null };
+    }
+    return { 
+      ...g, 
+      status: 'final', 
+      winner: resultType === 'TIE' ? 'TIE' : teamId 
+    };
+  });
+
+  trackSaving(
+    updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { 
+      [`games.${targetWk}`]: updatedGames 
+    })
+  );
+};
 const handleLockWeek = async () => {
   try {
     setIsSaving(true);
@@ -4662,11 +4703,11 @@ const handleCloseWeek = async () => {
     setIsSaving(false);
   }
 };
+// ✅ DYNAMIC RE-OPEN TARGET:
 const handleOpenWeek = async () => {
   setIsSaving(true);
   try {
-    // 🔒 Force target explicitly to Week 3 (or the week selected in Admin)
-    const targetWk = selectedWeek || 3;
+    const targetWk = selectedWeek || liveSeasonWeek;
 
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
       [`weekStates.${targetWk}`]: 'open',
@@ -4675,7 +4716,6 @@ const handleOpenWeek = async () => {
       [`koWeekStates.${String(targetWk)}`]: 'open'
     });
 
-    // 🟢 Pull all active view states back to Week 3
     setLiveSeasonWeek(targetWk);
     setPicksSelectedWeek(targetWk);
     setResultsSelectedWeek(targetWk);
