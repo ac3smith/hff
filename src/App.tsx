@@ -3360,7 +3360,7 @@ const isWeekClosed = currentWeekState === 'closed';
           const fpVal = user.weeklyFantasyHistory?.[wk] ?? user.weeklyFantasyHistory?.[String(wk)];
 
           const cp = cpVal !== undefined && cpVal !== null ? parseFloat(cpVal) : 0;
-          // Use nullish coalescing (??) so an explicit 0 is preserved instead of falling back to -12
+          // Use nullish coalescing so an explicit 0 payout is kept as 0 instead of defaulting to -12
           const fp = fpVal !== undefined && fpVal !== null ? parseFloat(fpVal) : -12;
 
           if (wk <= midPoint) {
