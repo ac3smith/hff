@@ -4535,7 +4535,7 @@ const handleLockWeek = async () => {
 };
 
 
-  // 📍 2. DIRECT CLOSE WEEK (ADMIN ACTION) 📍
+  // 📍 2. DIRECT CLOSE WEEK (ADMIN ACTION) 
 const handleCloseWeek = async () => {
   setIsSaving(true);
   try {
