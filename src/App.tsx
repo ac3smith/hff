@@ -4463,11 +4463,13 @@ const handleLockWeek = async () => {
     setIsSaving(true);
     // 🔒 Target selectedWeek explicitly
     const targetWeek = selectedWeek || resultsSelectedWeek || liveSeasonWeek || 1;
-    
     const targetGames = globalSettings?.games?.[targetWeek] || [];
-    const updates: any = {};
+    
+    const batch = writeBatch(db);
 
+    // 1. Process Confidence Deadbeats
     allUsers.forEach((u: any) => {
+      if (!u.playsConfidence) return;
       const userPicks = u.picks?.[targetWeek] || {};
       const userRanks = u.ranks?.[targetWeek] || {};
       const hasTiebreaker = String(u.tiebreakers?.[targetWeek] || '').trim() !== '';
@@ -4477,78 +4479,28 @@ const handleLockWeek = async () => {
       if (isMissingPicks) {
         const deadbeatRanks: any = {};
         targetGames.forEach((g: any) => {
-          deadbeatRanks[g.id] = 5;
+          deadbeatRanks[g.id] = 5; // Apply 5-point deadbeat penalty
         });
 
-        updates[`players/${u.id}/ranks.${targetWeek}`] = deadbeatRanks;
-        updates[`players/${u.id}/tiebreakers.${targetWeek}`] = '0';
-      }
-    });
-
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-      [`weekStates.${targetWeek}`]: 'locked',
-      [`koWeekStates.${targetWeek}`]: 'locked'
-    });
-
-    setIsSaving(false);
-    alert(`Week ${targetWeek} locked!`);
-  } catch (err) {
-    console.error("Lock week failed:", err);
-    setIsSaving(false);
-  }
-};
-  const executeLockWeek = async () => {
-    const batch = writeBatch(db);
-
-    // 1. Process Confidence deadbeats
-    allUsers.forEach((u) => {
-      if (u.playsKnockout) {
-        const pick = u.knockoutPicks?.[selectedWeek];
-        let status = 'Undecided';
-    
-        if (!pick) {
-          status = 'No Pick';
-        } else {
-          const game = games.find((g: any) => {
-            const awayCode = getCanonicalTeamCode(g.away);
-            const homeCode = getCanonicalTeamCode(g.home);
-            const pickCode = getCanonicalTeamCode(pick);
-            return awayCode === pickCode || homeCode === pickCode;
-          });
-    
-          const isGameFinal = String(game?.status || '').toLowerCase() === 'final';
-    
-          if (game && isGameFinal) {
-            const winnerCode = getCanonicalTeamCode(game.winner);
-            const pickCode = getCanonicalTeamCode(pick);
-    
-            if (winnerCode === 'TIE' || winnerCode !== pickCode) {
-              status = 'Loser';
-            } else {
-              status = 'Winner';
-            }
-          } else {
-            // Game has not finished yet = Undecided (Player stays Alive)
-            status = 'Undecided';
-          }
-        }
-    
-        batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), {
-          [`knockoutStatuses.${selectedWeek}`]: status
+        // Write the deadbeat penalty directly to the user's document
+        const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id);
+        batch.update(userRef, {
+          [`ranks.${targetWeek}`]: deadbeatRanks,
+          [`tiebreakers.${targetWeek}`]: '0'
         });
       }
     });
 
-    // 2. Process Knockout statuses safely
+    // 2. Process Knockout Statuses (Lock them in as 'Alive' or 'No Pick')
     allUsers.forEach((u) => {
       if (u.playsKnockout) {
-        const pick = u.knockoutPicks?.[selectedWeek];
+        const pick = u.knockoutPicks?.[targetWeek];
         let status = 'Undecided';
 
         if (!pick) {
           status = 'No Pick';
         } else {
-          const game = games.find((g: any) => g.away === pick || g.home === pick);
+          const game = targetGames.find((g: any) => g.away === pick || g.home === pick);
           if (game && game.status === 'final') {
             status = game.winner === 'TIE' ? 'Loser' : (game.winner === pick ? 'Winner' : 'Loser');
           } else {
@@ -4556,28 +4508,31 @@ const handleLockWeek = async () => {
           }
         }
 
-        batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id), {
-          [`knockoutStatuses.${selectedWeek}`]: status
+        const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id);
+        batch.update(userRef, {
+          [`knockoutStatuses.${targetWeek}`]: status
         });
       }
     });
 
-    // 3. Lock week state
-    batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-      [`weekStates.${selectedWeek}`]: 'locked'
+    // 3. Lock the Week Globally
+    const globalRef = doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global');
+    batch.update(globalRef, {
+      [`weekStates.${targetWeek}`]: 'locked',
+      [`koWeekStates.${targetWeek}`]: 'locked'
     });
 
-    setIsSaving(true);
-    try {
-      await batch.commit();
-    } catch (e) {
-      console.error(e);
-    }
+    // Commit everything at once safely
+    await batch.commit();
+
     setIsSaving(false);
-    setHasSaved(true);
-    setTimeout(() => setHasSaved(false), 2000);
-    setDeadbeatsToConfirm(null);
-  };
+    alert(`Week ${targetWeek} successfully locked! Deadbeats processed and all picks are now revealed.`);
+  } catch (err) {
+    console.error("Lock week failed:", err);
+    setIsSaving(false);
+    alert("Failed to lock week. Check console logs.");
+  }
+};
 
 
   // 📍 2. DIRECT CLOSE WEEK (ADMIN ACTION) 📍
