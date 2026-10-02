@@ -815,84 +815,139 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
 
   // Calculate confidence points for each user based on games
   const processedData = useMemo(() => {
-    if (!data) return [];
-    
-    // 1. Calculate max possible points (standard vs deadbeat)
-    const standardMaxPossible = (games || []).reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
-    const hasActiveLiveGames = (games || []).some((g: any) => {
-      const status = String(g.status || '').toLowerCase();
-      const isLive = ['in_progress', 'ht', 'q1', 'q2', 'q3', 'q4', 'ot', 'live', 'halftime'].includes(status);
-      const hasScores = (g.awayScore !== null && g.awayScore !== undefined) || (g.homeScore !== null && g.homeScore !== undefined);
-      return isLive || (hasScores && g.status !== 'final');
-    });
-    // 2. Calculate score per user
-    const calculated = data.map((user: any) => {
-      const userPicks = user.picks?.[week] || {};
-      const userRanks = user.ranks?.[week] || {};
+    if (!data || !Array.isArray(data)) return [];
 
-      // Check if player is a deadbeat
-      const isDeadbeat = user.tiebreakers?.[week] === '0' || 
-        ((games || []).length > 0 && (games || []).every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
+    const actualTB = globalSettings?.actualTiebreakers?.[week] ?? globalSettings?.actualTiebreakers?.[String(week)] ?? 0;
+    const targetGames = games || [];
+    const standardMaxPossible = targetGames.reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
 
-      const userMaxPossible = isDeadbeat ? (games || []).length * 5 : standardMaxPossible;
+    const processed = data
+      .filter((u: any) => Boolean(u?.playsConfidence) && String(u?.paymentStatus) !== 'disqualified')
+      .map((u: any) => {
+        const userPicksRaw = u?.picks?.[week] ?? u?.picks?.[String(week)] ?? u?.picks?.[Number(week)] ?? {};
+        const userRanksRaw = u?.ranks?.[week] ?? u?.ranks?.[String(week)] ?? u?.ranks?.[Number(week)] ?? {};
 
-      const pointsLost = (games || []).reduce((lost: number, g: any) => {
-        const pick = userPicks[g.id];
-        const rank = parseInt(userRanks[g.id] || 0, 10);
+        let userPicks = { ...userPicksRaw };
+        let userRanks = { ...userRanksRaw };
 
-        if (!pick || !rank) return lost;
+        const userTBStr = String(
+          u?.tiebreakers?.[week] ?? 
+          u?.tiebreakers?.[String(week)] ?? 
+          u?.tiebreakers?.[Number(week)] ?? ''
+        ).trim();
+        const userTB = parseInt(userTBStr || '0', 10);
 
-        const projWinner = getProjectedWinner(g);
-        const activeWinner = isProjection 
-          ? (g.status === 'final' ? g.winner : projWinner) 
-          : (g.status === 'final' ? g.winner : null);
+        const isDeadbeat =
+          userTBStr === '0' ||
+          (targetGames.length > 0 &&
+            targetGames.every((g: any) => {
+              const r = parseInt(String(userRanks[g.id] || userRanks[String(g.id)] || 0), 10);
+              return r === 5;
+            }));
 
-        if (activeWinner && pick !== activeWinner) {
-          return lost + rank;
+        if (isDeadbeat) {
+          targetGames.forEach((g: any) => {
+            if (!userRanks[g.id] && !userRanks[String(g.id)]) userRanks[g.id] = 5;
+            if (!userPicks[g.id] && !userPicks[String(g.id)]) userPicks[g.id] = 'DB';
+          });
         }
 
-        return lost;
-      }, 0);
+        const userMaxPossible = isDeadbeat ? targetGames.length * 5 : standardMaxPossible;
 
-      const activeScore = userMaxPossible - pointsLost;
+        // 1. Calculate points lost
+        const pointsLost = targetGames.reduce((lost: number, g: any) => {
+          const pick = userPicks[g.id] || userPicks[String(g.id)];
+          const rank = parseInt(String(userRanks[g.id] || userRanks[String(g.id)] || 0), 10);
 
-      return {
-        ...user,
-        activeScore,
-        confidenceScore: activeScore,
-        projectedScore: activeScore
-      };
-    });
+          if (!pick || !rank) return lost;
 
-    // 3. Sort by Points descending
-    calculated.sort((a: any, b: any) => {
+          const projWinner = getProjectedWinner(g);
+          const activeWinner = isProjection 
+            ? (g.status === 'final' ? g.winner : projWinner) 
+            : (g.status === 'final' ? g.winner : null);
+
+          if (activeWinner && pick !== activeWinner) {
+            return lost + rank;
+          }
+
+          return lost;
+        }, 0);
+
+        // 2. NEW: Calculate points WON (secured points) to use for tiebreaker sorting
+        const pointsWon = targetGames.reduce((won: number, g: any) => {
+          const pick = userPicks[g.id] || userPicks[String(g.id)];
+          const rank = parseInt(String(userRanks[g.id] || userRanks[String(g.id)] || 0), 10);
+
+          if (!pick || !rank) return won;
+
+          const projWinner = getProjectedWinner(g);
+          const activeWinner = isProjection 
+            ? (g.status === 'final' ? g.winner : projWinner) 
+            : (g.status === 'final' ? g.winner : null);
+
+          // If the player picked the winner, add to their secured points
+          if (activeWinner && pick === activeWinner) {
+            return won + rank;
+          }
+
+          return won;
+        }, 0);
+
+        const activeScore = userMaxPossible - pointsLost;
+        const tbDiff = Math.abs(userTB - actualTB);
+
+        return {
+          ...u,
+          activeScore,
+          confidenceScore: activeScore,
+          projectedScore: activeScore,
+          pointsWon, // Pass this down for the sorter
+          tbDiff,
+          userPicks,
+          userRanks,
+          userTB
+        };
+      });
+
+    // 3. APPLY NEW SORTING LOGIC
+    processed.sort((a: any, b: any) => {
+      // Priority 1: Official Total Points (Descending)
       if (b.activeScore !== a.activeScore) return b.activeScore - a.activeScore;
-
-      if (isWeekComplete && !isProjection && a.tbDiff !== undefined && b.tbDiff !== undefined && a.tbDiff !== b.tbDiff) {
+      
+      // Priority 2 (NEW): If tied in points, list the player with more SECURED/WON points higher
+      if (b.pointsWon !== a.pointsWon) return b.pointsWon - a.pointsWon;
+      
+      // Priority 3: Actual tiebreaker score distance (only if a tiebreaker has been entered by the admin)
+      if (actualTB > 0 && a.tbDiff !== b.tbDiff) {
         return a.tbDiff - b.tbDiff;
       }
-
-      return String(a.lastName || '').localeCompare(String(b.lastName || ''));
+      
+      // Priority 4: Alphabetical fallback
+      const nameA = `${a.firstName} ${a.lastName}`.trim();
+      const nameB = `${b.firstName} ${b.lastName}`.trim();
+      return nameA.localeCompare(nameB);
     });
 
-    // 4. Assign Rankings
+    // 4. Assign Official Ranks (Ignores Points Won so they remain officially tied)
     let currentRank = 1;
-    calculated.forEach((u: any, i: number) => {
+    processed.forEach((u: any, i: number) => {
       const activeScore = u.activeScore;
-      const prevScore = i > 0 ? calculated[i - 1].activeScore : null;
+      const prevScore = i > 0 ? processed[i - 1].activeScore : null;
 
-      if (i > 0 && activeScore < prevScore) {
-        currentRank = i + 1;
-      } else if (isWeekComplete && !isProjection && i > 0 && activeScore === prevScore && u.tbDiff !== calculated[i - 1].tbDiff) {
-        currentRank = i + 1;
+      if (i > 0) {
+        const prevUser = processed[i - 1];
+        // Official rank only drops if they have a strictly worse score OR a worse tiebreaker distance
+        if (activeScore < prevScore || (actualTB > 0 && u.tbDiff > prevUser.tbDiff)) {
+          currentRank = i + 1;
+        }
       }
 
       u.projectedRank = currentRank;
       u.displayRank = currentRank;
     });
 
-    return calculated;
-  }, [data, games, week, isProjection, isWeekComplete]);
+    return processed;
+  }, [data, games, week, isProjection, isWeekComplete, globalSettings]);
 
   // Find high stakes games for the logged in user
   const highStakesGames = useMemo(() => {
@@ -3056,35 +3111,7 @@ useEffect(() => {
   } 
 }, [globalSettings?.weekStates, dbReady]);
 
-  // 🔒 Auto-lock current week 1 hour before first game kickoff if not locked yet
-/*useEffect(() => {
-  if (!globalSettings?.games?.[picksSelectedWeek] || isAdmin) return;
 
-  const weekGamesList = globalSettings.games[picksSelectedWeek] || [];
-  if (weekGamesList.length === 0) return;
-
-  const lockTime = getLockdownTime(weekGamesList);
-  if (!lockTime) return;
-
-  const checkAutoLock = async () => {
-    const currentState = globalSettings?.weekStates?.[picksSelectedWeek] || 'open';
-    if (Date.now() >= lockTime && currentState === 'open') {
-      try {
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-          [`weekStates.${picksSelectedWeek}`]: 'locked',
-          [`koWeekStates.${picksSelectedWeek}`]: 'locked'
-        });
-      } catch (err) {
-        console.error("Auto-lock failed:", err);
-      }
-    }
-  };
-
-  checkAutoLock();
-  const interval = setInterval(checkAutoLock, 30000);
-  return () => clearInterval(interval);
-}, [picksSelectedWeek, globalSettings, isAdmin]);
-*/
   // ✅ AUTO-ADVANCE DASHBOARD TARGET WHEN WEEK IS LOCKED/CLOSED:
 useEffect(() => {
   if (!globalSettings?.weekStates) return;
