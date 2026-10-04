@@ -3039,11 +3039,15 @@ useEffect(() => {
 
 
 // ⏱️ Auto-sync ESPN live scores every 10 seconds on active live tabs
+// ⏱️ Auto-sync ESPN live scores every 10 seconds on active live tabs
 useEffect(() => {
   if (!isLoggedIn) return;
 
   const isLiveTab = ['c-tracker', 'k-tracker', 'dashboard'].includes(activeTab);
   if (!isLiveTab) return;
+
+  // 🛑 KILL SWITCH FOR GHOST TABS: Only the Admin device can fetch and save scores
+  if (!isAdmin) return;
 
   handleSyncScores();
 
@@ -3052,7 +3056,7 @@ useEffect(() => {
   }, 10000);
 
   return () => clearInterval(timer);
-}, [activeTab, isLoggedIn, resultsSelectedWeek, liveSeasonWeek]); // Added week dependencies
+}, [activeTab, isLoggedIn, resultsSelectedWeek, liveSeasonWeek, isAdmin]);
 
 // Games for Dashboard, Results, & Standings (Locked to current active week)
 const games = useMemo(() => {
