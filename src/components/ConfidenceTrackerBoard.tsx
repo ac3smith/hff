@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Target, Zap } from 'lucide-react';
+import { Target, Zap, Clock } from 'lucide-react';
 
 function getProjectedWinner(game: any) {
   if (!game) return null;
@@ -170,6 +170,7 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
 
         const userMaxPossible = isDeadbeat ? targetGames.length * 5 : standardMaxPossible;
 
+        // 1. Calculate points lost
         const pointsLost = targetGames.reduce((lost: number, g: any) => {
           const pick = userPicks[g.id] || userPicks[String(g.id)];
           const rank = parseInt(String(userRanks[g.id] || userRanks[String(g.id)] || 0), 10);
@@ -188,6 +189,25 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
           return lost;
         }, 0);
 
+        // 2. NEW: Calculate points WON (secured points) to use for tiebreaker sorting
+        const pointsWon = targetGames.reduce((won: number, g: any) => {
+          const pick = userPicks[g.id] || userPicks[String(g.id)];
+          const rank = parseInt(String(userRanks[g.id] || userRanks[String(g.id)] || 0), 10);
+
+          if (!pick || !rank) return won;
+
+          const projWinner = getProjectedWinner(g);
+          const activeWinner = isProjection 
+            ? (g.status === 'final' ? g.winner : projWinner) 
+            : (g.status === 'final' ? g.winner : null);
+
+          if (activeWinner && pick === activeWinner) {
+            return won + rank;
+          }
+
+          return won;
+        }, 0);
+
         const activeScore = userMaxPossible - pointsLost;
         const tbDiff = Math.abs(userTB - actualTB);
 
@@ -196,6 +216,7 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
           activeScore,
           confidenceScore: activeScore,
           projectedScore: activeScore,
+          pointsWon,
           tbDiff,
           userPicks,
           userRanks,
@@ -203,8 +224,10 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
         };
       });
 
+    // 3. APPLY NEW SORTING LOGIC
     processed.sort((a: any, b: any) => {
       if (b.activeScore !== a.activeScore) return b.activeScore - a.activeScore;
+      if (b.pointsWon !== a.pointsWon) return b.pointsWon - a.pointsWon;
       if (actualTB > 0 && a.tbDiff !== b.tbDiff) {
         return a.tbDiff - b.tbDiff;
       }
@@ -213,6 +236,7 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
       return nameA.localeCompare(nameB);
     });
 
+    // 4. Assign Official Ranks (Ignores Points Won so they remain officially tied)
     let currentRank = 1;
     processed.forEach((u: any, i: number) => {
       const activeScore = u.activeScore;
@@ -505,77 +529,185 @@ export function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, curr
             </table>
           </div>
         ) : (
-          <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {(() => {
-              const myPicks = currentUser?.picks?.[week] || currentUser?.picks?.[String(week)] || {};
-              const myRanks = currentUser?.ranks?.[week] || currentUser?.ranks?.[String(week)] || {};
-
-              if (!games || games.length === 0) {
-                return (
-                  <div className="col-span-full text-center py-12 text-slate-400 font-bold">
-                    No games loaded for Week {week}.
-                  </div>
-                );
-              }
-
-              return games.map((g: any) => {
-                const pick = myPicks[g.id] || myPicks[String(g.id)];
-                const rank = parseInt(String(myRanks[g.id] || myRanks[String(g.id)] || 0), 10);
-
-                const activeWinner = isProjection ? getProjectedWinner(g) : (g.status === 'final' ? g.winner : null);
-                const isWinner = activeWinner && pick === activeWinner;
-                const isLoser = activeWinner && pick !== activeWinner;
-                const displayPick = pick === g.away ? (g.awayAbbr || pick) : (pick === g.home ? (g.homeAbbr || pick) : pick);
-
-                return (
-                  <div key={g.id} className="bg-slate-900 rounded-2xl p-4 border border-slate-800 text-white flex flex-col justify-between shadow-lg">
-                    <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-                      <span className="text-xs font-black uppercase text-slate-400">
-                        {g.awayAbbr || g.away} @ {g.homeAbbr || g.home}
-                      </span>
-                      <span className="text-xs font-black text-[#FFB81C] bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                        {g.status === 'final' ? 'FINAL' : g.status === 'in_progress' ? 'LIVE' : g.time}
-                      </span>
-                    </div>
-
-                    <div className="my-3 flex items-center justify-between">
-                      <div>
-                        <div className="text-[10px] font-black uppercase text-slate-400">Your Pick</div>
-                        <div className="text-base font-black text-white">{displayPick || 'No Pick'}</div>
-                      </div>
-
-                      <div className="text-right">
-                        <div className="text-[10px] font-black uppercase text-slate-400">Confidence</div>
-                        <div className="text-lg font-black text-[#FFB81C]">+{rank || 0} PTS</div>
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-xs">
-                      <span className="font-mono text-slate-400">
-                        Score: {g.awayScore ?? 0} - {g.homeScore ?? 0}
-                      </span>
-
-                      {isWinner ? (
-                        <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded font-black border border-emerald-500/30">
-                          ▲ WON
-                        </span>
-                      ) : isLoser ? (
-                        <span className="bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded font-black border border-rose-500/30">
-                          ▼ LOST
-                        </span>
-                      ) : (
-                        <span className="bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-black">
-                          PENDING
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              });
-            })()}
-          </div>
+          <MyMatchupsView
+            games={games}
+            currentUser={currentUser}
+            week={week}
+            isProjection={isProjection}
+          />
         )}
       </div>
+    </div>
+  );
+}
+
+export function MyMatchupsView({ games, currentUser, week, isProjection }: any) {
+  if (!currentUser) return null;
+
+  const userPicks = currentUser.picks?.[week] || currentUser.picks?.[String(week)] || {};
+  const userRanks = currentUser.ranks?.[week] || currentUser.ranks?.[String(week)] || {};
+  const userTiebreaker = currentUser.tiebreakers?.[week] ?? currentUser.tiebreakers?.[String(week)] ?? null;
+
+  const getGameTimestamp = (g: any) => {
+    try {
+      const dateStr = g.apiDate || g.date || '';
+      const timeStr = g.time || '12:00 PM';
+      return new Date(`${dateStr} ${timeStr}`).getTime() || 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const myGames = (games || [])
+    .map((g: any) => {
+      const pick = userPicks[g.id] || userPicks[String(g.id)];
+      const rank = parseInt(String(userRanks[g.id] || userRanks[String(g.id)] || 0), 10);
+      const projWinner = getProjectedWinner(g);
+      const activeWinner = isProjection ? projWinner : (g.status === 'final' ? g.winner : null);
+
+      const isWinning = activeWinner && pick === activeWinner;
+      const isLosing = activeWinner && pick !== activeWinner;
+      const statusGroup = g.status === 'in_progress' ? 1 : g.status === 'upcoming' ? 2 : 3;
+      const kickoffTime = getGameTimestamp(g);
+
+      return {
+        ...g,
+        myPick: pick,
+        myRank: rank,
+        isWinning,
+        isLosing,
+        statusGroup,
+        kickoffTime
+      };
+    })
+    .sort((a: any, b: any) => {
+      if (a.statusGroup !== b.statusGroup) return a.statusGroup - b.statusGroup;
+      return a.kickoffTime - b.kickoffTime;
+    });
+
+  return (
+    <div className="space-y-4 p-2 sm:p-4 max-w-4xl mx-auto">
+      {myGames.map((g: any) => {
+        const isLive = g.status === 'in_progress';
+        const isFinal = g.status === 'final';
+        const displayPick = g.myPick === g.away ? (g.awayAbbr || g.away) : (g.myPick === g.home ? (g.homeAbbr || g.home) : g.myPick);
+
+        const awayCanonical = String(g.awayAbbr || g.away).toUpperCase();
+        const homeCanonical = String(g.homeAbbr || g.home).toUpperCase();
+        const possessionCanonical = String(g.possession || '').toUpperCase();
+
+        const hasPossessionAway = isLive && (possessionCanonical === awayCanonical || String(g.possession).toLowerCase() === 'away');
+        const hasPossessionHome = isLive && (possessionCanonical === homeCanonical || String(g.possession).toLowerCase() === 'home');
+
+        return (
+          <div
+            key={g.id}
+            className={`bg-slate-900 text-white rounded-2xl p-4 sm:p-5 border-2 shadow-lg transition-all ${
+              g.isRedZone
+                ? 'border-rose-500 ring-2 ring-rose-500/40 bg-slate-900/95'
+                : isFinal
+                ? 'border-slate-800 opacity-80'
+                : 'border-slate-800'
+            }`}
+          >
+            {/* TOP HEADER: Matchup & TV Network */}
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800/80 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                  {g.awayAbbr || g.away} @ {g.homeAbbr || g.home}
+                </span>
+                {g.tvNetwork && (
+                  <span className="text-[9px] font-black uppercase tracking-widest bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded hidden sm:inline-block">
+                    {g.tvNetwork}
+                  </span>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-2">
+                {g.isTiebreaker && <span className="text-[#FFB81C] text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30">* TB</span>}
+                {g.isRedZone && <span className="bg-rose-600 text-white font-black text-[9px] px-2 py-0.5 rounded animate-pulse">🚨 RED ZONE</span>}
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${isLive ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40 animate-pulse' : 'bg-slate-800 text-slate-400'}`}>
+                  {isLive ? `${g.gameQuarter} ${g.gameClock ? `(${g.gameClock})` : ''}` : isFinal ? 'FINAL' : `${g.date} • ${g.time}`}
+                </span>
+              </div>
+            </div>
+
+            {/* COMPACT MAIN BODY: Score on Left, Pick on Right */}
+            <div className="flex items-center justify-between gap-4 mb-3">
+              
+              {/* Left Side: Score Box */}
+              <div className="flex flex-col gap-1.5 flex-1 max-w-[140px]">
+                <div className={`flex justify-between items-center ${g.winner === g.away ? 'text-[#FFB81C]' : 'text-slate-200'}`}>
+                  <span className="font-black text-sm sm:text-base flex items-center gap-1.5">
+                    {g.awayAbbr || g.away} {hasPossessionAway && <span className="text-[10px] animate-bounce">🏈</span>}
+                  </span>
+                  <span className="font-mono font-black text-xl sm:text-2xl">{g.awayScore !== null && g.awayScore !== undefined ? g.awayScore : '-'}</span>
+                </div>
+                <div className={`flex justify-between items-center ${g.winner === g.home ? 'text-[#FFB81C]' : 'text-slate-200'}`}>
+                  <span className="font-black text-sm sm:text-base flex items-center gap-1.5">
+                    {g.homeAbbr || g.home} {hasPossessionHome && <span className="text-[10px] animate-bounce">🏈</span>}
+                  </span>
+                  <span className="font-mono font-black text-xl sm:text-2xl">{g.homeScore !== null && g.homeScore !== undefined ? g.homeScore : '-'}</span>
+                </div>
+              </div>
+
+              {/* Right Side: My Pick & Points */}
+              <div className="bg-slate-800/80 rounded-xl p-2.5 sm:p-3 flex items-center justify-between border border-slate-700 w-[140px] sm:w-[180px] shrink-0">
+                <div>
+                  <div className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-0.5">My Pick</div>
+                  <div className="text-sm sm:text-base font-black text-white">{displayPick || '—'}</div>
+                </div>
+                <div className="text-right border-l border-slate-700 pl-3">
+                  <div className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-0.5">PTS</div>
+                  <div className="text-sm sm:text-base font-black text-[#FFB81C]">{g.myRank || 0}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* NEW: LIVE ACTION PLAY-BY-PLAY FEED */}
+            {isLive && (g.downAndDistance || g.lastPlayText) && (
+              <div className="bg-slate-950/50 rounded-xl p-3 mb-3 border border-slate-800/80 shadow-inner">
+                {g.downAndDistance && (
+                  <div className="text-xs font-black text-[#FFB81C] uppercase tracking-wider mb-1">
+                    {g.downAndDistance}
+                  </div>
+                )}
+                {g.lastPlayText && (
+                  <div className="text-[11px] sm:text-xs font-medium text-slate-400 italic leading-snug">
+                    "{g.lastPlayText}"
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* FOOTER OUTCOME */}
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                {g.isTiebreaker && userTiebreaker !== null ? `Tiebreaker: ${userTiebreaker} PTS` : 'Outcome'}
+              </span>
+              
+              {g.myPick ? (
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                  isFinal
+                    ? g.isWinning ? 'text-emerald-400 bg-emerald-950/80 border border-emerald-500/30' : 'text-rose-400 bg-rose-950/80 border border-rose-500/30'
+                    : isLive
+                    ? g.isWinning ? 'text-emerald-400 bg-emerald-950/80 border border-emerald-500/30' : 'text-rose-400 bg-rose-950/80 border border-rose-500/30'
+                    : 'text-slate-400 bg-slate-800 border border-slate-700'
+                }`}>
+                  {isFinal 
+                    ? (g.isWinning ? `✓ Won (+${g.myRank})` : `✗ Lost (-${g.myRank})`) 
+                    : isLive 
+                    ? (g.isWinning ? `▲ Winning (+${g.myRank})` : `▼ Trailing (-${g.myRank})`) 
+                    : 'Pending'}
+                </span>
+              ) : (
+                <span className="text-[10px] font-black text-rose-500 uppercase">Missing Pick</span>
+              )}
+            </div>
+
+          </div>
+        );
+      })}
     </div>
   );
 }
