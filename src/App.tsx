@@ -1134,6 +1134,12 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                   </th>
                   <th className="p-1 text-center border-r border-slate-800 w-12 sm:w-14 italic text-[10px] sm:text-xs">Behind</th>
                   <th className="p-1 text-center border-r border-slate-800 w-12 sm:w-16 italic text-[10px] sm:text-xs">TB</th>
+                  {/* 💰 Show Net $ Header ONLY if week is officially closed */}
+{isWeekComplete && (
+  <th className="p-1 text-center border-r border-slate-800 w-14 sm:w-16 italic text-[10px] sm:text-xs text-emerald-400 font-black">
+    Net $
+  </th>
+)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1211,6 +1217,21 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
       </span>
     )}
   </td>
+  {/* 💰 Show Net Earnings Badge ONLY if week is officially closed */}
+{isWeekComplete && (
+  <td className={`p-1 text-center font-mono font-black text-[10px] sm:text-xs border-r border-slate-100 ${isMe ? 'bg-[#FFB81C]/20' : isProjection ? 'bg-amber-50' : 'bg-white'}`}>
+    {(() => {
+      const netVal = user.weeklyFantasyHistory?.[week] ?? user.weeklyFantasyHistory?.[String(week)] ?? user.savedNet;
+      if (netVal === undefined || netVal === null) return <span className="text-slate-300 font-normal">-</span>;
+      const numNet = Number(netVal);
+      return (
+        <span className={`px-1.5 py-0.5 rounded ${numNet >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+          {numNet >= 0 ? `+$${numNet}` : `-$${Math.abs(numNet)}`}
+        </span>
+      );
+    })()}
+  </td>
+)}
                     </tr>
                   );
                 })}
