@@ -2718,16 +2718,28 @@ function MyMatchupsView({ games, currentUser, week, isProjection }: any) {
 function MainApp() {
   const [user, setUser] = useState<any>(null), [dbReady, setDbReady] = useState(false), [authLoaded, setAuthLoaded] = useState(false), [sessionLoaded, setSessionLoaded] = useState(false), [isLoggedIn, setIsLoggedIn] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  
   const [liveSeasonWeek, setLiveSeasonWeek] = useState(1);        // Fixed anchor for Dashboard & Standings
   const [picksSelectedWeek, setPicksSelectedWeek] = useState(1);   // Advance picks selector
   const [resultsSelectedWeek, setResultsSelectedWeek] = useState(1); // Historical results selector
+  const [adminSelectedWeek, setAdminSelectedWeek] = useState(1);   // Dedicated Admin selector
   const [showMobileAccountDrawer, setShowMobileAccountDrawer] = useState(false);
   
   // Safety aliases for legacy handlers
   const currentActiveWeek = liveSeasonWeek;
   const setCurrentActiveWeek = setLiveSeasonWeek;
-  const selectedWeek = resultsSelectedWeek;
-  const setSelectedWeek = setResultsSelectedWeek;
+  
+  // 🔥 DYNAMIC ALIAS: Instantly swaps identity based on which tab you are looking at!
+  const selectedWeek = activeTab === 'admin' ? adminSelectedWeek : resultsSelectedWeek;
+  
+  const setSelectedWeek = (wk: number) => {
+    if (activeTab === 'admin') {
+      setAdminSelectedWeek(wk);
+    } else {
+      setResultsSelectedWeek(wk);
+    }
+  };
+
   const [currentUserId, setCurrentUserId] = useState('');
   const [allUsers, setAllUsers] = useState<any[]>([]), [globalSettings, setGlobalSettings] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false), [hasSaved, setHasSaved] = useState(false), [showPrintModal, setShowPrintModal] = useState(false), [showChangePassword, setShowChangePassword] = useState(false), [adminTab, setAdminTab] = useState('status'); 
@@ -2977,11 +2989,13 @@ activeWk = closedWeeks.length > 0
 setLiveSeasonWeek(activeWk);
 
 if (!dbReady) {
-setPicksSelectedWeek(activeWk);
-// Default F-Results view to the most recently closed week (or active week if Week 1)
-setResultsSelectedWeek(closedWeeks[0] || activeWk);
-setSelectedWeek(activeWk);
-setDbReady(true);
+  setPicksSelectedWeek(activeWk);
+  
+  const activeWkState = weekStates[activeWk] || 'open';
+  setResultsSelectedWeek(activeWkState === 'locked' ? activeWk : (closedWeeks[0] || activeWk));
+  setAdminSelectedWeek(activeWk); // Admin defaults to current week
+  
+  setDbReady(true);
 }
       }
     });
@@ -3016,12 +3030,16 @@ useEffect(() => {
       ? Math.min(closedWeeks[0] + 1, globalSettings?.maxActiveWeeks || 18) 
       : 1;
 
-    if (!dbReady) {
-      setLiveSeasonWeek(activeWk);
-      setPicksSelectedWeek(activeWk);
-      setResultsSelectedWeek(closedWeeks[0] || activeWk);
-      setDbReady(true); 
-    }
+      if (!dbReady) {
+        setLiveSeasonWeek(activeWk);
+        setPicksSelectedWeek(activeWk);
+        
+        const activeWkState = weekStates[activeWk] || 'open';
+        setResultsSelectedWeek(activeWkState === 'locked' ? activeWk : (closedWeeks[0] || activeWk));
+        setAdminSelectedWeek(activeWk);
+        
+        setDbReady(true); 
+      }
   } 
 }, [globalSettings?.weekStates, dbReady]);
 
@@ -4412,8 +4430,8 @@ const handleResetFanatics = async () => {
 };  
 const updateGameResult = (gameId: number, resultType: string, teamId: string) => {
   // Explicitly target the week currently selected in the admin dropdown
-  const targetWk = resultsSelectedWeek || selectedWeek || liveSeasonWeek;
-  const currentWeekGames = globalSettings?.games?.[targetWk] || resultsGames || games || [];
+  const targetWk = selectedWeek || liveSeasonWeek;
+  const currentWeekGames = globalSettings?.games?.[targetWk] || [];
 
   const updatedGames = currentWeekGames.map((g: any) => {
     if (g.id !== gameId) return g;
@@ -4437,7 +4455,8 @@ const handleLockWeek = async () => {
   try {
     setIsSaving(true);
     // 🔒 Target selectedWeek explicitly
-    const targetWeek = selectedWeek || resultsSelectedWeek || liveSeasonWeek || 1;
+    const targetWeek = selectedWeek || liveSeasonWeek || 1;
+
     const targetGames = globalSettings?.games?.[targetWeek] || [];
     
     const batch = writeBatch(db);
@@ -4499,6 +4518,9 @@ const handleLockWeek = async () => {
 
     // Commit everything at once safely
     await batch.commit();
+
+    // 🔥 Force the Results board forward to the newly locked live games
+    setResultsSelectedWeek(targetWeek);
 
     setIsSaving(false);
     alert(`Week ${targetWeek} successfully locked! Deadbeats processed and all picks are now revealed.`);
@@ -5756,7 +5778,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {(resultsGames || games || []).map((game: any) => (
+    {(globalSettings?.games?.[selectedWeek] || []).map((game: any) => (
                           <tr key={game.id} className="hover:bg-slate-50 transition-colors">
                             <td className="p-4 font-black text-slate-900 text-lg">
                               {String(game.awayName || game.away)} @ {String(game.homeName || game.home)}
@@ -5771,9 +5793,9 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                                     onChange={async (e) => {
                                       const isChecked = e.target.checked;
                                       try {
-                                        const updatedGames = (resultsGames || games).map((g: any) => 
-                                          g.id === game.id ? { ...g, isTiebreaker: isChecked } : g
-                                        );
+                                        const updatedGames = (globalSettings?.games?.[selectedWeek] || []).map((g: any) => 
+  g.id === game.id ? { ...g, isTiebreaker: isChecked } : g
+);
                                         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
                                           [`games.${selectedWeek}`]: updatedGames
                                         });
