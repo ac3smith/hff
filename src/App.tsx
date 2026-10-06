@@ -1201,10 +1201,16 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
                         )}
                       </td>
                       <td className={`p-1 text-center text-[10px] sm:text-xs font-bold text-slate-700 italic border-r border-slate-100 ${isMe ? 'bg-[#FFB81C]/20' : isProjection ? 'bg-amber-50' : 'bg-white'}`}>
-                        <span className="text-slate-600 font-mono">
-                          {String(user.userTB || user.tiebreakers?.[week] || '—')}
-                        </span>
-                      </td>
+    {shouldHide ? (
+      <span className="text-[8px] font-black uppercase text-slate-400 bg-slate-100 py-0.5 px-1.5 rounded block border border-slate-200">
+        LOCK
+      </span>
+    ) : (
+      <span className="text-slate-600 font-mono">
+        {String(user.userTB || user.tiebreakers?.[week] || '—')}
+      </span>
+    )}
+  </td>
                     </tr>
                   );
                 })}
