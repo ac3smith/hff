@@ -1174,7 +1174,7 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
 
                         return (
                           <td key={g.id} className={`p-0.5 border-r border-slate-100 text-center ${isMe ? 'bg-[#FFB81C]/10' : isProjection ? 'bg-amber-50/50' : 'bg-white'}`}>
-                            {shouldHide && !pick ? (
+                            {shouldHide ? (
                               <div className="text-center text-[10px] font-black italic text-slate-400 bg-slate-100 py-1 rounded uppercase border border-slate-200">
                                 LOCK
                               </div>
@@ -4066,11 +4066,31 @@ function ensureAutoTiebreaker(gamesList: any[]) {
       });
   
       // ✅ SCORE SYNC ONLY UPDATES GAME SCORES — NEVER LOCK STATES
-await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-  [`games.${targetWeek}`]: updatedGames
-});
-  
-    } catch (e: any) {
+// 🏈 AUTO-CALCULATE THE TIEBREAKER TOTAL
+const tbGame = updatedGames.find((g: any) => g.isTiebreaker) || updatedGames[updatedGames.length - 1];
+let autoTiebreakerTotal = 0;
+
+if (tbGame && (tbGame.status === 'in_progress' || tbGame.status === 'final')) {
+  const awayPts = parseInt(String(tbGame.awayScore || 0), 10);
+  const homePts = parseInt(String(tbGame.homeScore || 0), 10);
+  autoTiebreakerTotal = awayPts + homePts;
+}
+
+// 🛑 SMART SAVE: Only update Firebase if scores ACTUALLY changed
+if (JSON.stringify(targetGames) !== JSON.stringify(updatedGames)) {
+  const updatePayload: any = {
+    [`games.${targetWeek}`]: updatedGames
+  };
+
+  // If tiebreaker game has points, save the total automatically
+  if (autoTiebreakerTotal > 0) {
+    updatePayload[`actualTiebreakers.${targetWeek}`] = autoTiebreakerTotal;
+  }
+
+  await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), updatePayload);
+}
+
+} catch (e: any) {
       console.error("ESPN Score Sync Error:", e);
     } finally {
       setIsSyncing(false);
@@ -5776,12 +5796,21 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                     </table>
                   </div>
                   <div className="p-6 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
-                    <div>
-                      <h4 className="font-black text-slate-900 uppercase italic">Actual Tiebreaker Points</h4>
-                      <p className="text-xs text-slate-500 font-medium">Used to calculate closest tiebreaker</p>
-                    </div>
-                    <input type="number" className="border-2 border-slate-200 rounded-xl px-4 py-2 text-xl font-black text-center w-32 outline-none focus:border-[#FFB81C]" value={globalSettings?.actualTiebreakers?.[selectedWeek] || ''} onChange={(e) => { updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { [`actualTiebreakers.${selectedWeek}`]: parseInt(e.target.value) || 0 }); }} />
-                  </div>
+  <div>
+    <h4 className="font-black text-slate-900 uppercase italic">Actual Tiebreaker Points</h4>
+    <p className="text-xs text-slate-500 font-medium">Used to calculate closest tiebreaker</p>
+  </div>
+  <div className="w-32">
+    <AdminNumberInput 
+      value={globalSettings?.actualTiebreakers?.[selectedWeek] || ''}
+      onSave={(val: any) => {
+        updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), { 
+          [`actualTiebreakers.${selectedWeek}`]: val || 0 
+        });
+      }}
+    />
+  </div>
+</div>
                 </div>
 
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
