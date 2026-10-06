@@ -2277,9 +2277,11 @@ const payouts = matrix.weeklyGross;
       u.behind = leaderScore - u.score;
     });
 
-    // 3. Define Great 8 (all players earning cash) and Basement
-    const great8 = processedUsers.filter(u => u.grossPayout > 0);
-    const basement = processedUsers.slice(-8).reverse();
+// 1. Includes all cash earners regardless of count
+const great8 = processedUsers.filter(u => u.grossPayout > 0 || u.netWinnings > -12);
+
+// 2. Displays absolute lowest position at the top working up
+const basement = processedUsers.slice(-8);
 
     // 4. Movers & Shakers
     let biggestClimber: any = null;
@@ -6196,7 +6198,17 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 {adminTab === 'recap' && (
   <div className="space-y-8 max-w-[1400px] mx-auto">
     {(() => {
-      const targetWk = selectedWeek || liveSeasonWeek;
+      const weekStates = globalSettings?.weekStates || {};
+      const closedWeeks = Object.keys(weekStates)
+        .map(Number)
+        .filter(w => weekStates[w] === 'closed')
+        .sort((a, b) => b - a);
+
+      // Defaults to the most recently closed week (e.g. Week 4) when Week 5 is open
+      const targetWk = (weekStates[selectedWeek] === 'closed' || weekStates[selectedWeek] === 'locked')
+        ? selectedWeek
+        : (closedWeeks[0] || (liveSeasonWeek > 1 ? liveSeasonWeek - 1 : 1));
+
       const weekGames = globalSettings?.games?.[targetWk] || games || [];
       const actualTB = globalSettings?.actualTiebreakers?.[targetWk] ?? 0;
 
@@ -6215,35 +6227,70 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
         return dateStr.includes('mon') || g.isTiebreaker;
       });
 
-      // 3. Process Weekly Standings for Great 8 & Basement
-      const standardMaxPossible = weekGames.reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
-      const processedUsers = allUsers.filter(u => u.playsConfidence).map((u: any) => {
-        const userPicks = u.picks?.[targetWk] || {};
-        const userRanks = u.ranks?.[targetWk] || {};
-        const userTB = parseInt(u.tiebreakers?.[targetWk] || '0', 10);
-        const isDeadbeat = u.tiebreakers?.[targetWk] === '0' || (weekGames.length > 0 && weekGames.every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
+// 3. Process Weekly Standings for Great 8 & Basement (Database-First)
+const standardMaxPossible = weekGames.reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
+const activeConfidenceUsers = allUsers.filter((u: any) => Boolean(u?.playsConfidence) && String(u?.paymentStatus) !== 'disqualified');
+const activeCount = activeConfidenceUsers.length;
+const isTargetWeekClosed = globalSettings?.weekStates?.[targetWk] === 'closed';
 
-        const userMaxPossible = isDeadbeat ? weekGames.length * 5 : standardMaxPossible;
-        const pointsLost = weekGames.reduce((lost: number, g: any) => {
-          const pick = userPicks[g.id];
-          const rank = parseInt(userRanks[g.id] || 0, 10);
-          if (!pick || !rank) return lost;
-          if (g.status === 'final' && g.winner && pick !== g.winner) return lost + rank;
-          return lost;
-        }, 0);
+const matrix = calculateFanaticsPayouts(activeCount);
+const payouts = matrix.weeklyGross;
 
-        const score = userMaxPossible - pointsLost;
-        const tbDiff = Math.abs(userTB - actualTB);
+const processedUsers = activeConfidenceUsers.map((u: any) => {
+  const userPicks = u.picks?.[targetWk] || {};
+  const userRanks = u.ranks?.[targetWk] || {};
+  const userTB = parseInt(u.tiebreakers?.[targetWk] || '0', 10);
+  const isDeadbeat = u.tiebreakers?.[targetWk] === '0' || (weekGames.length > 0 && weekGames.every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
 
-        return { ...u, name: formatFullName(u), score, tbDiff, userTB, userPicks, userRanks, isDeadbeat };
-      });
+  const userMaxPossible = isDeadbeat ? weekGames.length * 5 : standardMaxPossible;
+  const pointsLost = weekGames.reduce((lost: number, g: any) => {
+    const pick = userPicks[g.id];
+    const rank = parseInt(userRanks[g.id] || 0, 10);
+    if (!pick || !rank) return lost;
+    if (g.status === 'final' && g.winner && pick !== g.winner) return lost + rank;
+    return lost;
+  }, 0);
 
-      processedUsers.sort((a, b) => b.score - a.score || a.tbDiff - b.tbDiff);
-      const payouts = globalSettings?.fpPayouts || [77, 67, 56, 46, 31, 28, 25, 20];
-      calculateTiedPayouts(processedUsers, payouts);
+  const score = userMaxPossible - pointsLost;
+  const tbDiff = Math.abs(userTB - actualTB);
+  
+  // 💾 PULL EXACT FINALIZE RECORD FROM FIRESTORE DATABASE
+  const savedNet = u.weeklyFantasyHistory?.[targetWk] ?? u.weeklyFantasyHistory?.[String(targetWk)];
 
-      const great8 = processedUsers.filter(u => u.grossPayout > 0);
-      const basement = processedUsers.slice(-8).reverse();
+  return { 
+    ...u, 
+    name: formatFullName(u), 
+    score, 
+    tbDiff, 
+    userTB, 
+    userPicks, 
+    userRanks, 
+    isDeadbeat,
+    savedNet
+  };
+});
+
+processedUsers.sort((a, b) => b.score - a.score || a.tbDiff - b.tbDiff);
+
+// If week is NOT closed yet, project tie-splits on the fly
+if (!isTargetWeekClosed) {
+  calculateTiedPayouts(processedUsers, payouts);
+  processedUsers.forEach((u: any) => {
+    const gross = u.grossPayout || 0;
+    u.netWinnings = gross > 0 ? gross - 12 : -12;
+  });
+} else {
+  // 🔒 IF WEEK IS CLOSED: Read exact saved payouts from Firestore
+  processedUsers.forEach((u: any, idx: number) => {
+    u.rank = idx + 1;
+    const net = u.savedNet !== undefined && u.savedNet !== null ? Number(u.savedNet) : -12;
+    u.netWinnings = net;
+    u.grossPayout = net > -12 ? net + 12 : 0;
+  });
+}
+
+const great8 = processedUsers.filter(u => u.grossPayout > 0 || u.netWinnings > -12);
+const basement = processedUsers.slice(-8);
 
       // 4. Knockout Casualties
       const koCasualties = allUsers.filter(u => u.playsKnockout && ['Loser', 'Loser (No Pick)'].includes(u.knockoutStatuses?.[targetWk])).map(u => ({
@@ -6338,8 +6385,8 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
               </h3>
               <button
                 onClick={() => {
-                  const html = great8.map((u: any) => `#${u.rank} ${u.name} - ${u.score} PTS (+$${u.grossPayout})`).join('\n');
-                  copyToClipboard(html, "Great 8 summary copied to clipboard!");
+                  const text = great8.map((u: any) => `#${u.rank} ${u.name} - ${u.score} PTS (+$${u.netWinnings} Net)`).join('\n');
+                  copyToClipboard(text, "Great 8 summary copied to clipboard!");
                 }}
                 className="px-4 py-1.5 bg-[#FFB81C] text-slate-900 font-black text-xs uppercase rounded-lg shadow"
               >
@@ -6354,7 +6401,8 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                     <th className="p-2">Player</th>
                     <th className="p-2 text-center">Score</th>
                     <th className="p-2 text-center">Tiebreaker</th>
-                    <th className="p-2 text-right">Award</th>
+                    <th className="p-2 text-center">Gross Award</th>
+                    <th className="p-2 text-right">Net Winnings</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -6364,7 +6412,10 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                       <td className="p-2 text-slate-900">{u.name}</td>
                       <td className="p-2 text-center font-mono">{u.score} PTS</td>
                       <td className="p-2 text-center font-mono">{u.userTB}</td>
-                      <td className="p-2 text-right font-mono text-emerald-600 font-black">+${u.grossPayout}</td>
+                      <td className="p-2 text-center font-mono text-slate-500">${u.grossPayout}</td>
+                      <td className="p-2 text-right font-mono text-emerald-600 font-black">
+                        {u.netWinnings >= 0 ? `+$${u.netWinnings}` : `-$${Math.abs(u.netWinnings)}`}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -6546,13 +6597,13 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
         globalSettings={globalSettings}
       />
       <WeeklyRecapModal
-        isOpen={showWeeklyRecapModal}
-        onClose={() => setShowWeeklyRecapModal(false)}
-        week={resultsSelectedWeek || liveSeasonWeek}
-        games={games}
-        allUsers={allUsers}
-        globalSettings={globalSettings}
-      />
+  isOpen={showWeeklyRecapModal}
+  onClose={() => setShowWeeklyRecapModal(false)}
+  week={resultsSelectedWeek < liveSeasonWeek ? resultsSelectedWeek : (liveSeasonWeek > 1 ? liveSeasonWeek - 1 : 1)}
+  games={games}
+  allUsers={allUsers}
+  globalSettings={globalSettings}
+/>
       {showPrintModal && (
         <PrintModal 
           user={currentUser} 
