@@ -4058,63 +4058,64 @@ function ensureAutoTiebreaker(gamesList: any[]) {
     const now = Date.now();
     if (now - lastSyncTimeRef.current < 5000) return;
     lastSyncTimeRef.current = now;
-  
-    // 1. Correctly identify the active target week
+
     const targetWeek = selectedWeek || liveSeasonWeek || 1;
     const targetGames = globalSettings?.games?.[targetWeek] || games || [];
     if (!targetGames || targetGames.length === 0) return;
-  
+
     setIsSyncing(true);
     try {
-      // 🚀 Public ESPN NFL Scoreboard Endpoint
       const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`);
       if (!res.ok) {
         setIsSyncing(false);
         return;
       }
-  
+
       const json = await res.json();
       const espnEvents = json.events || [];
-  
+
       const updatedGames = targetGames.map((g: any) => {
         const gAwayCanonical = getCanonicalTeamCode(g.away || g.awayAbbr || g.awayName);
         const gHomeCanonical = getCanonicalTeamCode(g.home || g.homeAbbr || g.homeName);
-  
+
+        // Find ESPN game by matching both team codes regardless of ESPN's Home/Away order
         const match = espnEvents.find((evt: any) => {
           const competitors = evt.competitions?.[0]?.competitors || [];
-          const awayComp = competitors.find((c: any) => c.homeAway === 'away');
-          const homeComp = competitors.find((c: any) => c.homeAway === 'home');
-  
-          const agAwayCanonical = getCanonicalTeamCode(awayComp?.team?.abbreviation || awayComp?.team?.displayName);
-          const agHomeCanonical = getCanonicalTeamCode(homeComp?.team?.abbreviation || homeComp?.team?.displayName);
-  
-          return (agAwayCanonical === gAwayCanonical && agHomeCanonical === gHomeCanonical);
+          const teamCodes = competitors.map((c: any) => 
+            getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName)
+          );
+          return teamCodes.includes(gAwayCanonical) && teamCodes.includes(gHomeCanonical);
         });
-  
+
         if (match) {
           const competition = match.competitions?.[0] || {};
+          const competitors = competition.competitors || [];
           const statusObj = match.status || {};
           const statusType = String(statusObj.type?.name || '').toUpperCase();
-          
+
           const isFinal = statusType.includes('FINAL');
           const isLive = statusObj.type?.state === 'in';
-  
-          const awayComp = competition.competitors?.find((c: any) => c.homeAway === 'away');
-          const homeComp = competition.competitors?.find((c: any) => c.homeAway === 'home');
-  
-          const awayTotal = parseInt(awayComp?.score || '0', 10);
-          const homeTotal = parseInt(homeComp?.score || '0', 10);
-  
+
+          // MATCH DIRECTLY BY TEAM CODE (Fixes inverted score bug)
+          const awayTeamComp = competitors.find((c: any) => 
+            getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName) === gAwayCanonical
+          );
+          const homeTeamComp = competitors.find((c: any) => 
+            getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName) === gHomeCanonical
+          );
+
+          const awayTotal = awayTeamComp ? parseInt(String(awayTeamComp.score || '0'), 10) : 0;
+          const homeTotal = homeTeamComp ? parseInt(String(homeTeamComp.score || '0'), 10) : 0;
+
           const situation = competition.situation || {};
           const possessionTeamId = situation.possession;
-          const possessionComp = competition.competitors?.find((c: any) => String(c.team?.id) === String(possessionTeamId));
-          const possessionAbbr = possessionComp ? getCanonicalTeamCode(possessionComp.team?.abbreviation) : null;
+          const possessionComp = competitors.find((c: any) => String(c.team?.id) === String(possessionTeamId));
+          const possessionAbbr = possessionComp ? getCanonicalTeamCode(possessionComp.team?.abbreviation || possessionComp.team?.displayName) : null;
 
           const isRedZone = Boolean(situation.isRedZone);
           const clockDisplay = statusObj.displayClock || null;
           const quarterDisplay = statusObj.period ? `Q${statusObj.period}` : (isLive ? 'LIVE' : null);
 
-          // 🏈 NEW DATA MINING FOR "MY GAMES" VIEW
           const downAndDistance = situation.downDistanceText || null;
           const lastPlayText = situation.lastPlay?.text || null;
           const broadcasts = competition.broadcasts || [];
@@ -4122,8 +4123,8 @@ function ensureAutoTiebreaker(gamesList: any[]) {
 
           let winner = g.winner || null;
           if (isFinal) {
-            if (homeTotal > awayTotal) winner = g.home;
-            else if (awayTotal > homeTotal) winner = g.away;
+            if (awayTotal > homeTotal) winner = g.away;
+            else if (homeTotal > awayTotal) winner = g.home;
             else winner = 'TIE';
           }
 
@@ -4137,7 +4138,6 @@ function ensureAutoTiebreaker(gamesList: any[]) {
             homeScore: isLive || isFinal ? homeTotal : null,
             awayScore: isLive || isFinal ? awayTotal : null,
             winner: isFinal ? winner : null,
-            // Add the new fields to Firestore
             downAndDistance: isLive ? downAndDistance : null,
             lastPlayText: isLive ? lastPlayText : null,
             tvNetwork: tvNetwork || g.tvNetwork || null
@@ -4145,33 +4145,29 @@ function ensureAutoTiebreaker(gamesList: any[]) {
         }
         return g;
       });
-  
-      // ✅ SCORE SYNC ONLY UPDATES GAME SCORES — NEVER LOCK STATES
-// 🏈 AUTO-CALCULATE THE TIEBREAKER TOTAL
-const tbGame = updatedGames.find((g: any) => g.isTiebreaker) || updatedGames[updatedGames.length - 1];
-let autoTiebreakerTotal = 0;
 
-if (tbGame && (tbGame.status === 'in_progress' || tbGame.status === 'final')) {
-  const awayPts = parseInt(String(tbGame.awayScore || 0), 10);
-  const homePts = parseInt(String(tbGame.homeScore || 0), 10);
-  autoTiebreakerTotal = awayPts + homePts;
-}
+      const tbGame = updatedGames.find((g: any) => g.isTiebreaker) || updatedGames[updatedGames.length - 1];
+      let autoTiebreakerTotal = 0;
 
-// 🛑 SMART SAVE: Only update Firebase if scores ACTUALLY changed
-if (JSON.stringify(targetGames) !== JSON.stringify(updatedGames)) {
-  const updatePayload: any = {
-    [`games.${targetWeek}`]: updatedGames
-  };
+      if (tbGame && (tbGame.status === 'in_progress' || tbGame.status === 'final')) {
+        const awayPts = parseInt(String(tbGame.awayScore || 0), 10);
+        const homePts = parseInt(String(tbGame.homeScore || 0), 10);
+        autoTiebreakerTotal = awayPts + homePts;
+      }
 
-  // If tiebreaker game has points, save the total automatically
-  if (autoTiebreakerTotal > 0) {
-    updatePayload[`actualTiebreakers.${targetWeek}`] = autoTiebreakerTotal;
-  }
+      if (JSON.stringify(targetGames) !== JSON.stringify(updatedGames)) {
+        const updatePayload: any = {
+          [`games.${targetWeek}`]: updatedGames
+        };
 
-  await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), updatePayload);
-}
+        if (autoTiebreakerTotal > 0) {
+          updatePayload[`actualTiebreakers.${targetWeek}`] = autoTiebreakerTotal;
+        }
 
-} catch (e: any) {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), updatePayload);
+      }
+
+    } catch (e: any) {
       console.error("ESPN Score Sync Error:", e);
     } finally {
       setIsSyncing(false);
