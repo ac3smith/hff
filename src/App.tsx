@@ -414,87 +414,87 @@ function GameCard({ game, selectedPick, selectedRank, totalGames, usedRanks, isL
   const isFullyPicked = selectedPick && selectedRank;
 
   return (
-    <div className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden flex items-stretch min-h-[64px] sm:min-h-[76px] ${
+    <div className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden flex items-stretch min-h-[56px] sm:min-h-[76px] ${
       isFullyPicked && !isLocked 
         ? 'border-slate-900 shadow-md' 
         : selectedPick && !isLocked 
         ? 'border-[#FFB81C]/60' 
         : 'border-slate-200 hover:border-slate-300'
     }`}>
-      {/* 1. DATE & TIME BADGE (Upsized) */}
-      <div className={`w-28 sm:w-40 px-2 py-2 flex flex-col justify-center items-center shrink-0 border-r border-slate-100 text-center ${
+      {/* 1. DATE & TIME BADGE (Compact on Mobile) */}
+      <div className={`w-16 sm:w-40 px-1 sm:px-2 py-1.5 flex flex-col justify-center items-center shrink-0 border-r border-slate-100 text-center ${
         isLocked ? 'bg-slate-100' : 'bg-slate-50'
       }`}>
-        <div className="flex items-center gap-1.5 text-sm sm:text-base font-black text-slate-700 uppercase tracking-tight truncate">
-          {isLocked ? <Lock className="w-4 h-4 text-rose-500 shrink-0" /> : <Clock className="w-4 h-4 text-[#FFB81C] shrink-0" />}
+        <div className="flex items-center gap-1 text-[11px] sm:text-base font-black text-slate-700 uppercase tracking-tight truncate">
+          {isLocked ? <Lock className="w-3 h-3 sm:w-4 sm:h-4 text-rose-500 shrink-0" /> : <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-[#FFB81C] shrink-0" />}
           <span className="truncate">{game?.date?.replace(/, 20\d\d/, '')}</span>
-          {game?.isTiebreaker && <span className="text-[#FFB81C] font-black text-base leading-none" title="Tiebreaker Game">*</span>}
+          {game?.isTiebreaker && <span className="text-[#FFB81C] font-black text-xs sm:text-base leading-none" title="Tiebreaker Game">*</span>}
         </div>
-        <div className="text-xs sm:text-sm font-bold text-slate-400 leading-none mt-1">{game?.time}</div>
+        <div className="text-[9px] sm:text-sm font-bold text-slate-400 leading-none mt-0.5 sm:mt-1">{game?.time}</div>
       </div>
 
-      {/* 2. TEAM PICK SELECTION AREA (Upsized) */}
-      <div className={`p-1.5 sm:p-2.5 flex-1 flex items-center justify-between gap-2 sm:gap-3 ${isLocked ? 'opacity-75' : ''}`}>
+      {/* 2. TEAM PICK SELECTION AREA */}
+      <div className={`p-1 sm:p-2.5 flex-1 flex items-center justify-between gap-1 sm:gap-3 min-w-0 ${isLocked ? 'opacity-75' : ''}`}>
         
         {/* Away Team Button */}
         <button
           onClick={() => onPick(game?.away)}
           disabled={isLocked}
-          className={`flex-1 flex items-center justify-between py-2 px-2.5 sm:px-4 rounded-xl border-2 transition-all min-h-[48px] sm:min-h-[56px] ${
+          className={`flex-1 flex items-center justify-between py-1.5 px-2 sm:px-4 rounded-xl border-2 transition-all min-h-[42px] sm:min-h-[56px] min-w-0 ${
             selectedPick === game?.away
               ? 'border-[#FFB81C] bg-[#FFB81C]/15 text-slate-900 font-black shadow-sm'
               : 'border-transparent bg-slate-50 hover:bg-slate-100 text-slate-700'
           }`}
         >
-          <div className="flex items-center gap-2.5 truncate">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 truncate">
             <div 
-              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-black text-xs sm:text-sm shrink-0 shadow-sm"
+              className="w-6 h-6 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-black text-[10px] sm:text-sm shrink-0 shadow-sm"
               style={{ backgroundColor: NFL_COLORS[game?.away] || '#1e293b' }}
             >
               {game?.awayAbbr || game?.away}
             </div>
-            <span className="font-black uppercase italic text-sm sm:text-lg truncate sm:hidden">
+            <span className="font-black uppercase italic text-xs sm:text-lg truncate sm:hidden">
               {game?.awayAbbr || game?.away}
             </span>
-            <span className="font-black uppercase italic text-sm sm:text-lg truncate hidden sm:inline">
+            <span className="font-black uppercase italic text-xs sm:text-lg truncate hidden sm:inline">
               {game?.awayName || game?.awayAbbr || game?.away}
             </span>
           </div>
-          {selectedPick === game?.away && <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-[#FFB81C] shrink-0 ml-1 stroke-[3]" />}
+          {selectedPick === game?.away && <CheckCircle className="w-4 h-4 sm:w-6 sm:h-6 text-[#FFB81C] shrink-0 ml-1 stroke-[3]" />}
         </button>
 
-        <span className="text-sm sm:text-base font-black text-slate-300 italic uppercase shrink-0">@</span>
+        <span className="text-xs sm:text-base font-black text-slate-300 italic uppercase shrink-0">@</span>
 
         {/* Home Team Button */}
         <button
           onClick={() => onPick(game?.home)}
           disabled={isLocked}
-          className={`flex-1 flex items-center justify-between py-2 px-2.5 sm:px-4 rounded-xl border-2 transition-all min-h-[48px] sm:min-h-[56px] ${
+          className={`flex-1 flex items-center justify-between py-1.5 px-2 sm:px-4 rounded-xl border-2 transition-all min-h-[42px] sm:min-h-[56px] min-w-0 ${
             selectedPick === game?.home
               ? 'border-[#FFB81C] bg-[#FFB81C]/15 text-slate-900 font-black shadow-sm'
               : 'border-transparent bg-slate-50 hover:bg-slate-100 text-slate-700'
           }`}
         >
-          <div className="flex items-center gap-2.5 truncate">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 truncate">
             <div 
-              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-black text-xs sm:text-sm shrink-0 shadow-sm"
+              className="w-6 h-6 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-black text-[10px] sm:text-sm shrink-0 shadow-sm"
               style={{ backgroundColor: NFL_COLORS[game?.home] || '#1e293b' }}
             >
               {game?.homeAbbr || game?.home}
             </div>
-            <span className="font-black uppercase italic text-sm sm:text-lg truncate sm:hidden">
+            <span className="font-black uppercase italic text-xs sm:text-lg truncate sm:hidden">
               {game?.homeAbbr || game?.home}
             </span>
-            <span className="font-black uppercase italic text-sm sm:text-lg truncate hidden sm:inline">
+            <span className="font-black uppercase italic text-xs sm:text-lg truncate hidden sm:inline">
               {game?.homeName || game?.homeAbbr || game?.home}
             </span>
           </div>
-          {selectedPick === game?.home && <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-[#FFB81C] shrink-0 ml-1 stroke-[3]" />}
+          {selectedPick === game?.home && <CheckCircle className="w-4 h-4 sm:w-6 sm:h-6 text-[#FFB81C] shrink-0 ml-1 stroke-[3]" />}
         </button>
       </div>
 
-      {/* 3. RANK DROPDOWN (Upsized) */}
-      <div className={`px-2 sm:px-3 py-1.5 shrink-0 flex items-center justify-center border-l border-slate-100 ${
+      {/* 3. RANK DROPDOWN (Always Visible) */}
+      <div className={`px-1 sm:px-3 py-1.5 shrink-0 flex items-center justify-center border-l border-slate-100 ${
         isLocked ? 'bg-slate-100' : 'bg-slate-50/50'
       }`}>
         <select 
@@ -505,7 +505,7 @@ function GameCard({ game, selectedPick, selectedRank, totalGames, usedRanks, isL
             selectedRank && !isLocked 
               ? 'border-[#FFB81C] text-[#FFB81C] bg-slate-900 font-black' 
               : 'border-slate-200 text-slate-500 bg-white font-bold'
-          } text-sm sm:text-base font-black italic uppercase rounded-xl block w-24 sm:w-32 py-1.5 px-2 text-center outline-none transition-all cursor-pointer h-[48px] sm:h-[56px]`}
+          } text-xs sm:text-base font-black italic uppercase rounded-xl block w-18 sm:w-32 py-1 sm:py-1.5 px-1 text-center outline-none transition-all cursor-pointer h-[42px] sm:h-[56px]`}
         >
           <option value="" disabled>-- PTS --</option>
           {selectedRank && <option value="">-- Clear --</option>}
@@ -2167,26 +2167,26 @@ function AvailableRanksBar({ games, userPicks, userRanks, userTiebreaker }: { ga
   const hasTB = userTiebreaker !== undefined && userTiebreaker !== null && String(userTiebreaker).trim() !== '';
 
   return (
-    <div className="bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-800 p-2 text-white">
-      <div className="flex items-center justify-between gap-2">
+    <div className="bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-800 p-1 sm:p-2 text-white">
+      <div className="flex items-center justify-between gap-1 sm:gap-2">
         {/* Game Rank Chips (16 to 1) */}
-        <div className="grid grid-cols-8 md:grid-flow-col md:auto-cols-fr gap-1.5 text-center flex-1">
+        <div className="grid grid-cols-8 md:grid-flow-col md:auto-cols-fr gap-0.5 sm:gap-1.5 text-center flex-1 min-w-0">
           {allRanks.map((rank) => {
             const teamAbbr = rankMap[rank];
 
             return (
               <div
                 key={rank}
-                className={`rounded-xl py-1.5 px-1 flex flex-col items-center justify-center leading-none transition-all duration-200 ${
+                className={`rounded-lg sm:rounded-xl py-1 sm:py-1.5 px-0.5 flex flex-col items-center justify-center leading-none transition-all duration-200 ${
                   teamAbbr
                     ? 'bg-[#FFB81C] text-slate-900 font-black shadow-sm'
                     : 'bg-slate-800/80 text-slate-400 border border-slate-700/60 font-bold'
                 }`}
               >
-                <span className={`text-xs sm:text-sm font-black italic uppercase leading-none mb-1 ${teamAbbr ? 'text-slate-900/80' : 'text-slate-500'}`}>
+                <span className={`text-[10px] sm:text-sm font-black italic uppercase leading-none mb-0.5 sm:mb-1 ${teamAbbr ? 'text-slate-900/80' : 'text-slate-500'}`}>
                   {rank}
                 </span>
-                <span className={`text-xs sm:text-sm font-black italic uppercase leading-none tracking-tighter ${teamAbbr ? 'text-slate-900' : 'text-slate-600'}`}>
+                <span className={`text-[10px] sm:text-sm font-black italic uppercase leading-none tracking-tighter truncate w-full ${teamAbbr ? 'text-slate-900' : 'text-slate-600'}`}>
                   {teamAbbr || '—'}
                 </span>
               </div>
@@ -2196,17 +2196,17 @@ function AvailableRanksBar({ games, userPicks, userRanks, userTiebreaker }: { ga
 
         {/* TIEBREAKER REMINDER CHIP */}
         <div
-          className={`rounded-xl py-1.5 px-3 flex flex-col items-center justify-center leading-none shrink-0 border transition-all ${
+          className={`rounded-lg sm:rounded-xl py-1 sm:py-1.5 px-1.5 sm:px-3 flex flex-col items-center justify-center leading-none shrink-0 border transition-all ${
             hasTB
               ? 'bg-emerald-500 text-slate-900 border-emerald-400 font-black shadow-sm'
               : 'bg-amber-500/20 text-[#FFB81C] border-amber-500/40 font-bold animate-pulse'
           }`}
           title={hasTB ? `Tiebreaker: ${userTiebreaker} PTS` : 'No Tiebreaker entered (Defaults to 0)'}
         >
-          <span className={`text-xs sm:text-sm font-black italic uppercase leading-none mb-1 ${hasTB ? 'text-slate-900/80' : 'text-amber-400'}`}>
+          <span className={`text-[10px] sm:text-sm font-black italic uppercase leading-none mb-0.5 sm:mb-1 ${hasTB ? 'text-slate-900/80' : 'text-amber-400'}`}>
             TB
           </span>
-          <span className="text-xs sm:text-sm font-black italic uppercase leading-none tracking-tighter">
+          <span className="text-[10px] sm:text-sm font-black italic uppercase leading-none tracking-tighter">
             {hasTB ? userTiebreaker : '0*'}
           </span>
         </div>
