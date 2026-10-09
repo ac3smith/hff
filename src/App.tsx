@@ -414,98 +414,98 @@ function GameCard({ game, selectedPick, selectedRank, totalGames, usedRanks, isL
   const isFullyPicked = selectedPick && selectedRank;
 
   return (
-    <div className={`bg-white rounded-xl border transition-all duration-200 overflow-hidden flex items-stretch min-h-[46px] ${
+    <div className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden flex items-stretch min-h-[64px] sm:min-h-[76px] ${
       isFullyPicked && !isLocked 
-        ? 'border-slate-900 shadow-sm' 
+        ? 'border-slate-900 shadow-md' 
         : selectedPick && !isLocked 
         ? 'border-[#FFB81C]/60' 
         : 'border-slate-200 hover:border-slate-300'
     }`}>
-      {/* 1. DATE & TIME BADGE (Compact Left Bar) */}
-      <div className={`w-20 sm:w-32 px-1.5 py-1 flex flex-col justify-center items-center shrink-0 border-r border-slate-100 text-center ${
+      {/* 1. DATE & TIME BADGE (Upsized) */}
+      <div className={`w-28 sm:w-40 px-2 py-2 flex flex-col justify-center items-center shrink-0 border-r border-slate-100 text-center ${
         isLocked ? 'bg-slate-100' : 'bg-slate-50'
       }`}>
-        <div className="flex items-center gap-1 text-[10px] sm:text-xs font-black text-slate-600 uppercase tracking-tight truncate">
-          {isLocked ? <Lock className="w-3 h-3 text-rose-500 shrink-0" /> : <Clock className="w-3 h-3 text-[#FFB81C] shrink-0" />}
+        <div className="flex items-center gap-1.5 text-sm sm:text-base font-black text-slate-700 uppercase tracking-tight truncate">
+          {isLocked ? <Lock className="w-4 h-4 text-rose-500 shrink-0" /> : <Clock className="w-4 h-4 text-[#FFB81C] shrink-0" />}
           <span className="truncate">{game?.date?.replace(/, 20\d\d/, '')}</span>
-          {game?.isTiebreaker && <span className="text-[#FFB81C] font-black text-xs leading-none" title="Tiebreaker Game">*</span>}
+          {game?.isTiebreaker && <span className="text-[#FFB81C] font-black text-base leading-none" title="Tiebreaker Game">*</span>}
         </div>
-        <div className="text-[9px] sm:text-[10px] font-bold text-slate-400 leading-none mt-0.5">{game?.time}</div>
+        <div className="text-xs sm:text-sm font-bold text-slate-400 leading-none mt-1">{game?.time}</div>
       </div>
 
-      {/* 2. TEAM PICK SELECTION AREA (Slim Center Row) */}
-      <div className={`p-1 sm:p-1.5 flex-1 flex items-center justify-between gap-1 sm:gap-2 ${isLocked ? 'opacity-75' : ''}`}>
+      {/* 2. TEAM PICK SELECTION AREA (Upsized) */}
+      <div className={`p-1.5 sm:p-2.5 flex-1 flex items-center justify-between gap-2 sm:gap-3 ${isLocked ? 'opacity-75' : ''}`}>
         
         {/* Away Team Button */}
         <button
           onClick={() => onPick(game?.away)}
           disabled={isLocked}
-          className={`flex-1 flex items-center justify-between py-1 px-1.5 sm:px-2.5 rounded-lg border transition-all min-h-[34px] ${
+          className={`flex-1 flex items-center justify-between py-2 px-2.5 sm:px-4 rounded-xl border-2 transition-all min-h-[48px] sm:min-h-[56px] ${
             selectedPick === game?.away
               ? 'border-[#FFB81C] bg-[#FFB81C]/15 text-slate-900 font-black shadow-sm'
               : 'border-transparent bg-slate-50 hover:bg-slate-100 text-slate-700'
           }`}
         >
-          <div className="flex items-center gap-1.5 truncate">
+          <div className="flex items-center gap-2.5 truncate">
             <div 
-              className="w-5 h-5 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-white font-black text-[9px] sm:text-[10px] shrink-0 shadow-xs"
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-black text-xs sm:text-sm shrink-0 shadow-sm"
               style={{ backgroundColor: NFL_COLORS[game?.away] || '#1e293b' }}
             >
               {game?.awayAbbr || game?.away}
             </div>
-            <span className="font-black uppercase italic text-xs sm:text-sm truncate sm:hidden">
+            <span className="font-black uppercase italic text-sm sm:text-lg truncate sm:hidden">
               {game?.awayAbbr || game?.away}
             </span>
-            <span className="font-black uppercase italic text-xs sm:text-sm truncate hidden sm:inline">
+            <span className="font-black uppercase italic text-sm sm:text-lg truncate hidden sm:inline">
               {game?.awayName || game?.awayAbbr || game?.away}
             </span>
           </div>
-          {selectedPick === game?.away && <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#FFB81C] shrink-0 ml-1 stroke-[3]" />}
+          {selectedPick === game?.away && <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-[#FFB81C] shrink-0 ml-1 stroke-[3]" />}
         </button>
 
-        <span className="text-[9px] sm:text-[10px] font-black text-slate-300 italic uppercase shrink-0">@</span>
+        <span className="text-sm sm:text-base font-black text-slate-300 italic uppercase shrink-0">@</span>
 
         {/* Home Team Button */}
         <button
           onClick={() => onPick(game?.home)}
           disabled={isLocked}
-          className={`flex-1 flex items-center justify-between py-1 px-1.5 sm:px-2.5 rounded-lg border transition-all min-h-[34px] ${
+          className={`flex-1 flex items-center justify-between py-2 px-2.5 sm:px-4 rounded-xl border-2 transition-all min-h-[48px] sm:min-h-[56px] ${
             selectedPick === game?.home
               ? 'border-[#FFB81C] bg-[#FFB81C]/15 text-slate-900 font-black shadow-sm'
               : 'border-transparent bg-slate-50 hover:bg-slate-100 text-slate-700'
           }`}
         >
-          <div className="flex items-center gap-1.5 truncate">
+          <div className="flex items-center gap-2.5 truncate">
             <div 
-              className="w-5 h-5 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-white font-black text-[9px] sm:text-[10px] shrink-0 shadow-xs"
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-black text-xs sm:text-sm shrink-0 shadow-sm"
               style={{ backgroundColor: NFL_COLORS[game?.home] || '#1e293b' }}
             >
               {game?.homeAbbr || game?.home}
             </div>
-            <span className="font-black uppercase italic text-xs sm:text-sm truncate sm:hidden">
+            <span className="font-black uppercase italic text-sm sm:text-lg truncate sm:hidden">
               {game?.homeAbbr || game?.home}
             </span>
-            <span className="font-black uppercase italic text-xs sm:text-sm truncate hidden sm:inline">
+            <span className="font-black uppercase italic text-sm sm:text-lg truncate hidden sm:inline">
               {game?.homeName || game?.homeAbbr || game?.home}
             </span>
           </div>
-          {selectedPick === game?.home && <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#FFB81C] shrink-0 ml-1 stroke-[3]" />}
+          {selectedPick === game?.home && <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-[#FFB81C] shrink-0 ml-1 stroke-[3]" />}
         </button>
       </div>
 
-      {/* 3. RANK DROPDOWN (Slim Right Selector) */}
-      <div className={`px-1.5 py-1 shrink-0 flex items-center justify-center border-l border-slate-100 ${
+      {/* 3. RANK DROPDOWN (Upsized) */}
+      <div className={`px-2 sm:px-3 py-1.5 shrink-0 flex items-center justify-center border-l border-slate-100 ${
         isLocked ? 'bg-slate-100' : 'bg-slate-50/50'
       }`}>
         <select 
           value={selectedRank || ''} 
           onChange={(e) => onRankChange(e.target.value)} 
           disabled={isLocked} 
-          className={`appearance-none border ${
+          className={`appearance-none border-2 ${
             selectedRank && !isLocked 
               ? 'border-[#FFB81C] text-[#FFB81C] bg-slate-900 font-black' 
               : 'border-slate-200 text-slate-500 bg-white font-bold'
-          } text-xs font-black italic uppercase rounded-lg block w-20 sm:w-28 py-1 px-1 text-center outline-none transition-all cursor-pointer h-[34px]`}
+          } text-sm sm:text-base font-black italic uppercase rounded-xl block w-24 sm:w-32 py-1.5 px-2 text-center outline-none transition-all cursor-pointer h-[48px] sm:h-[56px]`}
         >
           <option value="" disabled>-- PTS --</option>
           {selectedRank && <option value="">-- Clear --</option>}
@@ -1881,20 +1881,19 @@ function LockBanner({ week }: any) {
   return <div className="bg-red-50 border-l-8 border-red-500 p-5 rounded-2xl flex gap-4 shadow-xl mb-6"><Lock className="w-8 h-8 text-red-500 flex-shrink-0" /><div><p className="text-lg font-black italic uppercase text-red-800">{label} is Locked</p></div></div>; 
 }
 
-// RESTRICTED WEEK SELECTOR FOR ADVANCE PICK TABS (Hides past closed weeks)
 function PickWeekSelector({ week, setWeek, currentActiveWeek, maxActiveWeeks = 18 }: any) { 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs font-black uppercase text-slate-400 tracking-wider shrink-0">Week:</span>
+      <span className="text-sm sm:text-base font-black italic uppercase text-slate-300 tracking-wider shrink-0">Week:</span>
       <select 
         value={week} 
         onChange={(e) => setWeek(Number(e.target.value))} 
-        className="bg-slate-800 text-white border border-slate-700 rounded-xl px-3 py-1 font-black text-xs sm:text-sm outline-none focus:border-[#FFB81C] cursor-pointer shadow-sm"
+        className="bg-slate-800 text-white border border-slate-700 rounded-xl px-3.5 py-2 font-black italic uppercase text-sm sm:text-base outline-none focus:border-[#FFB81C] cursor-pointer shadow-sm"
       >
         {Array.from({ length: maxActiveWeeks }, (_, i) => i + 1)
           .filter(w => w >= currentActiveWeek)
           .map(w => (
-            <option key={w} value={w} className="bg-slate-900 text-white font-bold">
+            <option key={w} value={w} className="bg-slate-900 text-white font-black italic uppercase text-sm sm:text-base">
               Week {w} {w === currentActiveWeek ? '(Current)' : '(Advance)'}
             </option>
           ))}
@@ -2168,26 +2167,26 @@ function AvailableRanksBar({ games, userPicks, userRanks, userTiebreaker }: { ga
   const hasTB = userTiebreaker !== undefined && userTiebreaker !== null && String(userTiebreaker).trim() !== '';
 
   return (
-    <div className="bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-800 p-1.5 text-white">
-      <div className="flex items-center justify-between gap-1.5">
+    <div className="bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-800 p-2 text-white">
+      <div className="flex items-center justify-between gap-2">
         {/* Game Rank Chips (16 to 1) */}
-        <div className="grid grid-cols-8 md:grid-flow-col md:auto-cols-fr gap-1 text-center flex-1">
+        <div className="grid grid-cols-8 md:grid-flow-col md:auto-cols-fr gap-1.5 text-center flex-1">
           {allRanks.map((rank) => {
             const teamAbbr = rankMap[rank];
 
             return (
               <div
                 key={rank}
-                className={`rounded-lg py-1 px-0.5 flex flex-col items-center justify-center leading-none transition-all duration-200 ${
+                className={`rounded-xl py-1.5 px-1 flex flex-col items-center justify-center leading-none transition-all duration-200 ${
                   teamAbbr
                     ? 'bg-[#FFB81C] text-slate-900 font-black shadow-sm'
                     : 'bg-slate-800/80 text-slate-400 border border-slate-700/60 font-bold'
                 }`}
               >
-                <span className={`text-[9px] sm:text-[10px] italic leading-none mb-0.5 ${teamAbbr ? 'text-slate-900/70 font-black' : 'text-slate-500'}`}>
+                <span className={`text-xs sm:text-sm font-black italic uppercase leading-none mb-1 ${teamAbbr ? 'text-slate-900/80' : 'text-slate-500'}`}>
                   {rank}
                 </span>
-                <span className={`text-[10px] sm:text-xs font-black italic uppercase leading-none tracking-tighter ${teamAbbr ? 'text-slate-900' : 'text-slate-600'}`}>
+                <span className={`text-xs sm:text-sm font-black italic uppercase leading-none tracking-tighter ${teamAbbr ? 'text-slate-900' : 'text-slate-600'}`}>
                   {teamAbbr || '—'}
                 </span>
               </div>
@@ -2197,17 +2196,17 @@ function AvailableRanksBar({ games, userPicks, userRanks, userTiebreaker }: { ga
 
         {/* TIEBREAKER REMINDER CHIP */}
         <div
-          className={`rounded-lg py-1 px-2.5 flex flex-col items-center justify-center leading-none shrink-0 border transition-all ${
+          className={`rounded-xl py-1.5 px-3 flex flex-col items-center justify-center leading-none shrink-0 border transition-all ${
             hasTB
               ? 'bg-emerald-500 text-slate-900 border-emerald-400 font-black shadow-sm'
               : 'bg-amber-500/20 text-[#FFB81C] border-amber-500/40 font-bold animate-pulse'
           }`}
           title={hasTB ? `Tiebreaker: ${userTiebreaker} PTS` : 'No Tiebreaker entered (Defaults to 0)'}
         >
-          <span className={`text-[9px] sm:text-[10px] italic leading-none mb-0.5 ${hasTB ? 'text-slate-900/80 font-black' : 'text-amber-400'}`}>
+          <span className={`text-xs sm:text-sm font-black italic uppercase leading-none mb-1 ${hasTB ? 'text-slate-900/80' : 'text-amber-400'}`}>
             TB
           </span>
-          <span className="text-[10px] sm:text-xs font-black italic leading-none tracking-tighter">
+          <span className="text-xs sm:text-sm font-black italic uppercase leading-none tracking-tighter">
             {hasTB ? userTiebreaker : '0*'}
           </span>
         </div>
@@ -5233,9 +5232,9 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
     {!currentUser.playsConfidence && <ParticipationAlert game="Fanatics" />}
     {isPickWeekLocked && <LockBanner week={picksSelectedWeek} />}
 
-    {/* COMPACT CONTROL HEADER WITH STATUS BADGE & LOCKDOWN DETAILS */}
-    <div className="bg-slate-900 rounded-2xl p-3 sm:p-4 text-white shadow-md border-t-2 border-[#FFB81C]">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+    {/* COMPACT CONTROL HEADER WITH MATCHED FONT SIZES */}
+    <div className="bg-slate-900 rounded-2xl p-3.5 sm:p-5 text-white shadow-md border-t-2 border-[#FFB81C]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         
         {/* LEFT: WEEK SELECTOR & HIGH-CONTRAST PICKS STATUS */}
         <div className="flex items-center gap-3 flex-wrap">
@@ -5247,11 +5246,11 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
           />
           
           {isCompleteFanatics ? (
-            <span className="bg-emerald-600 text-white border border-emerald-400 font-black italic uppercase text-xs px-3 py-1 rounded-full shadow-sm flex items-center gap-1.5 shrink-0">
+            <span className="bg-emerald-600 text-white border border-emerald-400 font-black italic uppercase text-xs sm:text-sm px-3.5 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 shrink-0 tracking-wider">
               <CheckCircle className="w-4 h-4 text-white" /> PICKS COMPLETE
             </span>
           ) : (
-            <span className="bg-rose-600 text-white border border-rose-400 font-black italic uppercase text-xs px-3 py-1 rounded-full shadow-sm flex items-center gap-1.5 shrink-0 animate-pulse">
+            <span className="bg-rose-600 text-white border border-rose-400 font-black italic uppercase text-xs sm:text-sm px-3.5 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 shrink-0 animate-pulse tracking-wider">
               <XCircle className="w-4 h-4 text-white" /> PICKS NOT COMPLETE ({fullyPickedCount}/{totalPickGamesCount})
             </span>
           )}
@@ -5262,16 +5261,16 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
           <AutoSaveIndicator isSaving={isSaving} hasSaved={hasSaved} count={totalItemsCompleted} />
           
           {pickLockdownTime && (
-            <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700">
-              <Clock className="w-4 h-4 text-[#FFB81C] shrink-0" />
+            <div className="flex items-center gap-2 bg-slate-800 px-3.5 py-2 rounded-xl border border-slate-700">
+              <Clock className="w-4.5 h-4.5 text-[#FFB81C] shrink-0" />
               <div className="text-right leading-tight">
                 {formattedLockDeadline && (
-                  <span className="text-[10px] font-bold text-slate-300 block">
-                    Locks {formattedLockDeadline}
+                  <span className="text-xs sm:text-sm font-black italic uppercase text-slate-300 block tracking-wide">
+                    LOCKS {formattedLockDeadline}
                   </span>
                 )}
-                <span className="text-xs font-black text-[#FFB81C]">
-                  Countdown: <CountdownClock targetTime={pickLockdownTime} />
+                <span className="text-xs sm:text-sm font-black italic uppercase text-[#FFB81C] tracking-wide">
+                  COUNTDOWN: <CountdownClock targetTime={pickLockdownTime} />
                 </span>
               </div>
             </div>
