@@ -4059,7 +4059,8 @@ function ensureAutoTiebreaker(gamesList: any[]) {
     if (now - lastSyncTimeRef.current < 5000) return;
     lastSyncTimeRef.current = now;
 
-    const targetWeek = selectedWeek || liveSeasonWeek || 1;
+    // 🔒 ALWAYS target liveSeasonWeek strictly
+    const targetWeek = liveSeasonWeek || 1;
     const targetGames = globalSettings?.games?.[targetWeek] || games || [];
     if (!targetGames || targetGames.length === 0) return;
 
@@ -4078,7 +4079,7 @@ function ensureAutoTiebreaker(gamesList: any[]) {
         const gAwayCanonical = getCanonicalTeamCode(g.away || g.awayAbbr || g.awayName);
         const gHomeCanonical = getCanonicalTeamCode(g.home || g.homeAbbr || g.homeName);
 
-        // Find ESPN game by matching both team codes regardless of ESPN's Home/Away order
+        // 1. Match ESPN event containing BOTH teams (ignoring ESPN's Home/Away order)
         const match = espnEvents.find((evt: any) => {
           const competitors = evt.competitions?.[0]?.competitors || [];
           const teamCodes = competitors.map((c: any) => 
@@ -4096,14 +4097,17 @@ function ensureAutoTiebreaker(gamesList: any[]) {
           const isFinal = statusType.includes('FINAL');
           const isLive = statusObj.type?.state === 'in';
 
-          // MATCH DIRECTLY BY TEAM CODE (Fixes inverted score bug)
+          // 2. Find Hanover's Away Team inside ESPN's competitors array
           const awayTeamComp = competitors.find((c: any) => 
             getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName) === gAwayCanonical
           );
+
+          // 3. Find Hanover's Home Team inside ESPN's competitors array
           const homeTeamComp = competitors.find((c: any) => 
             getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName) === gHomeCanonical
           );
 
+          // 4. Extract scores directly by team identity (Impossible to invert)
           const awayTotal = awayTeamComp ? parseInt(String(awayTeamComp.score || '0'), 10) : 0;
           const homeTotal = homeTeamComp ? parseInt(String(homeTeamComp.score || '0'), 10) : 0;
 
