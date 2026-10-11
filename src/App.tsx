@@ -4071,14 +4071,15 @@ function ensureAutoTiebreaker(gamesList: any[]) {
     if (now - lastSyncTimeRef.current < 5000) return;
     lastSyncTimeRef.current = now;
 
-    // 🔒 ALWAYS target liveSeasonWeek strictly
+    // 🔒 Target current live season week strictly
     const targetWeek = liveSeasonWeek || 1;
     const targetGames = globalSettings?.games?.[targetWeek] || games || [];
     if (!targetGames || targetGames.length === 0) return;
 
     setIsSyncing(true);
     try {
-      const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`);
+      // Added timestamp cache-buster to guarantee fresh ESPN scores
+      const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?_=${now}`);
       if (!res.ok) {
         setIsSyncing(false);
         return;
@@ -4091,11 +4092,11 @@ function ensureAutoTiebreaker(gamesList: any[]) {
         const gAwayCanonical = getCanonicalTeamCode(g.away || g.awayAbbr || g.awayName);
         const gHomeCanonical = getCanonicalTeamCode(g.home || g.homeAbbr || g.homeName);
 
-        // 1. Match ESPN event containing BOTH teams (ignoring ESPN's Home/Away order)
+        // 1. Find matching ESPN game by canonical team codes
         const match = espnEvents.find((evt: any) => {
           const competitors = evt.competitions?.[0]?.competitors || [];
           const teamCodes = competitors.map((c: any) => 
-            getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName)
+            getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName || c.team?.name)
           );
           return teamCodes.includes(gAwayCanonical) && teamCodes.includes(gHomeCanonical);
         });
@@ -4109,17 +4110,18 @@ function ensureAutoTiebreaker(gamesList: any[]) {
           const isFinal = statusType.includes('FINAL');
           const isLive = statusObj.type?.state === 'in';
 
-          // 2. Find Hanover's Away Team inside ESPN's competitors array
-          const awayTeamComp = competitors.find((c: any) => 
-            getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName) === gAwayCanonical
-          );
+          // 2. Find Hanover Away Team competitor in ESPN
+          const awayTeamComp = competitors.find((c: any) => {
+            const code = getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName || c.team?.name);
+            return code === gAwayCanonical;
+          });
 
-          // 3. Find Hanover's Home Team inside ESPN's competitors array
-          const homeTeamComp = competitors.find((c: any) => 
-            getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName) === gHomeCanonical
-          );
+          // 3. Find Hanover Home Team competitor in ESPN
+          const homeTeamComp = competitors.find((c: any) => {
+            const code = getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName || c.team?.name);
+            return code === gHomeCanonical;
+          });
 
-          // 4. Extract scores directly by team identity (Impossible to invert)
           const awayTotal = awayTeamComp ? parseInt(String(awayTeamComp.score || '0'), 10) : 0;
           const homeTotal = homeTeamComp ? parseInt(String(homeTeamComp.score || '0'), 10) : 0;
 
@@ -4151,8 +4153,8 @@ function ensureAutoTiebreaker(gamesList: any[]) {
             gameClock: isLive ? clockDisplay : null,
             possession: isLive ? possessionAbbr : null,
             isRedZone: isLive ? isRedZone : false,
-            homeScore: isLive || isFinal ? homeTotal : null,
-            awayScore: isLive || isFinal ? awayTotal : null,
+            awayScore: isLive || isFinal ? awayTotal : null, // Away score -> awayScore
+            homeScore: isLive || isFinal ? homeTotal : null, // Home score -> homeScore
             winner: isFinal ? winner : null,
             downAndDistance: isLive ? downAndDistance : null,
             lastPlayText: isLive ? lastPlayText : null,
