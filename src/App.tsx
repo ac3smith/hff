@@ -63,16 +63,26 @@ const NFL_TEAMS: Record<string, { abbr: string; name: string; city: string; colo
   WAS: { abbr: 'WAS', name: 'Commanders', city: 'Washington', color: '#5A1414', aliases: ['WAS', 'WSH', 'WASHINGTON', 'COMMANDERS', 'REDSKINS'] }
 };
 
-// Global Central Resolver Function
 export function getCanonicalTeamCode(rawInput: string): string {
   if (!rawInput) return '';
   const clean = String(rawInput).trim().toUpperCase();
 
+  // 1. Direct code or alias match
   for (const [code, team] of Object.entries(NFL_TEAMS)) {
-    if (code === clean || team.aliases.some(a => a === clean)) {
+    if (code === clean || team.aliases.some(a => a.toUpperCase() === clean)) {
       return code;
     }
   }
+
+  // 2. Full team name or nickname match (e.g. "Kansas City Chiefs" -> "KC")
+  for (const [code, team] of Object.entries(NFL_TEAMS)) {
+    const fullName = `${team.city} ${team.name}`.toUpperCase();
+    const teamNameUpper = team.name.toUpperCase();
+    if (clean === fullName || clean === teamNameUpper || clean.includes(teamNameUpper)) {
+      return code;
+    }
+  }
+
   return clean;
 }
 
@@ -1481,96 +1491,216 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
 
   const firstPlacePTS = data?.[0]?.[ptsKey] || 0;
 
+  // 1. Identify Movement Leaders
+  const movers = (data || []).filter((u: any) => u.rankDelta !== 0);
+  const biggestMover = movers.length > 0 ? [...movers].sort((a: any, b: any) => b.rankDelta - a.rankDelta)[0] : null;
+  const toughestDrop = movers.length > 0 ? [...movers].sort((a: any, b: any) => a.rankDelta - b.rankDelta)[0] : null;
+
+  // 2. Identify 3-Week Points Leader & Latest Week High Scorer
+  const threeWeekLeader = (data || []).length > 0 
+    ? [...data].sort((a: any, b: any) => (b.threeWeekPts || 0) - (a.threeWeekPts || 0))[0] 
+    : null;
+
+  const latestWeekWinner = (data || []).length > 0
+    ? [...data].sort((a: any, b: any) => (b.latestWeekPts || 0) - (a.latestWeekPts || 0))[0]
+    : null;
+
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl border overflow-hidden border-t-6 sm:border-t-8 border-[#FFB81C] max-w-4xl mx-auto">
-      {/* HEADER */}
-      <div className="p-4 sm:p-6 bg-slate-50 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 sm:gap-2">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tight flex items-center gap-2 text-slate-900">
-            <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-[#FFB81C]" /> {view} Leaderboard
-          </h2>
-          <p className="text-[10px] sm:text-xs text-slate-500 font-bold mt-0.5">
-            {view === '1st Half' 
-              ? 'Weeks 1–9 Race' 
-              : view === '2nd Half' 
-              ? 'Weeks 10–18 Race' 
-              : 'Full Season Race (Weeks 1–18)'}
-          </p>
-        </div>
-      </div>
-
-      {/* TABLE COLUMN DESCRIPTIONS HEADER BAR */}
-      <div className="bg-slate-900 text-white px-3 sm:px-5 py-2.5 flex items-center justify-between text-[9px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-widest border-b-2 border-[#FFB81C]">
-        <div className="w-5/12 sm:w-2/5 truncate">Player</div>
-        <div className="flex items-center gap-2 sm:gap-6 justify-end w-7/12 sm:w-3/5 text-right">
-          <div className="w-12 sm:w-16 text-center">PTS</div>
-          <div className="w-16 sm:w-24 text-right">Behind</div>
-          <div className="w-16 sm:w-20 text-right">Net $</div>
-        </div>
-      </div>
-
-      {/* STANDINGS TABLE ROWS */}
-      <div className="divide-y divide-slate-100">
-        {(data || []).map((user: any, idx: number) => {
-          const isMe = user.id === currentUser?.id;
-          const pts = user[ptsKey] || 0;
-          const netDollars = user[fpKey] || 0;
-
-          const behindLeader = firstPlacePTS - pts;
-          const behindNext = idx > 0 ? (data[idx - 1]?.[ptsKey] || 0) - pts : 0;
-
-          return (
-            <div key={user.id} className={`px-3 sm:px-5 py-2.5 sm:py-3.5 flex items-center justify-between transition-colors ${isMe ? 'bg-[#FFB81C]/20 font-black border-l-4 border-[#FFB81C]' : 'hover:bg-slate-50'}`}>
-              {/* Player Info */}
-              <div className="flex items-center gap-1.5 sm:gap-3 w-5/12 sm:w-2/5 min-w-0">
-                <span className="font-black italic text-xs sm:text-lg text-slate-400 w-4 sm:w-6 text-right shrink-0">
-                  #{user.displayRank}
-                </span>
-                <div className="truncate min-w-0">
-                  <span className="font-black uppercase text-xs sm:text-sm text-slate-900 block leading-tight truncate">
-                    {user.firstName} {user.nickname ? `"${user.nickname}"` : ''}
-                  </span>
-                  <span className="text-[10px] sm:text-xs text-slate-500 font-bold block truncate">
-                    {user.lastName}
-                  </span>
-                </div>
-              </div>
-
-              {/* Numerical Metrics */}
-              <div className="flex items-center gap-2 sm:gap-6 justify-end w-7/12 sm:w-3/5 text-right shrink-0">
-                {/* Points Badge */}
-                <div className="text-center font-mono font-black text-xs sm:text-sm text-slate-900 bg-slate-100 px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl w-12 sm:w-16 shrink-0">
-                  {pts} <span className="text-[8px] sm:text-[9px] font-black uppercase text-slate-400 block -mt-0.5 sm:-mt-1">PTS</span>
-                </div>
-
-                {/* Behind Column */}
-                <div className="text-right w-16 sm:w-24 shrink-0">
-                  {idx === 0 ? (
-                    <span className="text-slate-300 font-bold text-xs block text-right pr-2">-</span>
-                  ) : (
-                    <div className="flex flex-col items-end leading-tight">
-                      <span className={behindLeader === 0 ? 'text-slate-400 font-bold text-[11px] sm:text-xs' : 'text-rose-600 font-black text-[11px] sm:text-sm'}>
-                        {behindLeader === 0 ? '0' : `-${behindLeader}`}
-                      </span>
-                      <span className="text-[8px] sm:text-[9px] text-slate-400 font-bold mt-0.5">
-                        ({behindNext === 0 ? '0' : `-${behindNext}`})
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Net Winnings Badge */}
-                <div className={`text-right font-mono font-black text-[11px] sm:text-sm px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border w-16 sm:w-20 shrink-0 ${
-                  netDollars >= 0 
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                    : 'bg-rose-50 text-rose-700 border-rose-200'
-                }`}>
-                  {netDollars >= 0 ? `+$${netDollars}` : `-$${Math.abs(netDollars)}`}
-                </div>
-              </div>
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* 🏆 FACTUAL SPOTLIGHT CARDS */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        {/* ROCKET MOVER */}
+        <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-3.5 flex flex-col justify-between shadow-md text-white">
+          <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400 flex items-center justify-between">
+            <span>Rocket Mover</span>
+            <span>🚀</span>
+          </div>
+          <div className="my-1.5">
+            <div className="text-sm font-black truncate">{biggestMover ? `${biggestMover.firstName} ${biggestMover.lastName}` : 'Holding Steady'}</div>
+            <div className="text-[10px] font-bold text-slate-400 truncate">
+              {biggestMover && biggestMover.rankDelta > 0 ? `Climbed from #${biggestMover.prevRank} to #${biggestMover.displayRank}` : 'No rank changes yet'}
             </div>
-          );
-        })}
+          </div>
+          {biggestMover && biggestMover.rankDelta > 0 ? (
+            <span className="text-xs font-black text-emerald-400 font-mono">▲ +{biggestMover.rankDelta} Spots</span>
+          ) : (
+            <span className="text-xs font-bold text-slate-500">—</span>
+          )}
+        </div>
+
+        {/* TOUGHEST DROP */}
+        <div className="bg-slate-900 border border-rose-500/40 rounded-2xl p-3.5 flex flex-col justify-between shadow-md text-white">
+          <div className="text-[10px] font-black uppercase tracking-wider text-rose-400 flex items-center justify-between">
+            <span>Toughest Drop</span>
+            <span>📉</span>
+          </div>
+          <div className="my-1.5">
+            <div className="text-sm font-black truncate">{toughestDrop ? `${toughestDrop.firstName} ${toughestDrop.lastName}` : 'Holding Steady'}</div>
+            <div className="text-[10px] font-bold text-slate-400 truncate">
+              {toughestDrop && toughestDrop.rankDelta < 0 ? `Dropped from #${toughestDrop.prevRank} to #${toughestDrop.displayRank}` : 'No rank changes yet'}
+            </div>
+          </div>
+          {toughestDrop && toughestDrop.rankDelta < 0 ? (
+            <span className="text-xs font-black text-rose-400 font-mono">▼ {toughestDrop.rankDelta} Spots</span>
+          ) : (
+            <span className="text-xs font-bold text-slate-500">—</span>
+          )}
+        </div>
+
+        {/* 3-WEEK POINTS LEADER */}
+        <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-3.5 flex flex-col justify-between shadow-md text-white">
+          <div className="text-[10px] font-black uppercase tracking-wider text-[#FFB81C] flex items-center justify-between">
+            <span>3-Wk Scoring Leader</span>
+            <span>🎯</span>
+          </div>
+          <div className="my-1.5">
+            <div className="text-sm font-black truncate">{threeWeekLeader ? `${threeWeekLeader.firstName} ${threeWeekLeader.lastName}` : 'Even Slate'}</div>
+            <div className="text-[10px] font-bold text-slate-400 truncate">
+              {threeWeekLeader && threeWeekLeader.threeWeekPts > 0 
+                ? `${threeWeekLeader.threeWeekPts} PTS over last 3 wks` 
+                : 'Need 2+ closed weeks'}
+            </div>
+          </div>
+          <span className="text-xs font-black text-[#FFB81C] font-mono">
+            {threeWeekLeader && threeWeekLeader.threeWeekAvg > 0 ? `${threeWeekLeader.threeWeekAvg.toFixed(1)} PTS/wk` : '—'}
+          </span>
+        </div>
+
+{/* LAST WEEK'S WINNER */}
+<div className="bg-slate-900 border border-indigo-500/40 rounded-2xl p-3.5 flex flex-col justify-between shadow-md text-white">
+          <div className="text-[10px] font-black uppercase tracking-wider text-indigo-400 flex items-center justify-between">
+            <span>Last Week's Winner</span>
+            <span>👑</span>
+          </div>
+          <div className="my-1.5">
+            <div className="text-sm font-black truncate">
+              {latestWeekWinner ? `${latestWeekWinner.firstName} ${latestWeekWinner.lastName}` : 'Even Slate'}
+            </div>
+            {latestWeekWinner && latestWeekWinner.latestWeekNum ? (
+              <div className="text-[10px] font-bold text-slate-400 truncate">
+                Week {latestWeekWinner.latestWeekNum}
+              </div>
+            ) : null}
+          </div>
+          <span className="text-xs font-black text-indigo-400 font-mono">
+            {latestWeekWinner && latestWeekWinner.latestWeekPts > 0 ? `${latestWeekWinner.latestWeekPts} PTS` : '—'}
+          </span>
+        </div>
+      </div>
+
+      {/* STANDINGS TABLE */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl border overflow-hidden border-t-6 sm:border-t-8 border-[#FFB81C]">
+        <div className="p-4 sm:p-6 bg-slate-50 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 sm:gap-2">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tight flex items-center gap-2 text-slate-900">
+              <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-[#FFB81C]" /> {view} Leaderboard
+            </h2>
+            <p className="text-[10px] sm:text-xs text-slate-500 font-bold mt-0.5">
+              {view === '1st Half' 
+                ? 'Weeks 1–9 Race' 
+                : view === '2nd Half' 
+                ? 'Weeks 10–18 Race' 
+                : 'Full Season Race (Weeks 1–18)'}
+            </p>
+          </div>
+        </div>
+
+        {/* TABLE HEADER */}
+        <div className="bg-slate-900 text-white px-3 sm:px-5 py-2.5 flex items-center justify-between text-[9px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-widest border-b-2 border-[#FFB81C]">
+          <div className="w-6/12 sm:w-5/12 truncate">Player & Recent Scoring</div>
+          <div className="flex items-center gap-2 sm:gap-6 justify-end w-6/12 sm:w-7/12 text-right">
+            <div className="w-10 sm:w-14 text-center">Shift</div>
+            <div className="w-12 sm:w-16 text-center">PTS</div>
+            <div className="w-14 sm:w-20 text-right">Behind</div>
+            <div className="w-14 sm:w-18 text-right">Net $</div>
+          </div>
+        </div>
+
+        {/* TABLE ROWS */}
+        <div className="divide-y divide-slate-100">
+          {(data || []).map((user: any, idx: number) => {
+            const isMe = user.id === currentUser?.id;
+            const pts = user[ptsKey] || 0;
+            const netDollars = user[fpKey] || 0;
+
+            const behindLeader = firstPlacePTS - pts;
+            const behindNext = idx > 0 ? (data[idx - 1]?.[ptsKey] || 0) - pts : 0;
+            const delta = user.rankDelta || 0;
+
+            return (
+              <div key={user.id} className={`px-3 sm:px-5 py-2.5 sm:py-3.5 flex items-center justify-between transition-colors ${isMe ? 'bg-[#FFB81C]/20 font-black border-l-4 border-[#FFB81C]' : 'hover:bg-slate-50'}`}>
+                {/* Player Name + Concrete 3-Week Stats Subtitle */}
+                <div className="flex items-center gap-2 sm:gap-3 w-6/12 sm:w-5/12 min-w-0">
+                  <span className="font-black italic text-xs sm:text-lg text-slate-400 w-4 sm:w-6 text-right shrink-0">
+                    #{user.displayRank}
+                  </span>
+                  <div className="truncate min-w-0">
+                    <span className="font-black uppercase text-xs sm:text-sm text-slate-900 block leading-tight truncate">
+                      {user.firstName} {user.nickname ? `"${user.nickname}"` : ''} {user.lastName}
+                    </span>
+                    {user.threeWeekPts > 0 ? (
+                      <span className="text-[9px] sm:text-[10px] text-slate-500 font-mono font-bold block truncate mt-0.5">
+                        3-Wk Total: {user.threeWeekPts} PTS • {user.threeWeekAvg.toFixed(1)}/wk
+                      </span>
+                    ) : (
+                      <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold block truncate mt-0.5">
+                        Season In Progress
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Metrics */}
+                <div className="flex items-center gap-2 sm:gap-6 justify-end w-6/12 sm:w-7/12 text-right shrink-0">
+                  {/* Shift Column */}
+                  <div className="w-10 sm:w-14 text-center shrink-0">
+                    {delta > 0 ? (
+                      <span className="text-[10px] sm:text-xs font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-mono">
+                        ▲+{delta}
+                      </span>
+                    ) : delta < 0 ? (
+                      <span className="text-[10px] sm:text-xs font-black text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded font-mono">
+                        ▼{delta}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300 font-bold text-xs">—</span>
+                    )}
+                  </div>
+
+                  {/* Points Badge */}
+                  <div className="text-center font-mono font-black text-xs sm:text-sm text-slate-900 bg-slate-100 px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl w-12 sm:w-16 shrink-0">
+                    {pts} <span className="text-[8px] sm:text-[9px] font-black uppercase text-slate-400 block -mt-0.5 sm:-mt-1">PTS</span>
+                  </div>
+
+                  {/* Behind Column */}
+                  <div className="text-right w-14 sm:w-20 shrink-0">
+                    {idx === 0 ? (
+                      <span className="text-slate-300 font-bold text-xs block text-right pr-2">-</span>
+                    ) : (
+                      <div className="flex flex-col items-end leading-tight">
+                        <span className={behindLeader === 0 ? 'text-slate-400 font-bold text-[11px] sm:text-xs' : 'text-rose-600 font-black text-[11px] sm:text-sm'}>
+                          {behindLeader === 0 ? '0' : `-${behindLeader}`}
+                        </span>
+                        <span className="text-[8px] sm:text-[9px] text-slate-400 font-bold mt-0.5">
+                          ({behindNext === 0 ? '0' : `-${behindNext}`})
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Net Winnings Badge */}
+                  <div className={`text-right font-mono font-black text-[11px] sm:text-sm px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border w-14 sm:w-18 shrink-0 ${
+                    netDollars >= 0 
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                      : 'bg-rose-50 text-rose-700 border-rose-200'
+                  }`}>
+                    {netDollars >= 0 ? `+$${netDollars}` : `-$${Math.abs(netDollars)}`}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -2317,42 +2447,55 @@ const great8 = processedUsers.filter(u => u.grossPayout > 0 || u.netWinnings > -
 // 2. Displays absolute lowest position at the top working up
 const basement = processedUsers.slice(-8);
 
-    // 4. Movers & Shakers
-    let biggestClimber: any = null;
-    let biggestDrop: any = null;
+// 4. Movers & Shakers (Cumulative Season Standings Shift)
+let biggestClimber: any = null;
+let biggestDrop: any = null;
 
-    if (effectiveWeek > 1) {
-      const prevWeek = effectiveWeek - 1;
-      const currentStandings = [...allUsers].filter((u: any) => u.playsConfidence).map((u: any) => ({
-        id: u.id,
-        name: formatFullName(u),
-        pts: parseFloat(u.weeklyConfidenceHistory?.[effectiveWeek] || 0)
-      })).sort((a, b) => b.pts - a.pts);
+if (effectiveWeek > 1) {
+  const prevWeek = effectiveWeek - 1;
 
-      const prevStandings = [...allUsers].filter((u: any) => u.playsConfidence).map((u: any) => ({
-        id: u.id,
-        name: formatFullName(u),
-        pts: parseFloat(u.weeklyConfidenceHistory?.[prevWeek] || 0)
-      })).sort((a, b) => b.pts - a.pts);
+  // Cumulative through current effective week
+  const currentStandings = [...allUsers]
+    .filter((u: any) => u.playsConfidence)
+    .map((u: any) => {
+      let sum = 0;
+      for (let w = 1; w <= effectiveWeek; w++) {
+        sum += parseFloat(u.weeklyConfidenceHistory?.[w] || 0);
+      }
+      return { id: u.id, name: formatFullName(u), pts: sum };
+    })
+    .sort((a, b) => b.pts - a.pts);
 
-      let maxClimb = -Infinity;
-      let maxDrop = -Infinity;
+  // Cumulative through previous week
+  const prevStandings = [...allUsers]
+    .filter((u: any) => u.playsConfidence)
+    .map((u: any) => {
+      let sum = 0;
+      for (let w = 1; w <= prevWeek; w++) {
+        sum += parseFloat(u.weeklyConfidenceHistory?.[w] || 0);
+      }
+      return { id: u.id, name: formatFullName(u), pts: sum };
+    })
+    .sort((a, b) => b.pts - a.pts);
 
-      currentStandings.forEach((u, currIdx) => {
-        const prevIdx = prevStandings.findIndex(p => p.id === u.id);
-        if (prevIdx !== -1) {
-          const shift = prevIdx - currIdx;
-          if (shift > maxClimb && shift > 0) {
-            maxClimb = shift;
-            biggestClimber = { name: u.name, shift, newRank: currIdx + 1 };
-          }
-          if (-shift > maxDrop && shift < 0) {
-            maxDrop = -shift;
-            biggestDrop = { name: u.name, shift: -shift, newRank: currIdx + 1 };
-          }
-        }
-      });
+  let maxClimb = 0;
+  let maxDrop = 0;
+
+  currentStandings.forEach((u, currIdx) => {
+    const prevIdx = prevStandings.findIndex((p) => p.id === u.id);
+    if (prevIdx !== -1) {
+      const shift = prevIdx - currIdx; // e.g. was 7, now 3 -> +4 spots
+      if (shift > maxClimb) {
+        maxClimb = shift;
+        biggestClimber = { name: u.name, shift, newRank: currIdx + 1 };
+      }
+      if (shift < maxDrop) {
+        maxDrop = shift;
+        biggestDrop = { name: u.name, shift: Math.abs(shift), newRank: currIdx + 1 };
+      }
     }
+  });
+}
 
     // 5. Knockout Pool Casualties
     const koCasualties = allUsers.filter((u: any) => u.playsKnockout && (u.knockoutStatuses?.[effectiveWeek] === 'Loser' || u.knockoutStatuses?.[effectiveWeek] === 'Loser (No Pick)')).map((u: any) => ({
@@ -3376,13 +3519,42 @@ const isWeekClosed = currentWeekState === 'closed';
     const activeCpField = seasonView === '1st Half' ? 'cpFirstHalf' : seasonView === '2nd Half' ? 'cpSecondHalf' : 'cpOverall';
     const activeFpField = seasonView === '1st Half' ? 'fpFirstHalf' : seasonView === '2nd Half' ? 'fpSecondHalf' : 'fpOverall';
 
-    const baseStats = allUsers.filter(u => Boolean(u.playsConfidence) && String(u.paymentStatus) !== 'disqualified').map(user => {
+    const maxWeeks = globalSettings?.maxActiveWeeks || 18;
+    const midPoint = Math.ceil(maxWeeks / 2);
+
+    // 1. Identify closed weeks in chronological order
+    const closedWeeks = Array.from({ length: maxWeeks }, (_, i) => i + 1)
+      .filter((w) => globalSettings?.weekStates?.[w] === 'closed');
+
+    const latestClosedWeek = closedWeeks.length > 0 ? closedWeeks[closedWeeks.length - 1] : 0;
+    const prevClosedWeek = closedWeeks.length > 1 ? closedWeeks[closedWeeks.length - 2] : 0;
+    const recentClosedWeeks = closedWeeks.slice(-3); // Last 3 closed weeks
+
+    const eligibleUsers = allUsers.filter(u => Boolean(u.playsConfidence) && String(u.paymentStatus) !== 'disqualified');
+
+    // 2. Cumulative points through prior closed week to compute actual rank change
+    const prevRankMap: Record<string, number> = {};
+    if (prevClosedWeek > 0) {
+      const prevStandings = eligibleUsers.map((u: any) => {
+        let pts = 0;
+        for (let w = 1; w <= prevClosedWeek; w++) {
+          const val = u.weeklyConfidenceHistory?.[w] ?? u.weeklyConfidenceHistory?.[String(w)];
+          if (val !== undefined && val !== null) pts += parseFloat(val);
+        }
+        return { id: u.id, pts };
+      }).sort((a, b) => b.pts - a.pts);
+
+      let pRank = 1;
+      prevStandings.forEach((u, idx) => {
+        if (idx > 0 && u.pts < prevStandings[idx - 1].pts) pRank = idx + 1;
+        prevRankMap[u.id] = pRank;
+      });
+    }
+
+    // 3. Compute Base Season Stats & Objective 3-Week Metrics
+    const baseStats = eligibleUsers.map(user => {
       let cp1 = 0, cp2 = 0, cpo = 0;
       let fp1 = 0, fp2 = 0, fpo = 0;
-
-      // Loop starting from Week 1 instead of Week 4
-      const maxWeeks = globalSettings?.maxActiveWeeks || 18;
-      const midPoint = Math.ceil(maxWeeks / 2); // Split 1st half and 2nd half dynamically
 
       for (let wk = 1; wk <= maxWeeks; wk++) {
         const wkState = globalSettings?.weekStates?.[wk] || globalSettings?.weekStates?.[String(wk)];
@@ -3392,7 +3564,6 @@ const isWeekClosed = currentWeekState === 'closed';
           const fpVal = user.weeklyFantasyHistory?.[wk] ?? user.weeklyFantasyHistory?.[String(wk)];
 
           const cp = cpVal !== undefined && cpVal !== null ? parseFloat(cpVal) : 0;
-          // Use nullish coalescing so an explicit 0 payout is kept as 0 instead of defaulting to -12
           const fp = fpVal !== undefined && fpVal !== null ? parseFloat(fpVal) : -12;
 
           if (wk <= midPoint) {
@@ -3408,6 +3579,20 @@ const isWeekClosed = currentWeekState === 'closed';
         }
       }
 
+      // Exact points scored over the last 3 closed weeks
+      let threeWeekPts = 0;
+      recentClosedWeeks.forEach((w) => {
+        const val = user.weeklyConfidenceHistory?.[w] ?? user.weeklyConfidenceHistory?.[String(w)];
+        if (val !== undefined && val !== null) threeWeekPts += parseFloat(val);
+      });
+      const threeWeekAvg = recentClosedWeeks.length > 0 ? (threeWeekPts / recentClosedWeeks.length) : 0;
+
+      // Exact points scored in the most recent closed week
+      const latestVal = latestClosedWeek > 0 
+        ? (user.weeklyConfidenceHistory?.[latestClosedWeek] ?? user.weeklyConfidenceHistory?.[String(latestClosedWeek)]) 
+        : 0;
+      const latestWeekPts = latestVal !== undefined && latestVal !== null ? parseFloat(latestVal) : 0;
+
       return {
         ...user,
         cpFirstHalf: cp1,
@@ -3415,7 +3600,11 @@ const isWeekClosed = currentWeekState === 'closed';
         cpOverall: cpo,
         fpFirstHalf: fp1,
         fpSecondHalf: fp2,
-        fpOverall: fpo
+        fpOverall: fpo,
+        threeWeekPts,
+        threeWeekAvg,
+        latestWeekPts,
+        latestWeekNum: latestClosedWeek
       };
     });
 
@@ -3437,6 +3626,10 @@ const isWeekClosed = currentWeekState === 'closed';
         rank = i + 1;
       }
       u.displayRank = rank;
+
+      const prevRank = prevRankMap[u.id];
+      u.rankDelta = prevRank !== undefined ? prevRank - rank : 0;
+      u.prevRank = prevRank ?? rank;
     });
 
     return sorted;
@@ -4071,14 +4264,14 @@ function ensureAutoTiebreaker(gamesList: any[]) {
     if (now - lastSyncTimeRef.current < 5000) return;
     lastSyncTimeRef.current = now;
 
-    // 🔒 Target current live season week strictly
+    // 🔒 Strictly target liveSeasonWeek
     const targetWeek = liveSeasonWeek || 1;
     const targetGames = globalSettings?.games?.[targetWeek] || games || [];
     if (!targetGames || targetGames.length === 0) return;
 
     setIsSyncing(true);
     try {
-      // Added timestamp cache-buster to guarantee fresh ESPN scores
+      // Fetch with cache-buster timestamp
       const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?_=${now}`);
       if (!res.ok) {
         setIsSyncing(false);
@@ -4092,11 +4285,11 @@ function ensureAutoTiebreaker(gamesList: any[]) {
         const gAwayCanonical = getCanonicalTeamCode(g.away || g.awayAbbr || g.awayName);
         const gHomeCanonical = getCanonicalTeamCode(g.home || g.homeAbbr || g.homeName);
 
-        // 1. Find matching ESPN game by canonical team codes
+        // 1. Match ESPN game containing BOTH teams
         const match = espnEvents.find((evt: any) => {
           const competitors = evt.competitions?.[0]?.competitors || [];
           const teamCodes = competitors.map((c: any) => 
-            getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName || c.team?.name)
+            getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName || c.team?.name || c.team?.location)
           );
           return teamCodes.includes(gAwayCanonical) && teamCodes.includes(gHomeCanonical);
         });
@@ -4110,20 +4303,26 @@ function ensureAutoTiebreaker(gamesList: any[]) {
           const isFinal = statusType.includes('FINAL');
           const isLive = statusObj.type?.state === 'in';
 
-          // 2. Find Hanover Away Team competitor in ESPN
+          // 2. Find Hanover's Away Team strictly by team identity (Never by homeAway tag or array index)
           const awayTeamComp = competitors.find((c: any) => {
             const code = getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName || c.team?.name);
             return code === gAwayCanonical;
           });
 
-          // 3. Find Hanover Home Team competitor in ESPN
+          // 3. Find Hanover's Home Team strictly by team identity
           const homeTeamComp = competitors.find((c: any) => {
             const code = getCanonicalTeamCode(c.team?.abbreviation || c.team?.displayName || c.team?.name);
             return code === gHomeCanonical;
           });
 
-          const awayTotal = awayTeamComp ? parseInt(String(awayTeamComp.score || '0'), 10) : 0;
-          const homeTotal = homeTeamComp ? parseInt(String(homeTeamComp.score || '0'), 10) : 0;
+          // 4. Extract scores with fallback to existing DB scores if a team payload is missing
+          const awayTotal = awayTeamComp && awayTeamComp.score !== undefined 
+            ? parseInt(String(awayTeamComp.score || '0'), 10) 
+            : (g.awayScore ?? 0);
+
+          const homeTotal = homeTeamComp && homeTeamComp.score !== undefined 
+            ? parseInt(String(homeTeamComp.score || '0'), 10) 
+            : (g.homeScore ?? 0);
 
           const situation = competition.situation || {};
           const possessionTeamId = situation.possession;
@@ -4153,8 +4352,8 @@ function ensureAutoTiebreaker(gamesList: any[]) {
             gameClock: isLive ? clockDisplay : null,
             possession: isLive ? possessionAbbr : null,
             isRedZone: isLive ? isRedZone : false,
-            awayScore: isLive || isFinal ? awayTotal : null, // Away score -> awayScore
-            homeScore: isLive || isFinal ? homeTotal : null, // Home score -> homeScore
+            awayScore: isLive || isFinal ? awayTotal : null,
+            homeScore: isLive || isFinal ? homeTotal : null,
             winner: isFinal ? winner : null,
             downAndDistance: isLive ? downAndDistance : null,
             lastPlayText: isLive ? lastPlayText : null,
@@ -4774,7 +4973,7 @@ isKnockedOut = wasAlreadyOut(currentUser, liveSeasonWeek, globalSettings);
 let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 
   return (
-    <div className="min-h-screen w-full overflow-x-clip font-sans text-slate-900 pb-24 md:pb-0 relative" style={fieldBackgroundStyle}>
+    <div className="min-h-screen w-full overflow-x-clip font-sans text-slate-900 pb-36 lg:pb-12 relative" style={fieldBackgroundStyle}>
       {showChangePassword && <ChangePasswordModal user={sessionUser} onClose={() => setShowChangePassword(false)} onSave={handleChangePassword} />}
       {deadbeatsToConfirm && (
           <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4"><div className="bg-white max-w-lg w-full rounded-3xl p-8 shadow-2xl animate-in zoom-in-95"><h2 className="text-2xl font-black italic uppercase text-red-600 mb-4 flex items-center gap-2"><AlertCircle /> Confirm Deadbeats</h2><p className="text-slate-600 font-bold mb-4">The following players have incomplete picks and will receive default deadbeat assignments:</p><div className="max-h-60 overflow-y-auto mb-6 bg-slate-50 rounded-xl p-4 border border-slate-200">{deadbeatsToConfirm.length === 0 ? <p className="text-slate-400 italic">None! All active players have fully submitted picks.</p> : <ul className="space-y-2">{deadbeatsToConfirm.map((u: any, i: number) => <li key={i} className="font-black text-slate-800 flex items-center">{String(u.name)} <span className="text-[10px] text-slate-400 bg-white px-2 py-0.5 rounded ml-2 border uppercase tracking-widest">{String(u.type)}</span></li>)}</ul>}</div><div className="flex gap-4"><button onClick={() => setDeadbeatsToConfirm(null)} className="flex-1 px-6 py-4 bg-slate-100 text-slate-700 rounded-xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button><button onClick={executeLockWeek} className="flex-1 px-6 py-4 bg-red-600 text-white rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-red-700 transition-all">Lock & Apply</button></div></div></div>
@@ -4993,7 +5192,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
   </div>
 </nav>
 
-      <main className="max-w-[1600px] mx-auto px-4 py-6 print:hidden">
+<main className="max-w-[1600px] mx-auto px-4 py-6 pb-20 lg:pb-8 print:hidden">
       {activeTab === 'dashboard' && (
   <div key={`dashboard-week-${picksSelectedWeek}`} className="space-y-6 max-w-5xl mx-auto">
           {/* WELCOME BANNER */}
@@ -6678,6 +6877,307 @@ class AppErrorBoundary extends React.Component<any, any> {
     }
     return this.props.children;
   }
+}
+
+// 📈 PERSONAL PROFILE, TRAJECTORY GRAPH & STREAMLINED PATH TO VICTORY
+export function PlayerPersonalStatsView({
+  allUsers,
+  globalSettings,
+  currentUser,
+  currentWeek
+}: {
+  allUsers: any[];
+  globalSettings: any;
+  currentUser: any;
+  currentWeek: number;
+}) {
+  const [selectedPlayerId, setSelectedPlayerId] = useState(currentUser?.id || '');
+
+  const eligiblePlayers = useMemo(() => {
+    return (allUsers || [])
+      .filter((u: any) => Boolean(u?.playsConfidence) && String(u?.paymentStatus) !== 'disqualified')
+      .sort((a: any, b: any) => String(a.lastName || '').localeCompare(String(b.lastName || '')));
+  }, [allUsers]);
+
+  const targetPlayer = eligiblePlayers.find((u: any) => u.id === selectedPlayerId) || currentUser;
+
+  const maxWeeks = globalSettings?.maxActiveWeeks || 18;
+  const closedWeeks = useMemo(() => {
+    return Array.from({ length: maxWeeks }, (_, i) => i + 1)
+      .filter((w) => globalSettings?.weekStates?.[w] === 'closed');
+  }, [globalSettings, maxWeeks]);
+
+  // 1. Calculate Week-by-Week Cumulative Rank Trajectory
+  const trajectoryData = useMemo(() => {
+    if (!targetPlayer || closedWeeks.length === 0) return [];
+
+    return closedWeeks.map((wk) => {
+      // Cumulative points through week 'wk' for all players
+      const standingsAtWeek = eligiblePlayers.map((u: any) => {
+        let sum = 0;
+        for (let w = 1; w <= wk; w++) {
+          const val = u.weeklyConfidenceHistory?.[w] ?? u.weeklyConfidenceHistory?.[String(w)];
+          if (val !== undefined && val !== null) sum += parseFloat(val);
+        }
+        return { id: u.id, pts: sum };
+      }).sort((a, b) => b.pts - a.pts);
+
+      let rank = 1;
+      standingsAtWeek.forEach((item, idx) => {
+        if (idx > 0 && item.pts < standingsAtWeek[idx - 1].pts) rank = idx + 1;
+        if (item.id === targetPlayer.id) {
+          // Found player rank
+        }
+      });
+
+      const playerStanding = standingsAtWeek.find((item) => item.id === targetPlayer.id);
+      const playerRank = standingsAtWeek.findIndex((item) => item.id === targetPlayer.id) + 1;
+      const weekPtsVal = targetPlayer.weeklyConfidenceHistory?.[wk] ?? targetPlayer.weeklyConfidenceHistory?.[String(wk)] ?? 0;
+
+      return {
+        week: wk,
+        rank: playerRank,
+        weekPts: parseFloat(weekPtsVal),
+        totalPts: playerStanding?.pts || 0
+      };
+    });
+  }, [targetPlayer, eligiblePlayers, closedWeeks]);
+
+  // 2. Personal Career Bests & Averages
+  const bestRank = trajectoryData.length > 0 ? Math.min(...trajectoryData.map((d) => d.rank)) : null;
+  const lowestRank = trajectoryData.length > 0 ? Math.max(...trajectoryData.map((d) => d.rank)) : null;
+  const bestScore = trajectoryData.length > 0 ? Math.max(...trajectoryData.map((d) => d.weekPts)) : 0;
+  const avgPts = trajectoryData.length > 0 
+    ? (trajectoryData.reduce((acc, d) => acc + d.weekPts, 0) / trajectoryData.length).toFixed(1) 
+    : '0.0';
+
+  // 3. Streamlined Path Analysis (Remaining Games for Current Active Week)
+  const activeGames = globalSettings?.games?.[currentWeek] || [];
+  const remainingGames = activeGames.filter((g: any) => g.status !== 'final' && g.status !== 'closed');
+
+  const playerPicks = targetPlayer?.picks?.[currentWeek] || {};
+  const playerRanks = targetPlayer?.ranks?.[currentWeek] || {};
+
+  let remainingPointsOnBoard = 0;
+  const pendingMatchups = remainingGames.map((g: any) => {
+    const pick = playerPicks[g.id] || playerPicks[String(g.id)];
+    const rank = parseInt(String(playerRanks[g.id] || playerRanks[String(g.id)] || 0), 10);
+    if (pick && rank > 0) remainingPointsOnBoard += rank;
+
+    const displayPick = pick === g.away ? (g.awayAbbr || g.away) : (pick === g.home ? (g.homeAbbr || g.home) : pick);
+    return { game: g, pick: displayPick, rank, rawPick: pick };
+  });
+
+  // SVG Chart Geometry
+  const totalPoolSize = eligiblePlayers.length || 58;
+  const svgWidth = 600;
+  const svgHeight = 220;
+  const paddingX = 40;
+  const paddingY = 30;
+  const graphWidth = svgWidth - paddingX * 2;
+  const graphHeight = svgHeight - paddingY * 2;
+
+  const pointsString = trajectoryData.map((d, idx) => {
+    const x = paddingX + (trajectoryData.length > 1 ? (idx / (trajectoryData.length - 1)) * graphWidth : graphWidth / 2);
+    // Rank 1 at top (paddingY), Rank totalPoolSize at bottom (paddingY + graphHeight)
+    const y = paddingY + ((d.rank - 1) / Math.max(1, totalPoolSize - 1)) * graphHeight;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto text-slate-900">
+      {/* PLAYER SELECTOR HEADER */}
+      <div className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border-b-8 border-[#FFB81C] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <span className="text-[10px] font-black uppercase tracking-widest text-[#FFB81C]">Player Performance & Path</span>
+          <h2 className="text-2xl sm:text-3xl font-black italic uppercase text-white mt-1">
+            {targetPlayer?.firstName} {targetPlayer?.lastName}
+          </h2>
+          <p className="text-xs text-slate-400 font-bold mt-0.5">
+            Season Trajectory • Personal Records • Remaining Game Impact
+          </p>
+        </div>
+
+        {/* PLAYER INSPECTION SWITCHER */}
+        <div className="flex items-center gap-2 bg-slate-800 p-2 rounded-2xl border border-slate-700 w-full sm:w-auto">
+          <span className="text-[10px] font-black uppercase text-slate-400 pl-2">Inspect:</span>
+          <select
+            value={selectedPlayerId}
+            onChange={(e) => setSelectedPlayerId(e.target.value)}
+            className="bg-slate-900 text-white font-bold text-xs uppercase rounded-xl px-3 py-2 outline-none border border-slate-700 focus:border-[#FFB81C] cursor-pointer flex-1 sm:flex-initial"
+          >
+            {eligiblePlayers.map((u: any) => (
+              <option key={u.id} value={u.id}>
+                {u.firstName} {u.lastName} {u.id === currentUser?.id ? '(You)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* PERSONAL STATS OVERVIEW CARDS */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+          <span className="text-[9px] font-black uppercase text-slate-400 block tracking-widest">Season High Rank</span>
+          <span className="text-2xl font-black italic text-emerald-600 font-mono">
+            {bestRank !== null ? `#${bestRank}` : '—'}
+          </span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">Peak Position</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+          <span className="text-[9px] font-black uppercase text-slate-400 block tracking-widest">Lowest Rank</span>
+          <span className="text-2xl font-black italic text-rose-600 font-mono">
+            {lowestRank !== null ? `#${lowestRank}` : '—'}
+          </span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">Floor Position</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+          <span className="text-[9px] font-black uppercase text-slate-400 block tracking-widest">Best Week Total</span>
+          <span className="text-2xl font-black italic text-[#FFB81C] font-mono">
+            {bestScore > 0 ? `${bestScore} PTS` : '—'}
+          </span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">Season Single-Week Best</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+          <span className="text-[9px] font-black uppercase text-slate-400 block tracking-widest">Scoring Average</span>
+          <span className="text-2xl font-black italic text-slate-900 font-mono">
+            {avgPts}
+          </span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">Points Per Week</span>
+        </div>
+      </div>
+
+      {/* STANDINGS TRAJECTORY GRAPH */}
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-5 sm:p-6">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h3 className="text-lg font-black italic uppercase text-slate-900">
+              Season Rank Trajectory
+            </h3>
+            <p className="text-xs text-slate-400 font-bold">Overall standing movement after each closed week</p>
+          </div>
+          <span className="text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+            Top = Rank #1
+          </span>
+        </div>
+
+        {trajectoryData.length <= 1 ? (
+          <div className="py-12 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">
+            More closed weeks needed to plot rank trajectory
+          </div>
+        ) : (
+          <div className="w-full overflow-x-auto">
+            <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-auto min-w-[500px]">
+              <defs>
+                <linearGradient id="rankGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#FFB81C" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="#FFB81C" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+
+              {/* Horizontal Reference Gridlines */}
+              <line x1={paddingX} y1={paddingY} x2={svgWidth - paddingX} y2={paddingY} stroke="#e2e8f0" strokeDasharray="4" />
+              <line x1={paddingX} y1={paddingY + graphHeight / 2} x2={svgWidth - paddingX} y2={paddingY + graphHeight / 2} stroke="#e2e8f0" strokeDasharray="4" />
+              <line x1={paddingX} y1={paddingY + graphHeight} x2={svgWidth - paddingX} y2={paddingY + graphHeight} stroke="#e2e8f0" strokeDasharray="4" />
+
+              {/* Y-Axis Labels */}
+              <text x={paddingX - 8} y={paddingY + 4} textAnchor="end" className="text-[10px] fill-slate-400 font-bold font-mono">#1</text>
+              <text x={paddingX - 8} y={paddingY + graphHeight / 2 + 4} textAnchor="end" className="text-[10px] fill-slate-400 font-bold font-mono">#{Math.round(totalPoolSize / 2)}</text>
+              <text x={paddingX - 8} y={paddingY + graphHeight + 4} textAnchor="end" className="text-[10px] fill-slate-400 font-bold font-mono">#{totalPoolSize}</text>
+
+              {/* Trajectory Connecting Line */}
+              <polyline
+                fill="none"
+                stroke="#FFB81C"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points={pointsString}
+              />
+
+              {/* Data Nodes & Week Labels */}
+              {trajectoryData.map((d, idx) => {
+                const x = paddingX + (trajectoryData.length > 1 ? (idx / (trajectoryData.length - 1)) * graphWidth : graphWidth / 2);
+                const y = paddingY + ((d.rank - 1) / Math.max(1, totalPoolSize - 1)) * graphHeight;
+
+                return (
+                  <g key={d.week}>
+                    {/* Node Dot */}
+                    <circle cx={x} cy={y} r="5.5" fill="#0f172a" stroke="#FFB81C" strokeWidth="2.5" />
+                    {/* Rank Badge Above Dot */}
+                    <text x={x} y={y - 10} textAnchor="middle" className="text-[10px] fill-slate-800 font-black font-mono">
+                      #{d.rank}
+                    </text>
+                    {/* Week Label Below */}
+                    <text x={x} y={svgHeight - 6} textAnchor="middle" className="text-[10px] fill-slate-400 font-bold uppercase">
+                      Wk {d.week}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        )}
+      </div>
+
+      {/* STREAMLINED PATH TO VICTORY: REMAINING GAME IMPACT */}
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="p-5 bg-slate-900 text-white flex justify-between items-center border-b-4 border-[#FFB81C]">
+          <div>
+            <h3 className="text-lg font-black italic uppercase text-[#FFB81C]">
+              Week {currentWeek} Remaining Path Analysis
+            </h3>
+            <p className="text-xs text-slate-400 font-bold">Unsettled matchups & available points</p>
+          </div>
+          <span className="text-xs font-black font-mono text-[#FFB81C] bg-slate-800 px-3 py-1 rounded-xl border border-slate-700">
+            +{remainingPointsOnBoard} PTS Available
+          </span>
+        </div>
+
+        <div className="p-6">
+          {pendingMatchups.length === 0 ? (
+            <div className="py-6 text-center text-slate-400 font-bold text-xs uppercase tracking-wider">
+              All Week {currentWeek} games are complete! No remaining active matchups.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-600 font-medium mb-2">
+                Outcomes required for <span className="font-bold text-slate-900">{targetPlayer?.firstName}</span> to maximize their weekly finish:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {pendingMatchups.map(({ game, pick, rank }: any) => (
+                  <div key={game.id} className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                        {game.awayAbbr || game.away} @ {game.homeAbbr || game.home}
+                      </span>
+                      <span className="text-sm font-black text-slate-900 uppercase italic">
+                        Selected: <span className="text-[#FFB81C]">{pick || 'Missing'}</span>
+                      </span>
+                      {game.isTiebreaker && (
+                        <span className="text-[9px] text-[#FFB81C] font-black uppercase block mt-0.5">★ Designated Tiebreaker</span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-black font-mono bg-slate-900 text-[#FFB81C] px-2.5 py-1 rounded-lg">
+                        +{rank} PTS
+                      </span>
+                      <span className="text-[9px] text-slate-400 block mt-1 uppercase font-bold">
+                        {game.status === 'in_progress' ? '🏈 Live Now' : 'Upcoming'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
