@@ -1605,18 +1605,18 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
           </div>
         </div>
 
-        {/* TABLE HEADER */}
-        <div className="bg-slate-900 text-white px-3 sm:px-5 py-2.5 flex items-center justify-between text-[9px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-widest border-b-2 border-[#FFB81C]">
-          <div className="w-6/12 sm:w-5/12 truncate">Player & Recent Scoring</div>
-          <div className="flex items-center gap-2 sm:gap-6 justify-end w-6/12 sm:w-7/12 text-right">
-            <div className="w-10 sm:w-14 text-center">Shift</div>
+{/* TABLE HEADER */}
+<div className="bg-slate-900 text-white px-3 sm:px-5 py-2.5 flex items-center justify-between text-[9px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-widest border-b-2 border-[#FFB81C]">
+          <div className="flex-1 min-w-0 pr-2">Player</div>
+          <div className="flex items-center gap-1.5 sm:gap-4 shrink-0 text-right">
+            <div className="w-9 sm:w-12 text-center">Shift</div>
             <div className="w-12 sm:w-16 text-center">PTS</div>
-            <div className="w-14 sm:w-20 text-right">Behind</div>
+            <div className="w-12 sm:w-16 text-right">Behind</div>
             <div className="w-14 sm:w-18 text-right">Net $</div>
           </div>
         </div>
 
-        {/* TABLE ROWS */}
+        {/* STANDINGS TABLE ROWS */}
         <div className="divide-y divide-slate-100">
           {(data || []).map((user: any, idx: number) => {
             const isMe = user.id === currentUser?.id;
@@ -1627,39 +1627,43 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
             const behindNext = idx > 0 ? (data[idx - 1]?.[ptsKey] || 0) - pts : 0;
             const delta = user.rankDelta || 0;
 
+            const threeWkTooltip = user.threeWeekPts > 0 
+              ? `3-Wk Form: ${user.threeWeekPts} PTS total (${user.threeWeekAvg.toFixed(1)} PTS/wk avg)` 
+              : undefined;
+
             return (
-              <div key={user.id} className={`px-3 sm:px-5 py-2.5 sm:py-3.5 flex items-center justify-between transition-colors ${isMe ? 'bg-[#FFB81C]/20 font-black border-l-4 border-[#FFB81C]' : 'hover:bg-slate-50'}`}>
-                {/* Player Name + Concrete 3-Week Stats Subtitle */}
-                <div className="flex items-center gap-2 sm:gap-3 w-6/12 sm:w-5/12 min-w-0">
-                  <span className="font-black italic text-xs sm:text-lg text-slate-400 w-4 sm:w-6 text-right shrink-0">
+              <div 
+                key={user.id} 
+                className={`relative px-3 sm:px-5 py-2 sm:py-2.5 flex items-center justify-between transition-colors ${
+                  isMe ? 'bg-[#FFB81C]/20 font-black border-l-4 border-[#FFB81C]' : 'hover:bg-slate-50'
+                }`}
+                title={threeWkTooltip}
+              >
+                {/* 2-Line Stacked Player Name */}
+                <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 pr-2">
+                  <span className="font-black italic text-xs sm:text-base text-slate-400 w-5 sm:w-6 text-right shrink-0">
                     #{user.displayRank}
                   </span>
-                  <div className="truncate min-w-0">
+                  <div className="min-w-0 truncate">
                     <span className="font-black uppercase text-xs sm:text-sm text-slate-900 block leading-tight truncate">
-                      {user.firstName} {user.nickname ? `"${user.nickname}"` : ''} {user.lastName}
+                      {user.firstName} {user.nickname ? `"${user.nickname}"` : ''}
                     </span>
-                    {user.threeWeekPts > 0 ? (
-                      <span className="text-[9px] sm:text-[10px] text-slate-500 font-mono font-bold block truncate mt-0.5">
-                        3-Wk Total: {user.threeWeekPts} PTS • {user.threeWeekAvg.toFixed(1)}/wk
-                      </span>
-                    ) : (
-                      <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold block truncate mt-0.5">
-                        Season In Progress
-                      </span>
-                    )}
+                    <span className="text-[11px] sm:text-xs font-bold text-slate-600 block leading-tight truncate mt-0.5">
+                      {user.lastName}
+                    </span>
                   </div>
                 </div>
 
-                {/* Metrics */}
-                <div className="flex items-center gap-2 sm:gap-6 justify-end w-6/12 sm:w-7/12 text-right shrink-0">
+                {/* Right-Docked Metrics */}
+                <div className="flex items-center gap-1.5 sm:gap-4 shrink-0 text-right">
                   {/* Shift Column */}
-                  <div className="w-10 sm:w-14 text-center shrink-0">
+                  <div className="w-9 sm:w-12 text-center shrink-0">
                     {delta > 0 ? (
-                      <span className="text-[10px] sm:text-xs font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-mono">
+                      <span className="text-[10px] sm:text-xs font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-1 py-0.5 rounded font-mono">
                         ▲+{delta}
                       </span>
                     ) : delta < 0 ? (
-                      <span className="text-[10px] sm:text-xs font-black text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded font-mono">
+                      <span className="text-[10px] sm:text-xs font-black text-rose-600 bg-rose-50 border border-rose-200 px-1 py-0.5 rounded font-mono">
                         ▼{delta}
                       </span>
                     ) : (
@@ -1668,20 +1672,20 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
                   </div>
 
                   {/* Points Badge */}
-                  <div className="text-center font-mono font-black text-xs sm:text-sm text-slate-900 bg-slate-100 px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl w-12 sm:w-16 shrink-0">
+                  <div className="text-center font-mono font-black text-xs sm:text-sm text-slate-900 bg-slate-100 px-1 sm:px-2 py-1 rounded-lg w-12 sm:w-16 shrink-0">
                     {pts} <span className="text-[8px] sm:text-[9px] font-black uppercase text-slate-400 block -mt-0.5 sm:-mt-1">PTS</span>
                   </div>
 
                   {/* Behind Column */}
-                  <div className="text-right w-14 sm:w-20 shrink-0">
+                  <div className="text-right w-12 sm:w-16 shrink-0">
                     {idx === 0 ? (
-                      <span className="text-slate-300 font-bold text-xs block text-right pr-2">-</span>
+                      <span className="text-slate-300 font-bold text-xs block text-right pr-1">-</span>
                     ) : (
                       <div className="flex flex-col items-end leading-tight">
                         <span className={behindLeader === 0 ? 'text-slate-400 font-bold text-[11px] sm:text-xs' : 'text-rose-600 font-black text-[11px] sm:text-sm'}>
                           {behindLeader === 0 ? '0' : `-${behindLeader}`}
                         </span>
-                        <span className="text-[8px] sm:text-[9px] text-slate-400 font-bold mt-0.5">
+                        <span className="text-[8px] sm:text-[9px] text-slate-400 font-bold">
                           ({behindNext === 0 ? '0' : `-${behindNext}`})
                         </span>
                       </div>
@@ -1689,7 +1693,7 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
                   </div>
 
                   {/* Net Winnings Badge */}
-                  <div className={`text-right font-mono font-black text-[11px] sm:text-sm px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border w-14 sm:w-18 shrink-0 ${
+                  <div className={`text-right font-mono font-black text-[11px] sm:text-xs px-1.5 sm:px-2 py-1 rounded-lg border w-14 sm:w-18 shrink-0 ${
                     netDollars >= 0 
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                       : 'bg-rose-50 text-rose-700 border-rose-200'
