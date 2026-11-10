@@ -1517,9 +1517,35 @@ function SeasonTrackerBoard({ data, view, currentUser, globalSettings }: any) {
     ? [...data].sort((a: any, b: any) => (b.threeWeekPts || 0) - (a.threeWeekPts || 0))[0] 
     : null;
 
-  const latestWeekWinner = (data || []).length > 0
-    ? [...data].sort((a: any, b: any) => (b.latestWeekPts || 0) - (a.latestWeekPts || 0))[0]
-    : null;
+    const latestClosedWeek = data?.[0]?.latestWeekNum || 0;
+    const savedWeeklyWinners = globalSettings?.weeklyWinners?.[latestClosedWeek];
+  
+    // 1. Check if the official 1st place winner is stored in Firestore week closure records
+    let latestWeekWinner: any = null;
+    if (Array.isArray(savedWeeklyWinners) && savedWeeklyWinners.length > 0) {
+      const winnerId = savedWeeklyWinners[0]?.id;
+      latestWeekWinner = (data || []).find((u: any) => u.id === winnerId);
+    }
+  
+    // 2. Fallback: Sort by Highest Payout (Net $) -> Highest Points (PTS) -> Closest Tiebreaker
+    if (!latestWeekWinner && (data || []).length > 0) {
+      latestWeekWinner = [...data].sort((a: any, b: any) => {
+        // Prioritize highest payout awarded (1st place)
+        const netA = a.latestWeekNet !== undefined ? a.latestWeekNet : -12;
+        const netB = b.latestWeekNet !== undefined ? b.latestWeekNet : -12;
+        if (netB !== netA) return netB - netA;
+  
+        // Compare raw points scored
+        const ptsA = a.latestWeekPts || 0;
+        const ptsB = b.latestWeekPts || 0;
+        if (ptsB !== ptsA) return ptsB - ptsA;
+  
+        // Break point ties using tiebreaker proximity
+        const diffA = a.latestWeekTBDiff !== undefined ? a.latestWeekTBDiff : 999;
+        const diffB = b.latestWeekTBDiff !== undefined ? b.latestWeekTBDiff : 999;
+        return diffA - diffB;
+      })[0];
+    }
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -3643,10 +3669,22 @@ fpo += (half1Bonus + half2Bonus + overallBonus);
       const threeWeekAvg = recentClosedWeeks.length > 0 ? (threeWeekPts / recentClosedWeeks.length) : 0;
 
       // Exact points scored in the most recent closed week
+      // Exact points scored in the most recent closed week
       const latestVal = latestClosedWeek > 0 
         ? (user.weeklyConfidenceHistory?.[latestClosedWeek] ?? user.weeklyConfidenceHistory?.[String(latestClosedWeek)]) 
         : 0;
       const latestWeekPts = latestVal !== undefined && latestVal !== null ? parseFloat(latestVal) : 0;
+
+      // Official net cash earnings for the latest closed week (1st place receives highest payout)
+      const latestNetVal = latestClosedWeek > 0
+        ? (user.weeklyFantasyHistory?.[latestClosedWeek] ?? user.weeklyFantasyHistory?.[String(latestClosedWeek)])
+        : -12;
+      const latestWeekNet = latestNetVal !== undefined && latestNetVal !== null ? parseFloat(latestNetVal) : -12;
+
+      // Tiebreaker proximity
+      const actualTB = globalSettings?.actualTiebreakers?.[latestClosedWeek] ?? 0;
+      const userTB = parseInt(String(user.tiebreakers?.[latestClosedWeek] ?? '0'), 10);
+      const latestWeekTBDiff = Math.abs(userTB - actualTB);
 
       return {
         ...user,
@@ -3659,6 +3697,8 @@ fpo += (half1Bonus + half2Bonus + overallBonus);
         threeWeekPts,
         threeWeekAvg,
         latestWeekPts,
+        latestWeekNet,
+        latestWeekTBDiff,
         latestWeekNum: latestClosedWeek
       };
     });
