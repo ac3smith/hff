@@ -1485,18 +1485,34 @@ if (wasOutBefore) {
   );
 }
 
-function SeasonTrackerBoard({ data, view, currentUser }: any) {
+function SeasonTrackerBoard({ data, view, currentUser, globalSettings }: any) {
   const ptsKey = view === '1st Half' ? 'cpFirstHalf' : view === '2nd Half' ? 'cpSecondHalf' : 'cpOverall';
   const fpKey = view === '1st Half' ? 'fpFirstHalf' : view === '2nd Half' ? 'fpSecondHalf' : 'fpOverall';
 
   const firstPlacePTS = data?.[0]?.[ptsKey] || 0;
 
-  // 1. Identify Movement Leaders
+  // 1. Determine Half View & Bonus Allocations
+  const isHalfView = view === '1st Half' || view === '2nd Half';
+  const halfKey = view === '1st Half' ? 'firstHalf' : 'secondHalf';
+
+  const settlement = globalSettings?.settlements?.[halfKey];
+  const isSettled = Boolean(settlement && settlement.winners?.length > 0);
+
+  const activeCount = (data || []).length || 58;
+  const maxWeeksVal = globalSettings?.maxActiveWeeks || 18;
+  const half1Weeks = Math.ceil(maxWeeksVal / 2);
+
+  // Dynamic bonus matrix for display / projection
+  const matrix = calculateFanaticsPayouts(activeCount, maxWeeksVal);
+  const bonusSchedule = view === '1st Half' 
+    ? (globalSettings?.seasonBonuses?.firstHalf || matrix.half1Payouts)
+    : (globalSettings?.seasonBonuses?.secondHalf || matrix.half2Payouts);
+
+  // 2. Identify Movement Leaders & Spotlight Cards
   const movers = (data || []).filter((u: any) => u.rankDelta !== 0);
   const biggestMover = movers.length > 0 ? [...movers].sort((a: any, b: any) => b.rankDelta - a.rankDelta)[0] : null;
   const toughestDrop = movers.length > 0 ? [...movers].sort((a: any, b: any) => a.rankDelta - b.rankDelta)[0] : null;
 
-  // 2. Identify 3-Week Points Leader & Latest Week High Scorer
   const threeWeekLeader = (data || []).length > 0 
     ? [...data].sort((a: any, b: any) => (b.threeWeekPts || 0) - (a.threeWeekPts || 0))[0] 
     : null;
@@ -1566,16 +1582,14 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
           </span>
         </div>
 
-{/* LAST WEEK'S WINNER */}
-<div className="bg-slate-900 border border-indigo-500/40 rounded-2xl p-3.5 flex flex-col justify-between shadow-md text-white">
+        {/* LAST WEEK'S WINNER */}
+        <div className="bg-slate-900 border border-indigo-500/40 rounded-2xl p-3.5 flex flex-col justify-between shadow-md text-white">
           <div className="text-[10px] font-black uppercase tracking-wider text-indigo-400 flex items-center justify-between">
             <span>Last Week's Winner</span>
             <span>👑</span>
           </div>
           <div className="my-1.5">
-            <div className="text-sm font-black truncate">
-              {latestWeekWinner ? `${latestWeekWinner.firstName} ${latestWeekWinner.lastName}` : 'Even Slate'}
-            </div>
+            <div className="text-sm font-black truncate">{latestWeekWinner ? `${latestWeekWinner.firstName} ${latestWeekWinner.lastName}` : 'Even Slate'}</div>
             {latestWeekWinner && latestWeekWinner.latestWeekNum ? (
               <div className="text-[10px] font-bold text-slate-400 truncate">
                 Week {latestWeekWinner.latestWeekNum}
@@ -1597,19 +1611,25 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
             </h2>
             <p className="text-[10px] sm:text-xs text-slate-500 font-bold mt-0.5">
               {view === '1st Half' 
-                ? 'Weeks 1–9 Race' 
+                ? (isSettled 
+                    ? `Weeks 1–${half1Weeks} Race • 1st Half Bonus Finalized (Top 8 Awarded)` 
+                    : `Weeks 1–${half1Weeks} Race • Top 8 Receive Cash Bonus`) 
                 : view === '2nd Half' 
-                ? 'Weeks 10–18 Race' 
+                ? `Weeks ${half1Weeks + 1}–${maxWeeksVal} Race • Top 8 Receive Cash Bonus` 
                 : 'Full Season Race (Weeks 1–18)'}
             </p>
           </div>
         </div>
 
-{/* TABLE HEADER */}
-<div className="bg-slate-900 text-white px-3 sm:px-5 py-2.5 flex items-center justify-between text-[9px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-widest border-b-2 border-[#FFB81C]">
+        {/* TABLE HEADER (Swaps Shift to Bonus for Half views) */}
+        <div className="bg-slate-900 text-white px-3 sm:px-5 py-2.5 flex items-center justify-between text-[9px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-widest border-b-2 border-[#FFB81C]">
           <div className="flex-1 min-w-0 pr-2">Player</div>
           <div className="flex items-center gap-1.5 sm:gap-4 shrink-0 text-right">
-            <div className="w-9 sm:w-12 text-center">Shift</div>
+            {!isHalfView ? (
+              <div className="w-9 sm:w-12 text-center">Shift</div>
+            ) : (
+              <div className="w-12 sm:w-16 text-right text-sky-400 font-black">Bonus</div>
+            )}
             <div className="w-12 sm:w-16 text-center">PTS</div>
             <div className="w-12 sm:w-16 text-right">Behind</div>
             <div className="w-14 sm:w-18 text-right">Net $</div>
@@ -1627,9 +1647,16 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
             const behindNext = idx > 0 ? (data[idx - 1]?.[ptsKey] || 0) - pts : 0;
             const delta = user.rankDelta || 0;
 
-            const threeWkTooltip = user.threeWeekPts > 0 
-              ? `3-Wk Form: ${user.threeWeekPts} PTS total (${user.threeWeekAvg.toFixed(1)} PTS/wk avg)` 
-              : undefined;
+            // Compute exact bonus for 1st/2nd half
+            let bonusAmt = 0;
+            if (isHalfView) {
+              if (isSettled) {
+                const winnerRecord = settlement?.winners?.find((w: any) => w.id === user.id);
+                bonusAmt = winnerRecord ? winnerRecord.bonusAmount : 0;
+              } else if (idx < 8) {
+                bonusAmt = bonusSchedule[idx] || 0;
+              }
+            }
 
             return (
               <div 
@@ -1637,7 +1664,6 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
                 className={`relative px-3 sm:px-5 py-2 sm:py-2.5 flex items-center justify-between transition-colors ${
                   isMe ? 'bg-[#FFB81C]/20 font-black border-l-4 border-[#FFB81C]' : 'hover:bg-slate-50'
                 }`}
-                title={threeWkTooltip}
               >
                 {/* 2-Line Stacked Player Name */}
                 <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 pr-2">
@@ -1656,20 +1682,35 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
 
                 {/* Right-Docked Metrics */}
                 <div className="flex items-center gap-1.5 sm:gap-4 shrink-0 text-right">
-                  {/* Shift Column */}
-                  <div className="w-9 sm:w-12 text-center shrink-0">
-                    {delta > 0 ? (
-                      <span className="text-[10px] sm:text-xs font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-1 py-0.5 rounded font-mono">
-                        ▲+{delta}
-                      </span>
-                    ) : delta < 0 ? (
-                      <span className="text-[10px] sm:text-xs font-black text-rose-600 bg-rose-50 border border-rose-200 px-1 py-0.5 rounded font-mono">
-                        ▼{delta}
-                      </span>
-                    ) : (
-                      <span className="text-slate-300 font-bold text-xs">—</span>
-                    )}
-                  </div>
+                  {/* OVERALL VIEW: Shows Week-over-Week Shift */}
+                  {!isHalfView && (
+                    <div className="w-9 sm:w-12 text-center shrink-0">
+                      {delta > 0 ? (
+                        <span className="text-[10px] sm:text-xs font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-1 py-0.5 rounded font-mono">
+                          ▲+{delta}
+                        </span>
+                      ) : delta < 0 ? (
+                        <span className="text-[10px] sm:text-xs font-black text-rose-600 bg-rose-50 border border-rose-200 px-1 py-0.5 rounded font-mono">
+                          ▼{delta}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 font-bold text-xs">—</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* HALF VIEWS: Shows Exact Bonus Cash for Top 8 */}
+                  {isHalfView && (
+                    <div className="w-12 sm:w-16 text-right shrink-0">
+                      {bonusAmt > 0 ? (
+                        <span className="inline-block px-1.5 py-0.5 rounded font-mono font-black text-[10px] sm:text-xs bg-sky-50 text-sky-700 border border-sky-200">
+                          +${bonusAmt}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 font-bold text-xs pr-2">—</span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Points Badge */}
                   <div className="text-center font-mono font-black text-xs sm:text-sm text-slate-900 bg-slate-100 px-1 sm:px-2 py-1 rounded-lg w-12 sm:w-16 shrink-0">
@@ -1693,7 +1734,7 @@ function SeasonTrackerBoard({ data, view, currentUser }: any) {
                   </div>
 
                   {/* Net Winnings Badge */}
-                  <div className={`text-right font-mono font-black text-[11px] sm:text-xs px-1.5 sm:px-2 py-1 rounded-lg border w-14 sm:w-18 shrink-0 ${
+                  <div className={`text-right font-mono font-black text-[11px] sm:text-sm px-1.5 sm:px-2 py-1 rounded-lg border w-14 sm:w-18 shrink-0 ${
                     netDollars >= 0 
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                       : 'bg-rose-50 text-rose-700 border-rose-200'
@@ -3090,29 +3131,31 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
 
   const handlePrepareSettlement = (type: 'firstHalf' | 'secondHalf' | 'overall') => {
     const activeCount = allUsers.filter(u => u.playsConfidence).length;
-    const matrix = calculateFanaticsPayouts(activeCount);
+    const maxWeeks = globalSettings?.maxActiveWeeks || 18;
+    const half1Weeks = Math.ceil(maxWeeks / 2);
+    const matrix = calculateFanaticsPayouts(activeCount, maxWeeks);
   
     let title = '';
     let payouts: number[] = [];
-    let sortedUsers: any[] = [];
   
     const cpField = type === 'firstHalf' ? 'cpFirstHalf' : type === 'secondHalf' ? 'cpSecondHalf' : 'cpOverall';
-    const fpField = type === 'firstHalf' ? 'fpFirstHalf' : type === 'secondHalf' ? 'fpSecondHalf' : 'fpOverall';
   
     if (type === 'firstHalf') {
-      title = '1st Half Settlement (Weeks 4–12)';
+      title = `1st Half Settlement (Weeks 1–${half1Weeks})`;
       payouts = globalSettings?.seasonBonuses?.firstHalf || matrix.half1Payouts;
     } else if (type === 'secondHalf') {
-      title = '2nd Half Settlement (Weeks 13–21)';
+      title = `2nd Half Settlement (Weeks ${half1Weeks + 1}–${maxWeeks})`;
       payouts = globalSettings?.seasonBonuses?.secondHalf || matrix.half2Payouts;
     } else {
       title = 'Overall Season Settlement (Full Season)';
       payouts = globalSettings?.seasonBonuses?.overall || matrix.seasonPayouts;
     }
   
-    sortedUsers = [...seasonStats].sort((a, b) => b[cpField] - a[cpField] || b[fpField] - a[fpField]).slice(0, 8);
+    // Sort players by confidence points in that period
+    const sortedUsers = [...seasonStats].sort((a, b) => (b[cpField] || 0) - (a[cpField] || 0)).slice(0, 8);
   
     const winners = sortedUsers.map((u, idx) => ({
+      id: u.id,
       rank: idx + 1,
       name: formatFullName(u),
       points: u[cpField] || 0,
@@ -3582,6 +3625,14 @@ const isWeekClosed = currentWeekState === 'closed';
           fpo += fp;
         }
       }
+// 💰 Credit 1st Half / 2nd Half / Overall bonus payouts if finalized
+const half1Bonus = globalSettings?.settlements?.firstHalf?.winners?.find((w: any) => w.id === user.id)?.bonusAmount || 0;
+const half2Bonus = globalSettings?.settlements?.secondHalf?.winners?.find((w: any) => w.id === user.id)?.bonusAmount || 0;
+const overallBonus = globalSettings?.settlements?.overall?.winners?.find((w: any) => w.id === user.id)?.bonusAmount || 0;
+
+fp1 += half1Bonus;
+fp2 += half2Bonus;
+fpo += (half1Bonus + half2Bonus + overallBonus);
 
       // Exact points scored over the last 3 closed weeks
       let threeWeekPts = 0;
@@ -6332,38 +6383,65 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
 
           {/* SECTION 2: SEASON BONUS PAYOUT TABLES (1ST HALF, 2ND HALF, OVERALL) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* 1ST HALF BONUS TABLE */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="p-4 bg-slate-900 text-white border-b-4 border-sky-400">
-                <h4 className="font-black italic uppercase text-sm sm:text-base text-sky-400 flex items-center gap-1.5">
-                  <Award className="w-4 h-4" /> 1st Half Bonus (Wks 1–{half1Weeks})
-                </h4>
-                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
-                  Total Pool: ${Math.round(matrix.half1Pot)}
-                </p>
-              </div>
-              <div className="p-3">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="text-[9px] uppercase text-slate-400 border-b border-slate-100">
-                      <th className="pb-2">Pos</th>
-                      <th className="pb-2 text-center">%</th>
-                      <th className="pb-2 text-right">Bonus Cash</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-bold">
-                    {half1Payouts.slice(0, 8).map((amt: number, i: number) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="py-2 text-slate-900">#{i + 1} Finish</td>
-                        <td className="py-2 text-center text-slate-400 font-mono">
-                          {[22, 19, 16, 13, 9, 8, 7, 6][i]}%
-                        </td>
-                        <td className="py-2 text-right font-mono font-black text-sky-600">+${amt}</td>
+{/* 1ST HALF BONUS TABLE */}
+<div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col justify-between">
+              <div>
+                <div className="p-4 bg-slate-900 text-white border-b-4 border-sky-400 flex items-center justify-between">
+                  <div>
+                    <h4 className="font-black italic uppercase text-sm sm:text-base text-sky-400 flex items-center gap-1.5">
+                      <Award className="w-4 h-4" /> 1st Half Bonus (Wks 1–{half1Weeks})
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                      Total Pool: ${Math.round(matrix.half1Pot)}
+                    </p>
+                  </div>
+                  {globalSettings?.settlements?.firstHalf ? (
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2.5 py-1 rounded-full">
+                      ✓ Awarded
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handlePrepareSettlement('firstHalf')}
+                      className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-900 rounded-xl font-black text-xs uppercase tracking-wider shadow-md transition-all"
+                    >
+                      Award 1st Half
+                    </button>
+                  )}
+                </div>
+                <div className="p-3">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="text-[9px] uppercase text-slate-400 border-b border-slate-100">
+                        <th className="pb-2">Pos</th>
+                        <th className="pb-2 text-center">%</th>
+                        <th className="pb-2 text-right">Bonus Cash</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-bold">
+                      {half1Payouts.slice(0, 8).map((amt: number, i: number) => (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="py-2 text-slate-900">#{i + 1} Finish</td>
+                          <td className="py-2 text-center text-slate-400 font-mono">
+                            {[22, 19, 16, 13, 9, 8, 7, 6][i]}%
+                          </td>
+                          <td className="py-2 text-right font-mono font-black text-sky-600">+${amt}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
+              {globalSettings?.settlements?.firstHalf && (
+                <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-bold">Already finalized in standings</span>
+                  <button
+                    onClick={() => handlePrepareSettlement('firstHalf')}
+                    className="text-sky-600 hover:text-sky-800 font-black uppercase text-[10px]"
+                  >
+                    Re-Calculate / Edit
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* 2ND HALF BONUS TABLE */}
@@ -6830,7 +6908,69 @@ const basement = processedUsers.slice(-8);
           </div>
         )}
       </main>
+{/* 💰 BONUS SETTLEMENT CONFIRMATION MODAL */}
+{settlementPreview && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white max-w-lg w-full rounded-3xl shadow-2xl overflow-hidden border-t-8 border-[#FFB81C]">
+            <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black italic uppercase text-[#FFB81C] flex items-center gap-2">
+                  <Award className="w-6 h-6 text-[#FFB81C]" /> {settlementPreview.title}
+                </h3>
+                <p className="text-xs text-slate-400 font-bold mt-0.5">
+                  Confirm payout allocations for the top 8 finishers
+                </p>
+              </div>
+              <button 
+                onClick={() => setSettlementPreview(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              <table className="w-full text-left text-xs font-bold">
+                <thead>
+                  <tr className="text-slate-400 uppercase text-[10px] border-b pb-2">
+                    <th className="pb-2">Rank</th>
+                    <th className="pb-2">Player</th>
+                    <th className="pb-2 text-center">Points</th>
+                    <th className="pb-2 text-right">Bonus Cash</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {settlementPreview.winners.map((w: any, idx: number) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="py-2.5 font-black italic text-[#FFB81C]">#{w.rank}</td>
+                      <td className="py-2.5 text-slate-900">{w.name}</td>
+                      <td className="py-2.5 text-center font-mono text-slate-600">{w.points} PTS</td>
+                      <td className="py-2.5 text-right font-mono font-black text-emerald-600">+${w.bonusAmount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-5 bg-slate-50 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={() => setSettlementPreview(null)}
+                className="flex-1 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-black text-xs uppercase rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSettlement}
+                disabled={isSaving}
+                className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-[#FFB81C] font-black text-xs uppercase rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
+              >
+                {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Confirm & Award
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* MODAL DIALOGS INSIDE MAINAPP */}
       <CloseWeekPreviewModal
         isOpen={isPreviewOpen}
