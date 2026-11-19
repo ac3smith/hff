@@ -6435,28 +6435,7 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
             {/* 4. FINANCIALS SUB-TAB */}
 {adminTab === 'financials' && (
   <div className="space-y-8 max-w-[1400px] mx-auto">
-    <button
-  onClick={async () => {
-    if (!confirm("Are you sure you want to delete hardcoded payout overrides from Firestore and force dynamic percentage calculations?")) return;
-    setIsSaving(true);
-    try {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pool_settings', 'global'), {
-        fpPayouts: deleteField(),
-        seasonBonuses: deleteField()
-      });
-      alert("✅ Firestore overrides deleted! Page will now refresh using live percentage calculations.");
-      window.location.reload();
-    } catch (e) {
-      console.error("Error deleting overrides:", e);
-      alert("Error deleting overrides from Firestore.");
-    } finally {
-      setIsSaving(false);
-    }
-  }}
-  className="mb-4 px-5 py-3 bg-[#FFB81C] text-slate-900 rounded-xl font-black text-xs uppercase shadow-lg hover:bg-amber-400 transition-all flex items-center gap-2"
->
-  <RefreshCw className="w-4 h-4" /> Reset Saved Firestore Overrides to Live %
-</button>
+    
     {(() => {
       const fanaticsPlayers = allUsers.filter(u => u.playsConfidence);
       const activeCount = fanaticsPlayers.length;
@@ -6659,72 +6638,126 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
               )}
             </div>
 
-            {/* 2ND HALF BONUS TABLE */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="p-4 bg-slate-900 text-white border-b-4 border-purple-400">
-                <h4 className="font-black italic uppercase text-sm sm:text-base text-purple-400 flex items-center gap-1.5">
-                  <Award className="w-4 h-4" /> 2nd Half Bonus (Wks {half1Weeks + 1}–{maxWeeksVal})
-                </h4>
-                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
-                  Total Pool: ${Math.round(matrix.half2Pot)}
-                </p>
-              </div>
-              <div className="p-3">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="text-[9px] uppercase text-slate-400 border-b border-slate-100">
-                      <th className="pb-2">Pos</th>
-                      <th className="pb-2 text-center">%</th>
-                      <th className="pb-2 text-right">Bonus Cash</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-bold">
-                    {half2Payouts.slice(0, 8).map((amt: number, i: number) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="py-2 text-slate-900">#{i + 1} Finish</td>
-                        <td className="py-2 text-center text-slate-400 font-mono">
-                          {[22, 19, 16, 13, 9, 8, 7, 6][i]}%
-                        </td>
-                        <td className="py-2 text-right font-mono font-black text-purple-600">+${amt}</td>
+{/* 2ND HALF BONUS TABLE */}
+<div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col justify-between">
+              <div>
+                <div className="p-4 bg-slate-900 text-white border-b-4 border-purple-400 flex items-center justify-between gap-2">
+                  <div>
+                    <h4 className="font-black italic uppercase text-sm sm:text-base text-purple-400 flex items-center gap-1.5">
+                      <Award className="w-4 h-4" /> 2nd Half Bonus (Wks {half1Weeks + 1}–{maxWeeksVal})
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                      Total Pool: ${Math.round(matrix.half2Pot)}
+                    </p>
+                  </div>
+                  {globalSettings?.settlements?.secondHalf ? (
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2.5 py-1 rounded-full shrink-0">
+                      ✓ Awarded
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handlePrepareSettlement('secondHalf')}
+                      className="px-3 py-1.5 bg-purple-400 hover:bg-purple-300 text-slate-900 rounded-xl font-black text-xs uppercase tracking-wider shadow-md transition-all shrink-0"
+                    >
+                      Award 2nd Half
+                    </button>
+                  )}
+                </div>
+                <div className="p-3">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="text-[9px] uppercase text-slate-400 border-b border-slate-100">
+                        <th className="pb-2">Pos</th>
+                        <th className="pb-2 text-center">%</th>
+                        <th className="pb-2 text-right">Bonus Cash</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-bold">
+                      {half2Payouts.slice(0, 8).map((amt: number, i: number) => (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="py-2 text-slate-900">#{i + 1} Finish</td>
+                          <td className="py-2 text-center text-slate-400 font-mono">
+                            {[22, 19, 16, 13, 9, 8, 7, 6][i]}%
+                          </td>
+                          <td className="py-2 text-right font-mono font-black text-purple-600">+${amt}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
+              {globalSettings?.settlements?.secondHalf && (
+                <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-bold">Already finalized in standings</span>
+                  <button
+                    onClick={() => handlePrepareSettlement('secondHalf')}
+                    className="text-purple-600 hover:text-purple-800 font-black uppercase text-[10px]"
+                  >
+                    Re-Calculate / Edit
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* OVERALL SEASON BONUS TABLE */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="p-4 bg-slate-900 text-white border-b-4 border-[#FFB81C]">
-                <h4 className="font-black italic uppercase text-sm sm:text-base text-[#FFB81C] flex items-center gap-1.5">
-                  <Crown className="w-4 h-4" /> Full Season Leaderboard
-                </h4>
-                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
-                  Total Pool: ${Math.round(matrix.seasonPot)}
-                </p>
-              </div>
-              <div className="p-3">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="text-[9px] uppercase text-slate-400 border-b border-slate-100">
-                      <th className="pb-2">Pos</th>
-                      <th className="pb-2 text-center">%</th>
-                      <th className="pb-2 text-right">Grand Prize</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-bold">
-                    {overallPayouts.slice(0, 8).map((amt: number, i: number) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="py-2 text-slate-900">#{i + 1} Overall</td>
-                        <td className="py-2 text-center text-slate-400 font-mono">
-                          {[22, 19, 16, 13, 9, 8, 7, 6][i]}%
-                        </td>
-                        <td className="py-2 text-right font-mono font-black text-emerald-600">+${amt}</td>
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col justify-between">
+              <div>
+                <div className="p-4 bg-slate-900 text-white border-b-4 border-[#FFB81C] flex items-center justify-between gap-2">
+                  <div>
+                    <h4 className="font-black italic uppercase text-sm sm:text-base text-[#FFB81C] flex items-center gap-1.5">
+                      <Crown className="w-4 h-4" /> Full Season Leaderboard
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                      Total Pool: ${Math.round(matrix.seasonPot)}
+                    </p>
+                  </div>
+                  {globalSettings?.settlements?.overall ? (
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2.5 py-1 rounded-full shrink-0">
+                      ✓ Awarded
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handlePrepareSettlement('overall')}
+                      className="px-3 py-1.5 bg-[#FFB81C] hover:bg-amber-400 text-slate-900 rounded-xl font-black text-xs uppercase tracking-wider shadow-md transition-all shrink-0"
+                    >
+                      Award Season
+                    </button>
+                  )}
+                </div>
+                <div className="p-3">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="text-[9px] uppercase text-slate-400 border-b border-slate-100">
+                        <th className="pb-2">Pos</th>
+                        <th className="pb-2 text-center">%</th>
+                        <th className="pb-2 text-right">Grand Prize</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-bold">
+                      {overallPayouts.slice(0, 8).map((amt: number, i: number) => (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="py-2 text-slate-900">#{i + 1} Overall</td>
+                          <td className="py-2 text-center text-slate-400 font-mono">
+                            {[22, 19, 16, 13, 9, 8, 7, 6][i]}%
+                          </td>
+                          <td className="py-2 text-right font-mono font-black text-emerald-600">+${amt}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
+              {globalSettings?.settlements?.overall && (
+                <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-bold">Already finalized in standings</span>
+                  <button
+                    onClick={() => handlePrepareSettlement('overall')}
+                    className="text-amber-600 hover:text-amber-800 font-black uppercase text-[10px]"
+                  >
+                    Re-Calculate / Edit
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
