@@ -864,12 +864,12 @@ function ConfidenceTrackerBoard({ data, games, week, isWeekComplete, currentUser
               return r === 5;
             }));
 
-        if (isDeadbeat) {
-          targetGames.forEach((g: any) => {
-            if (!userRanks[g.id] && !userRanks[String(g.id)]) userRanks[g.id] = 5;
-            if (!userPicks[g.id] && !userPicks[String(g.id)]) userPicks[g.id] = 'DB';
-          });
-        }
+            if (isDeadbeat) {
+              targetGames.forEach((g: any) => {
+                if (!userRanks[g.id] && !userRanks[String(g.id)]) userRanks[g.id] = 5;
+                if (!userPicks[g.id] && !userPicks[String(g.id)]) userPicks[g.id] = g.home;
+              });
+            }
 
         const userMaxPossible = isDeadbeat ? targetGames.length * 5 : standardMaxPossible;
 
@@ -2451,7 +2451,6 @@ function WeeklyRecapModal({ isOpen, onClose, week = 1, games, allUsers, globalSe
 
   const recapData = useMemo(() => {
     if (!allUsers || !effectiveWeek) return null;
-
     const evalGames = globalSettings?.games?.[effectiveWeek] || games || [];
     const actualTB = globalSettings?.actualTiebreakers?.[effectiveWeek] ?? 0;
     const lastGame = evalGames.find((g: any) => g.isTiebreaker) || evalGames[evalGames.length - 1];
@@ -2465,8 +2464,8 @@ function WeeklyRecapModal({ isOpen, onClose, week = 1, games, allUsers, globalSe
 
       const userMaxPossible = isDeadbeat ? evalGames.length * 5 : standardMaxPossible;
       const pointsLost = evalGames.reduce((lost: number, g: any) => {
-        const pick = userPicks[g.id];
-        const rank = parseInt(userRanks[g.id] || 0, 10);
+        const pick = userPicks[g.id] || (isDeadbeat ? g.home : null);
+        const rank = isDeadbeat ? 5 : parseInt(userRanks[g.id] || 0, 10);
         if (!pick || !rank) return lost;
         if (g.status === 'final' && g.winner && pick !== g.winner) return lost + rank;
         return lost;
@@ -2474,8 +2473,8 @@ function WeeklyRecapModal({ isOpen, onClose, week = 1, games, allUsers, globalSe
 
       const score = userMaxPossible - pointsLost;
       const tbDiff = Math.abs(userTB - actualTB);
-      const lastPick = lastGame ? userPicks[lastGame.id] : null;
-      const lastRank = lastGame ? parseInt(userRanks[lastGame.id] || 0, 10) : 0;
+      const lastPick = lastGame ? (userPicks[lastGame.id] || (isDeadbeat ? lastGame.home : null)) : null;
+      const lastRank = lastGame ? (isDeadbeat ? 5 : parseInt(userRanks[lastGame.id] || 0, 10)) : 0;
 
       return {
         ...u,
@@ -3044,7 +3043,8 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
     const matrix = calculateFanaticsPayouts(activeCount, maxActiveWeeks);
     const dynamicWeeklyPayouts = matrix.weeklyGross;
 
-    const standardMaxPossible = (games || []).reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
+    const targetWeekGames = globalSettings?.games?.[week] || games || [];
+    const standardMaxPossible = targetWeekGames.reduce((sum: number, _: any, idx: number) => sum + (idx + 1), 0);
 
     // C. Process scores and tiebreakers for all active users
     const processed = activeConfidenceUsers.map((u: any) => {
@@ -3052,13 +3052,13 @@ const handleFinalizeCloseWeek = async (finalData: any) => {
       const userRanks = u.ranks?.[week] || {};
 
       const isDeadbeat = u.tiebreakers?.[week] === '0' || 
-        ((games || []).length > 0 && (games || []).every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
+        (targetWeekGames.length > 0 && targetWeekGames.every((g: any) => parseInt(userRanks[g.id] || 0, 10) === 5));
 
-      const userMaxPossible = isDeadbeat ? (games || []).length * 5 : standardMaxPossible;
+      const userMaxPossible = isDeadbeat ? targetWeekGames.length * 5 : standardMaxPossible;
 
-      const pointsLost = (games || []).reduce((lost: number, g: any) => {
-        const pick = userPicks[g.id];
-        const rank = parseInt(userRanks[g.id] || 0, 10);
+      const pointsLost = targetWeekGames.reduce((lost: number, g: any) => {
+        const pick = userPicks[g.id] || (isDeadbeat ? g.home : null);
+        const rank = isDeadbeat ? 5 : parseInt(userRanks[g.id] || 0, 10);
         if (!pick || !rank) return lost;
 
         if (g.status === 'final' && g.winner && pick !== g.winner) {
@@ -3491,8 +3491,9 @@ const isWeekClosed = currentWeekState === 'closed';
         const userMaxPossible = isDeadbeat ? targetGames.length * 5 : standardMaxPossible;
 
         const pointsLost = targetGames.reduce((lost: number, g: any) => {
-          const pick = userPicks[g.id] || userPicks[String(g.id)];
-          const rank = parseInt(String(userRanks[g.id] || userRanks[String(g.id)] || 0), 10);
+          const rawPick = userPicks[g.id] || userPicks[String(g.id)];
+          const pick = rawPick || (isDeadbeat ? g.home : null);
+          const rank = isDeadbeat ? 5 : parseInt(String(userRanks[g.id] || userRanks[String(g.id)] || 0), 10);
 
           if (!pick || !rank) return lost;
           if (g.status === 'final' && g.winner && pick !== g.winner) {
@@ -4836,14 +4837,17 @@ const handleLockWeek = async () => {
       const isMissingPicks = targetGames.some((g: any) => !userPicks[g.id] || !userRanks[g.id]) || !hasTiebreaker;
 
       if (isMissingPicks) {
+        const deadbeatPicks: any = {};
         const deadbeatRanks: any = {};
         targetGames.forEach((g: any) => {
-          deadbeatRanks[g.id] = 5; // Apply 5-point deadbeat penalty
+          deadbeatPicks[g.id] = g.home; // Assign Home team as default deadbeat pick
+          deadbeatRanks[g.id] = 5;      // Apply 5-point deadbeat penalty
         });
 
         // Write the deadbeat penalty directly to the user's document
         const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', u.id);
         batch.update(userRef, {
+          [`picks.${targetWeek}`]: deadbeatPicks,
           [`ranks.${targetWeek}`]: deadbeatRanks,
           [`tiebreakers.${targetWeek}`]: '0'
         });
@@ -4926,10 +4930,10 @@ const handleCloseWeek = async () => {
       const userMaxPossible = isDeadbeat ? (games || []).length * 5 : standardMaxPossible;
 
       const pointsLost = (games || []).reduce((lost: number, g: any) => {
-        const pick = userPicks[g.id];
-        const rank = parseInt(userRanks[g.id] || 0, 10);
+        const pick = userPicks[g.id] || (isDeadbeat ? g.home : null);
+        const rank = isDeadbeat ? 5 : parseInt(userRanks[g.id] || 0, 10);
         if (!pick || !rank) return lost;
-
+   
         if (g.status === 'final' && g.winner && pick !== g.winner) {
           return lost + rank;
         }
