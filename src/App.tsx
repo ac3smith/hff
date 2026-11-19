@@ -3988,6 +3988,171 @@ const handleExportPicksCSV = () => {
   URL.revokeObjectURL(url);
 };
 
+// 📊 EXPORT FULL SEASON POINTS & FINANCIALS AUDIT CSV
+const handleExportFullSeasonCSV = () => {
+  if (!allUsers || allUsers.length === 0) return alert("No player data available to export.");
+
+  const maxWeeks = globalSettings?.maxActiveWeeks || 18;
+  const midPoint = Math.ceil(maxWeeks / 2);
+  const weeksList = Array.from({ length: maxWeeks }, (_, i) => i + 1);
+
+  const eligibleUsers = allUsers.filter(
+    (u: any) => Boolean(u.playsConfidence) && String(u.paymentStatus) !== 'disqualified'
+  );
+
+  // Build headers: Identity -> Weekly Points -> Point Totals -> Weekly Net $ -> Bonuses -> Net $ Totals
+  const headers = [
+    'Overall Rank',
+    'First Name',
+    'Last Name',
+    'Nickname',
+    'Payment Status',
+    ...weeksList.map(w => `Wk ${w} PTS`),
+    `1st Half PTS (1-${midPoint})`,
+    `2nd Half PTS (${midPoint + 1}-${maxWeeks})`,
+    'Overall Total PTS',
+    ...weeksList.map(w => `Wk ${w} Net $`),
+    '1st Half Bonus $',
+    '2nd Half Bonus $',
+    'Season Bonus $',
+    '1st Half Net $',
+    '2nd Half Net $',
+    'Overall Total Net $'
+  ];
+
+  // Calculate exact season figures per player (matching Standings math)
+  const rowsData = eligibleUsers.map((u: any) => {
+    let cp1 = 0, cp2 = 0, cpo = 0;
+    let fp1 = 0, fp2 = 0, fpo = 0;
+    const weeklyPtsCells: (number | string)[] = [];
+    const weeklyNetCells: (number | string)[] = [];
+
+    weeksList.forEach((wk) => {
+      const wkState = globalSettings?.weekStates?.[wk] || globalSettings?.weekStates?.[String(wk)];
+      if (wkState === 'closed') {
+        const cpVal = u.weeklyConfidenceHistory?.[wk] ?? u.weeklyConfidenceHistory?.[String(wk)];
+        const fpVal = u.weeklyFantasyHistory?.[wk] ?? u.weeklyFantasyHistory?.[String(wk)];
+
+        const cp = cpVal !== undefined && cpVal !== null ? parseFloat(cpVal) : 0;
+        const fp = fpVal !== undefined && fpVal !== null ? parseFloat(fpVal) : -12;
+
+        if (wk <= midPoint) {
+          cp1 += cp;
+          fp1 += fp;
+        } else {
+          cp2 += cp;
+          fp2 += fp;
+        }
+        cpo += cp;
+        fpo += fp;
+
+        weeklyPtsCells.push(cp);
+        weeklyNetCells.push(fp);
+      } else {
+        weeklyPtsCells.push('');
+        weeklyNetCells.push('');
+      }
+    });
+
+    const half1Bonus = globalSettings?.settlements?.firstHalf?.winners?.find((w: any) => w.id === u.id)?.bonusAmount || 0;
+    const half2Bonus = globalSettings?.settlements?.secondHalf?.winners?.find((w: any) => w.id === u.id)?.bonusAmount || 0;
+    const overallBonus = globalSettings?.settlements?.overall?.winners?.find((w: any) => w.id === u.id)?.bonusAmount || 0;
+
+    const totalHalf1Net = fp1 + half1Bonus;
+    const totalHalf2Net = fp2 + half2Bonus;
+    const totalOverallNet = fpo + half1Bonus + half2Bonus + overallBonus;
+
+    return {
+      firstName: u.firstName || '',
+      lastName: u.lastName || '',
+      nickname: u.nickname || '',
+      paymentStatus: u.paymentStatus || 'unpaid',
+      weeklyPtsCells,
+      cp1,
+      cp2,
+      cpo,
+      weeklyNetCells,
+      half1Bonus,
+      half2Bonus,
+      overallBonus,
+      totalHalf1Net,
+      totalHalf2Net,
+      totalOverallNet
+    };
+  });
+
+  // Sort by Overall Points descending, then Overall Net $ descending
+  rowsData.sort((a, b) => (b.cpo !== a.cpo ? b.cpo - a.cpo : b.totalOverallNet - a.totalOverallNet));
+
+  const escapeCsv = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+
+  const csvLines: string[] = [headers.map(escapeCsv).join(',')];
+
+  let rank = 1;
+  rowsData.forEach((r, idx) => {
+    if (idx > 0 && r.cpo < rowsData[idx - 1].cpo) rank = idx + 1;
+
+    const line = [
+      rank,
+      escapeCsv(r.firstName),
+      escapeCsv(r.lastName),
+      escapeCsv(r.nickname),
+      escapeCsv(r.paymentStatus),
+      ...r.weeklyPtsCells,
+      r.cp1,
+      r.cp2,
+      r.cpo,
+      ...r.weeklyNetCells,
+      r.half1Bonus,
+      r.half2Bonus,
+      r.overallBonus,
+      r.totalHalf1Net,
+      r.totalHalf2Net,
+      r.totalOverallNet
+    ];
+    csvLines.push(line.join(','));
+  });
+
+  // Append a POOL TOTALS verification row at the bottom
+  const sumWeeklyPts = weeksList.map((_, wIdx) =>
+    rowsData.reduce((acc, r) => acc + (typeof r.weeklyPtsCells[wIdx] === 'number' ? Number(r.weeklyPtsCells[wIdx]) : 0), 0)
+  );
+  const sumWeeklyNet = weeksList.map((_, wIdx) =>
+    rowsData.reduce((acc, r) => acc + (typeof r.weeklyNetCells[wIdx] === 'number' ? Number(r.weeklyNetCells[wIdx]) : 0), 0)
+  );
+
+  const totalsRow = [
+    '""',
+    '"POOL TOTALS"',
+    '""',
+    '""',
+    '""',
+    ...sumWeeklyPts,
+    rowsData.reduce((a, r) => a + r.cp1, 0),
+    rowsData.reduce((a, r) => a + r.cp2, 0),
+    rowsData.reduce((a, r) => a + r.cpo, 0),
+    ...sumWeeklyNet,
+    rowsData.reduce((a, r) => a + r.half1Bonus, 0),
+    rowsData.reduce((a, r) => a + r.half2Bonus, 0),
+    rowsData.reduce((a, r) => a + r.overallBonus, 0),
+    rowsData.reduce((a, r) => a + r.totalHalf1Net, 0),
+    rowsData.reduce((a, r) => a + r.totalHalf2Net, 0),
+    rowsData.reduce((a, r) => a + r.totalOverallNet, 0)
+  ];
+  csvLines.push(totalsRow.join(','));
+
+  // Download CSV file
+  const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `hff-full-season-audit-${new Date().toISOString().split('T')[0]}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
   const handleKnockoutQuickPick = async (forAll = false) => { 
     const usersToUpdate = forAll ? allUsers.filter(u => u.playsKnockout) : [currentUser]; 
     const batch = writeBatch(db); 
@@ -6329,6 +6494,12 @@ let displayKnockoutStatus = isKnockedOut ? 'Knocked Out' : 'Alive';
                   {activeCount} Active Players &bull; $12/Week Dues &bull; {closedWeeksCount} / {maxWeeksVal} Weeks Closed
                 </p>
               </div>
+              <button
+                onClick={handleExportFullSeasonCSV}
+                className="px-5 py-3 bg-[#FFB81C] hover:bg-amber-400 text-slate-900 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg transition-all flex items-center gap-2 shrink-0"
+              >
+                <FileText className="w-4 h-4" /> Export Full Season Audit (CSV)
+              </button>
             </div>
 
             {/* HIGH LEVEL METRICS GRID */}
